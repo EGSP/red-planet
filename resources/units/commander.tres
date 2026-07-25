@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="UnitDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/Configs/UnitDef.cs" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+Id = "commander"
+DisplayName = "Коммандер"
+Role = "commander"
+Speed = 3.0
+BuildPower = 10.0
+MinePower = 5.0
+ToolRange = 3.0
+Color = Color(0.35, 0.75, 1, 1)

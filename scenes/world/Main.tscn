@@ -1,0 +1,65 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/Main.cs" id="1_main"]
+[ext_resource type="Script" path="res://scripts/world/GridRenderer.cs" id="2_grid"]
+[ext_resource type="Script" path="res://scripts/units/CommandSystem.cs" id="3_command"]
+[ext_resource type="Script" path="res://scripts/units/BotAiSystem.cs" id="4_botai"]
+[ext_resource type="Script" path="res://scripts/world/UnitSystem.cs" id="5_unit"]
+[ext_resource type="Script" path="res://scripts/world/WorkSystem.cs" id="6_work"]
+[ext_resource type="Script" path="res://scripts/buildings/FactorySystem.cs" id="7_factory"]
+[ext_resource type="Script" path="res://scripts/world/OreSpawnSystem.cs" id="8_orespawn"]
+[ext_resource type="Script" path="res://scripts/world/CameraRig.cs" id="9_camera"]
+[ext_resource type="Script" path="res://scripts/ui/Hud.cs" id="10_hud"]
+[ext_resource type="PackedScene" path="res://scenes/units/Commander.tscn" id="11_commander"]
+[ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="12_blueprint"]
+[ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="13_ore"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+World = NodePath("World")
+CommanderScene = ExtResource("11_commander")
+
+[node name="Grid" type="Node2D" parent="."]
+script = ExtResource("2_grid")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="Systems" type="Node" parent="."]
+
+[node name="CommandSystem" type="Node" parent="Systems"]
+script = ExtResource("3_command")
+Phase = 0
+StepOrder = 0
+BlueprintScene = ExtResource("12_blueprint")
+
+[node name="BotAiSystem" type="Node" parent="Systems"]
+script = ExtResource("4_botai")
+Phase = 1
+StepOrder = 10
+
+[node name="UnitSystem" type="Node" parent="Systems"]
+script = ExtResource("5_unit")
+Phase = 1
+StepOrder = 20
+
+[node name="WorkSystem" type="Node" parent="Systems"]
+script = ExtResource("6_work")
+Phase = 1
+StepOrder = 30
+
+[node name="FactorySystem" type="Node" parent="Systems"]
+script = ExtResource("7_factory")
+Phase = 1
+StepOrder = 40
+
+[node name="OreSpawnSystem" type="Node" parent="Systems"]
+script = ExtResource("8_orespawn")
+Phase = 1
+StepOrder = 50
+OreScene = ExtResource("13_ore")
+
+[node name="Camera" type="Camera2D" parent="."]
+script = ExtResource("9_camera")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("10_hud")

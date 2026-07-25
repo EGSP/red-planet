@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BuildableDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/Configs/BuildableDef.cs" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/units/Digger.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+Id = "digger"
+DisplayName = "Копатель"
+Rows = Array[String](["#"])
+CostOre = 0.0
+CostMetal = 50.0
+Scene = ExtResource("2_scene")
+IsUnit = true
+BuildableBy = Array[String](["commander"])
+CanAssemble = false
+Color = Color(1, 0.7, 0.3, 1)

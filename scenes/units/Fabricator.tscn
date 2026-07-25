@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/units/Bot.cs" id="1_script"]
+[ext_resource type="Resource" path="res://resources/units/fabricator.tres" id="2_def"]
+
+[node name="Fabricator" type="Node2D"]
+z_index = 4
+script = ExtResource("1_script")
+Def = ExtResource("2_def")

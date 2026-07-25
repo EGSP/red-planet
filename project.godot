@@ -10,6 +10,8 @@ config_version=5
 
 [application]
 
+run/main_scene="res://scenes/world/Main.tscn"
+
 config/name="red_planet"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
@@ -30,3 +32,14 @@ project/assembly_name="red_planet"
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+
+[autoload]
+
+
+
+
+
+
+
+
+GameManager="*res://scripts/core/GameManager.cs"
