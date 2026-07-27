@@ -1,400 +1,349 @@
 # System Design — red_planet
 
-Живой документ по архитектуре. Движок: **Godot 4.7 (.NET) + C#**, платформа — только десктоп. Здесь зафиксированы подходы, которые мы обсудили, и то, как их реализовать: где какие слои, что делать нодой, что держать просто в памяти, как связывать сущности и как ужимать журналы, не ломая регистры.
+Живой документ по архитектуре. Движок: **Godot 4.7 (.NET) + C#**, платформа — только десктоп.
 
-Код в примерах — набросок (псевдо-C#), для передачи идеи, а не готовый к сборке.
+Здесь зафиксировано: где какие слои, что делать нодой, что держать просто в памяти, как связывать сущности и как ужимать журналы, не ломая проекции. Примеры кода — реальные, из проекта, а не наброски: имена классов и методов совпадают с тем, что лежит в `scripts/`.
 
 ---
 
 ## 1. Философия
 
-В основе — модель метаданных 1С, перенесённая на игру. По-геймдевному это привычные паттерны под другими именами:
+В основе — модель метаданных 1С, перенесённая на игру. Почему она уместна для стратегии-базостроя: **экономика базы по своей природе и есть учёт.** Добыча, производство, стройка — документы; запасы и население — регистры; типы юнитов и зданий — справочники.
 
-| 1С | В игре | Известный паттерн |
+**Но в коде используется словарь event sourcing и CQRS, а не 1С.** Причина простая: `Register` в английском не значит «регистр накопления» — это либо глагол, либо регистр процессора, отсюда рождались уродцы вроде `RegisterRegistry`. Общепринятые термины понятны и человеку, и ИИ-агенту, и совпадают с любой статьёй по теме.
+
+| 1С (мысленная модель) | В коде | Известный паттерн |
 |---|---|---|
-| Справочник | Config | data-driven определения (Resource/.tres) |
-| Документ | Record | event sourcing — иммутабельное событие в журнале |
-| Регистр накопления | Register | CQRS-проекция — производный агрегат |
-| — | System | логика над мини-ECS |
+| Справочник | `Catalog` + `…Def` | data-driven определения (`Resource`/`.tres`) |
+| Документ | `IEventRecord` | event sourcing — иммутабельная запись о факте |
+| Регистр накопления | `Projection` | CQRS read model — производный агрегат |
+| — | `GameSystem` | логика над мини-ECS |
 
-Почему это уместно для стратегии-базостроя: **экономика базы — это по сути учёт.** Производство, добыча, стройка — документы; склады и население — регистры; типы юнитов и зданий — справочники. Мы мыслим ровно теми категориями, под которые заточена предметная область.
-
-**Ценности, под которые оптимизируем** (важно — они диктуют решения ниже):
+**Ценности, под которые оптимизируем** (они диктуют решения ниже):
 
 1. Точечный контроль хода исполнения — свой планировщик, а не неявный обход дерева нод.
 2. Наблюдаемость зависимостей — единый композиционный корень.
-3. Конфигурируемость под геймдизайн и DX — настройка в редакторе (сигналы, `[Export]`, `.tres`).
-4. Производительность — по мере необходимости, не догма. Но для долгих партий и большого числа сущностей закладываем инкрементальность сразу.
+3. Конфигурируемость под геймдизайн и DX — настройка в редакторе (`[Export]`, `.tres`, сигналы).
+4. Производительность — по мере необходимости, не догма. Но инкрементальность закладываем сразу.
 
-**Чего пока НЕ делаем:** сетевых кривых/ChronoCam, DI-фреймворка, детерминированного lockstep. Игра одиночная/локальная, сервер и сеть — отложены.
+**Чего пока НЕ делаем:** сети и мультиплеера, DI-фреймворка, детерминированного lockstep, сохранений.
 
 ---
 
-## 2. Слои и поток данных
+## 2. Соглашения об именовании
 
-Слои:
+Правило одно: **абстракция носит имя паттерна, конкретный тип — имя из предметной области.**
 
-- **Config (справочник)** — статические определения. Ассет `.tres`, грузится в память.
-- **Record (документ)** — событие. Живёт в журнале в памяти.
-- **Register (регистр)** — производный агрегат. Живёт в памяти, обновляется инкрементально.
-- **System (система)** — логика. Нода со свойствами `[Export]`.
-- **Entity + Components (мини-ECS)** — сущности мира. Видимые/физические — ноды; их данные — обычные C#-объекты.
-- **Scheduler (планировщик)** — порядок систем и фазы кадра. Чистый объект в корне.
-- **GameManager (корень)** — держит всё вышеперечисленное. Нода-автозагрузка.
+- `IEventRecord` → `ResourceSpent`, `OreDepleted`, `BlueprintPlaced`
+- `Projection` → `StockpileProjection`
+- `WorkNode` → `Blueprint`, `OreDeposit`
 
-Поток за один тик:
+Отсюда следуют два частных случая, которые выглядят непоследовательно, но таковыми не являются:
+
+- **У документов суффикса нет.** Прошедшее время само выдаёт природу типа: `ResourceSpent` ни с чем не спутать. `ResourceSpentEvent` — шум.
+- **У проекций суффикс есть.** `Stockpile` — обычное существительное, грамматического признака в нём нет, без суффикса тип читался бы как «просто склад».
+
+**Суффикс `Store` = типизированный контейнер с поиском по ключу.** Три штуки, различаются только ключом:
+
+| Контейнер | Ключ | Что хранит |
+|---|---|---|
+| `EventStore` | тип документа | потоки документов |
+| `ProjectionStore` | тип проекции | проекции |
+| `EntityStore` | `EntityId` | живые ноды |
+
+`Catalog` из этого правила выведен намеренно: `Store` — про изменяемое состояние игры, а каталог — статический контент, загруженный один раз.
+
+---
+
+## 3. Слои и поток данных
+
+- **Справочник** (`Catalog`, `BuildableDef`, `UnitDef`) — статические определения. Ассет `.tres` → память.
+- **Документ** (`IEventRecord`) — факт. Живёт в журнале в памяти.
+- **Проекция** (`Projection`) — производный агрегат, обновляется дельтой.
+- **Система** (`GameSystem`) — логика. Нода со свойствами `[Export]`.
+- **Сущности** — видимое/физическое это ноды, их данные — обычные C#-объекты.
+- **Планировщик** (`Scheduler`) — порядок систем и фазы кадра.
+- **Фабрика** (`Spawner`) — единственное место, где рождаются сущности.
+- **Корень** (`GameManager`) — держит всё перечисленное. Нода-автозагрузка.
+
+Поток за один кадр:
 
 ```
-намерение (игрок/ИИ)
-   → система валидирует и публикует ДОКУМЕНТ в журнал
-      → РЕГИСТР впитывает документ дельтой (в момент публикации)
-      → системы РЕАГИРУЮТ на документы кадра (спавн, апгрейд, VFX)
-   → cleanup: транзиентные журналы чистятся, отложенные удаления применяются
-отрисовка — отдельно, вне тика симуляции
+намерение (игрок или ИИ)
+   → система проверяет и дописывает ДОКУМЕНТ в EventStore
+      → ПРОЕКЦИЯ впитывает его дельтой прямо в момент дозаписи
+      → системы РЕАГИРУЮТ на документы кадра (спавн, эффекты)
+   → cleanup: транзиентные потоки чистятся
+отрисовка — отдельно, в _Process нод, вне тика симуляции
 ```
 
-Ключ развязки: **системы не дёргают друг друга напрямую — они общаются через документы.** Система стройки не знает про систему мира; она публикует `BuildingPlacedRecord`, а мир на него реагирует.
+Ключ развязки: **системы не дёргают друг друга напрямую — они общаются через документы.** Система приказов не знает про мир: она дописывает `BlueprintPlaced`, а кто отреагирует — её не касается.
 
 ---
 
-## 3. Где что живёт: нода, память или ассет
+## 4. Где что живёт: нода, память или ассет
 
-Главный принцип:
+> **Нода — только там, где нужен движок:** отрисовка, физика, ввод, участие в дереве сцены, настройка в редакторе. Всё остальное — обычные C#-объекты в памяти под композиционным корнем. Так слой данных не зависит от Godot и тестируется без движка, а ноды остаются «кожей».
 
-> **Нода — только там, где нужен движок:** отрисовка, физика, ввод, участие в дереве сцены, настройка в редакторе. Всё, что чистая игровая логика и данные, — обычные C#-объекты в памяти под композиционным корнем. Так data-слой остаётся независимым от движка и тестируемым, а ноды — это «кожа», связывающая его с Godot.
-
-| Слой | Форма в Godot | Где живёт | Пример |
-|---|---|---|---|
-| GameManager (корень) | **нода-автозагрузка** (autoload) | в дереве, всегда | держит журнал, регистры, каталог, планировщик |
-| Scheduler (планировщик) | чистый C# внутри GameManager | память | порядок систем, фазы |
-| Journal + Records | чистый C# | память (в корне) | `Journal`, `BuildingPlacedRecord` |
-| Registers | чистый C# | память (в корне) | `StockpileRegister` |
-| Configs (справочники) | **Resource** (`.tres`) | ассет на диске → в память | `BuildingDef`, `UnitDef` |
-| Systems | **нода** с `[Export]` | в сцене, добавляешь/настраиваешь | `BuildSystem`, `UnitSystem` |
-| Видимые/физические сущности | **нода** (`Node2D`/`CharacterBody2D`) | в сцене | `Unit`, `Building` |
-| Компоненты-данные сущности | чистый C#, которым владеет нода | память | `Health`, `Inventory` |
-| Связи между сущностями | стабильный `EntityId`, не ссылка | — | документы несут id |
-| События-связки | **сигналы Godot** | — | connect в редакторе или коде |
+| Слой | Форма в Godot | Пример |
+|---|---|---|
+| `GameManager` | **нода-автозагрузка** | держит журнал, проекции, каталог, сетку, планировщик |
+| `Scheduler`, `Spawner`, `WorldGrid` | чистый C# в корне | порядок систем, создание сущностей, занятость клеток |
+| `EventStore` + документы | чистый C# в корне | `ResourceSpent`, `OreDepleted` |
+| `ProjectionStore` + проекции | чистый C# в корне | `StockpileProjection` |
+| Справочники | **`Resource`** (`.tres`) | `BuildableDef`, `UnitDef` |
+| Системы | **нода** с `[Export]` | `UnitSystem`, `OreSpawnSystem` |
+| Видимые сущности | **нода** (`Node2D`) | `Unit`, `Building`, `Blueprint` |
+| Данные сущности | чистый C#, которым владеет нода | инвентарь, здоровье |
+| Связи между сущностями | `EntityId`, не ссылка | документы носят id |
+| Связь с представлением | **сигналы Godot** | соединяются в редакторе или в коде |
 
 ---
 
-## 4. Слои подробно
+## 5. Слои подробно
 
-### 4.1 GameManager — композиционный корень
+### 5.1 GameManager — композиционный корень
 
-Одна нода-автозагрузка держит всю инфраструктуру. Это намеренный выбор: в игре всё равно есть глобальный менеджер, и как единая точка сборки он делает зависимости видимыми, а не прячет их.
+Одна нода-автозагрузка держит всю инфраструктуру. Это намеренный выбор: в игре всё равно есть глобальный менеджер, и как единая точка сборки он делает зависимости видимыми, а не прячет их по углам.
 
 ```csharp
 public partial class GameManager : Node
 {
-    public static GameManager Instance { get; private set; }
+    public static GameManager I { get; private set; }
 
-    public Journal Journal { get; } = new();
-    public RegisterRegistry Registers { get; } = new();
+    public EventStore Events { get; } = new();
+    public ProjectionStore Projections { get; } = new();
     public Catalog Catalog { get; } = new();
-    public EntityRegistry Entities { get; } = new();
-    public WorldGrid Grid { get; private set; }
+    public EntityStore Entities { get; } = new();
+    public WorldGrid Grid { get; } = new();
+    public Scheduler Scheduler { get; } = new();
+    public Spawner Spawn { get; private set; }
 
-    private readonly Scheduler _scheduler = new();
-    private int _lastId;
-
-    public override void _EnterTree() => Instance = this;
-
-    public override void _Ready()
+    public override void _EnterTree()
     {
-        Catalog.LoadAll();                        // справочники
-        Registers.Add(new StockpileRegister());   // регистры
-        Registers.Add(new PopulationRegister());
-        Registers.WireAll(Journal);               // подписки регистров на потоки документов
+        I = this;
+        Spawn = new Spawner(this);
+        Catalog.LoadAll();
+
+        // Порядок держим явным: если проекция читает другую, зависимость идёт раньше
+        Projections.Add(new StockpileProjection());
+        Projections.SubscribeAll(Events);
     }
 
-    public int NewId() => ++_lastId;              // выдача стабильных EntityId
-
-    // Системы-ноды регистрируются из своего _Ready:
-    public void RegisterSystem(GameSystem s, Phase phase) => _scheduler.Add(s, phase);
-
-    public override void _PhysicsProcess(double dt) => _scheduler.RunFrame(dt);
+    public override void _PhysicsProcess(double dt)
+    {
+        Scheduler.RunFrame(dt);
+        Events.ClearTransient();
+    }
 }
 ```
 
-Нюанс в рамках подхода: при росте графа зависимостей порядок инициализации регистров держать **явным** (как здесь — список `Add` по порядку), а не полагаться на удачную последовательность.
+Регистрация и подписка разнесены на два шага (`Add` … `SubscribeAll`) специально: сначала собираем состав, потом подписываем — тогда проекции могут ссылаться друг на друга.
 
-### 4.2 Справочники (Configs) — Resource / .tres
+### 5.2 Справочники — Catalog и `.tres`
 
-Статические определения. Класс — подкласс `Resource` (в `scripts/data/Configs`), экземпляры — `.tres` (в `resources/`). Каталог грузит их и кладёт в словарь по ключу — не линейным поиском по строке.
+Класс определения — подкласс `Resource` в `scripts/data/Configs/`, экземпляры — `.tres` в `resources/`. Форма постройки задаётся **матрицей строк**, поэтому формы могут быть не только прямоугольными:
 
 ```csharp
 [GlobalClass]
-public partial class BuildingDef : Resource
+public partial class BuildableDef : Resource
 {
-    [Export] public string Id;
-    [Export] public PackedScene Scene;      // сцена здания
-    [Export] public int WoodCost;
-    [Export] public Vector2I Size = new(1, 1);
-}
-
-public sealed class Catalog
-{
-    private readonly Dictionary<string, BuildingDef> _buildings = new();
-    public BuildingDef Building(string id) => _buildings[id];
-
-    public void LoadAll()
-    {
-        foreach (var def in LoadDir<BuildingDef>("res://resources/buildings/"))
-            _buildings[def.Id] = def;
-    }
+    [Export] public string Id = "";
+    [Export] public Godot.Collections.Array<string> Rows = new() { "#" };  // '#' — занятая клетка
+    [Export] public float CostOre;
+    [Export] public float CostMetal;
+    [Export] public PackedScene Scene;
+    [Export] public Godot.Collections.Array<string> BuildableBy = new() { "commander" };
 }
 ```
 
-Добавить новый тип здания = создать `.tres` в редакторе, кода не трогая.
+Каталог нужен по трём причинам, и первая — главная:
 
-### 4.3 Документы (Records) — журнал в памяти
+1. **Документы носят строковый `DefId`, а не ссылку на ресурс** — так они переживут сохранение. Кто-то должен превращать этот id обратно в определение, иначе запись «поставлен `factory` в клетке (5,2)» нечем восстановить.
+2. Надо уметь **перечислить** доступное роли — из этого HUD строит панель. Добавил `.tres` — кнопка появилась сама.
+3. Загрузка один раз на старте, пути к ресурсам не размазаны по коду.
 
-Иммутабельное событие. Интерфейс `IRecord` живёт в `scripts/data`. Транзиентные (нужны один кадр) помечаем маркером — их чистим в cleanup.
+Каталог — **только чтение**. Он ничего не создаёт и не знает о живых сущностях: создание в `Spawner`, живые экземпляры в `EntityStore`.
+
+### 5.3 Документы
+
+Структура (не класс), имя в прошедшем времени, внутри — только данные и стабильные идентификаторы, **никогда** ссылки на ноды.
 
 ```csharp
-public interface IRecord { int SequenceId { get; set; } }
-public interface ITransientRecord : IRecord { }   // живёт один кадр
+public interface IEventRecord
+{
+    int SequenceId { get; set; }   // проставляет сам поток при дозаписи
+}
 
-public struct BuildingPlacedRecord : IRecord
+[TransientEvent]                    // живёт один кадр
+public struct BlueprintPlaced : IEventRecord
 {
     public int SequenceId { get; set; }
-    public int BuildingId;      // стабильный EntityId, НЕ ссылка на ноду
-    public string DefId;        // ключ справочника
+    public int EntityId;
+    public string DefId;            // ключ справочника
     public Vector2I Cell;
-    public int OwnerId;
 }
 ```
 
-Журнал — набор типизированных потоков. Поток и хранит записи (для чтения за кадр), и публикует событие (для инкрементальных регистров):
+Структура, а не класс — потому что документов десятки в секунду, а значимый тип не грузит сборщик мусора.
+
+**Приказы документами не являются.** Документ — уже свершившийся факт, его нельзя отклонить или отменить. Приказ (`Order`) — это намерение, он живёт отдельно, в очереди юнита.
+
+Транзиентность — **атрибут**, а не интерфейс-маркер: время жизни это метаданные о записи, а не её разновидность.
+
+### 5.4 Журнал — EventStore и EventStream
 
 ```csharp
-public sealed class RecordStream<T> where T : IRecord
+public sealed class EventStream<T> : IEventStream where T : IEventRecord
 {
-    private readonly List<T> _records = new();
-    private int _lastSeq;
+    public event Action<T> Appended;              // сюда подписываются проекции
+    public IReadOnlyList<T> Records => _records;   // системам, читающим пачкой за кадр
 
-    public event Action<T> Published;             // регистры подписываются сюда
-    public IReadOnlyList<T> Records => _records;   // системам, читающим за кадр
+    public bool IsTransient { get; } =
+        Attribute.IsDefined(typeof(T), typeof(TransientEventAttribute));
 
-    public void Add(T rec)
+    public void Add(T record)
     {
-        rec.SequenceId = ++_lastSeq;
-        _records.Add(rec);
-        Published?.Invoke(rec);                    // проекция в момент публикации
+        record.SequenceId = ++_lastSequenceId;
+        _records.Add(record);
+        Appended?.Invoke(record);
     }
-
-    public void Clear() => _records.Clear();       // фаза cleanup (для транзиентных)
-}
-
-public sealed class Journal
-{
-    private readonly Dictionary<Type, object> _streams = new();
-
-    public RecordStream<T> Stream<T>() where T : IRecord
-    {
-        if (!_streams.TryGetValue(typeof(T), out var s))
-            _streams[typeof(T)] = s = new RecordStream<T>();
-        return (RecordStream<T>)s;
-    }
-
-    public void Publish<T>(T rec) where T : IRecord => Stream<T>().Add(rec);
 }
 ```
 
-### 4.4 Регистры (Registers) — инкрементальные проекции
+У потока две разные роли, и путать их не надо: `Appended` — подписка (так работают проекции), `Records` — список за кадр (для разбора пачкой).
 
-Регистр держит агрегат и обновляет его **дельтой в момент публикации документа**, а не пересчётом из журнала. Это важнейшее изменение относительно прошлого прототипа: так регистр не зависит от истории журнала — и журнал можно резать свободно (см. раздел 5).
+Метод дозаписи называется `Append`, а не `Publish`: журнал — append-only лог, и имя должно учить структуре данных.
 
 ```csharp
-public abstract class Register
+Events.Append(new ResourceSpent { Kind = ResourceKind.Ore, Amount = use });
+Events.Stream<ResourceSpent>().Appended += OnSpent;
+```
+
+**Сегодня это шина в пределах кадра, а не долговременный лог:** все документы проекта помечены `[TransientEvent]`, журнал вычищается каждый кадр и историю не хранит. Долговременный лог понадобится для сохранений — тогда часть потоков перестанет быть транзиентной (см. раздел 6).
+
+### 5.5 Проекции
+
+Проекция отвечает на вопрос «сколько сейчас», документ — на вопрос «что случилось».
+
+**Главное правило: обновляться дельтой в момент дозаписи, а не пересчётом из истории.** Два следствия:
+
+1. Журнал можно чистить и усекать — проекция самодостаточна.
+2. Стоимость обновления не растёт вместе с числом сущностей.
+
+Именно на этом обжёгся прошлый прототип (CircleSlugs): там регистр суммировал всех живых врагов заново на каждый спавн и каждую смерть.
+
+```csharp
+public abstract class Projection
 {
-    public event Action Changed;
+    public event Action Changed;                      // отсюда обновляется представление
     protected void NotifyChanged() => Changed?.Invoke();
-    public abstract void Wire(Journal journal);   // подписки на потоки
+    public abstract void Subscribe(EventStore events); // зовётся один раз при старте
 }
 
-public sealed class StockpileRegister : Register
+public sealed class StockpileProjection : Projection
 {
-    private readonly Dictionary<string, long> _amount = new();  // resId -> кол-во
-    public long Get(string resId) => _amount.GetValueOrDefault(resId);
+    private readonly Dictionary<ResourceKind, float> _amount = new();
 
-    public override void Wire(Journal j)
-    {
-        j.Stream<ResourceGainedRecord>().Published += r => Apply(r.ResId, +r.Amount);
-        j.Stream<ResourceSpentRecord>().Published  += r => Apply(r.ResId, -r.Amount);
-    }
+    public float Get(ResourceKind kind) => _amount.GetValueOrDefault(kind);
 
-    private void Apply(string resId, long delta)
+    public override void Subscribe(EventStore events)
     {
-        _amount[resId] = Get(resId) + delta;
-        NotifyChanged();
+        events.Stream<ResourceGained>().Appended += r => { Apply(r.Kind, +r.Amount); };
+        events.Stream<ResourceSpent>().Appended   += r => { Apply(r.Kind, -r.Amount); };
     }
 }
 ```
 
-`RegisterRegistry` хранит регистры по типу (`Dictionary<Type, Register>`), `Get<T>()` достаёт нужный, `WireAll(journal)` подписывает всех.
+**У проекции нет и не должно быть методов «добавить» или «списать».** Чтобы запас изменился, публикуй документ — тогда у каждого изменения есть след в журнале, и правило не обходится втихую.
 
-### 4.5 Системы (Systems) — ноды с `[Export]`
+### 5.6 Системы, планировщик и фазы
 
-Система — нода: её добавляют в сцену и настраивают в инспекторе (это DX-выбор). Базовый класс даёт доступ к корню и точки входа по фазам.
+Система — нода: её добавляют в сцену и настраивают в инспекторе. Порядок исполнения задаётся полем, а не порядком нод в дереве.
 
 ```csharp
 public partial class GameSystem : Node
 {
-    protected GameManager GM => GameManager.Instance;
+    [Export] public Phase Phase = Phase.Simulate;
+    [Export] public int StepOrder;          // чем меньше, тем раньше внутри фазы
 
-    public override void _Ready() => OnRegister();
-    protected virtual void OnRegister() {}         // подписки, регистрация в планировщике
-    public virtual void Simulate(double dt) {}     // фаза симуляции
-    public virtual void React(double dt) {}        // фаза реакции на документы кадра
+    protected GameManager GM => GameManager.I;
+
+    public override void _Ready() { GM.Scheduler.Add(this); OnRegister(); }
+    protected virtual void OnRegister() { }
+    public virtual void Step(double dt) { }
 }
 ```
 
-Пример: система стройки валидирует запрос (через регистр и сетку) и публикует документы. Заметь — она не создаёт здание сама, только фиксирует факт:
+Фазы: `Input` → `Simulate` → `React` → `Cleanup`. Один `_PhysicsProcess` корня прогоняет кадр целиком, отрисовка идёт отдельно в `_Process` нод.
+
+Текущий порядок в `Main.tscn`: `CommandSystem` (Input) → `BotAiSystem` → `UnitSystem` → `WorkSystem` → `FactorySystem` → `OreSpawnSystem`. Важно, что `UnitSystem` идёт раньше `WorkSystem`: сначала исполнители подключаются к узлам, потом узлы работают.
+
+### 5.7 Сущности, Spawner и EntityStore
+
+- **Видимое или физическое** — нода (`Node2D`, при необходимости `CharacterBody2D`, `Area2D`).
+- **Данные сущности** — обычные C#-объекты, которыми владеет нода. Не плодим ноды на каждую характеристику.
+- У сущности стабильный `EntityId`.
+
+Создание сущностей — **только через `Spawner`**. Он владеет обрядом: выдать id, поднять сцену, инициализировать, занять клетки, положить в `EntityStore`. Вынесено потому, что раньше эти четыре шага дословно повторялись в пяти местах, и правило «кто занимает сетку и кто попадает в реестр» расползалось по системам.
 
 ```csharp
-public partial class BuildSystem : GameSystem
-{
-    [Export] public string DefaultBuilding = "hq";
-
-    public void RequestPlace(string defId, Vector2I cell, int ownerId)
-    {
-        var def = GM.Catalog.Building(defId);
-        if (!GM.Grid.IsFree(cell, def.Size)) return;                     // занятость сетки
-        if (GM.Registers.Get<StockpileRegister>().Get("wood") < def.WoodCost) return;
-
-        GM.Journal.Publish(new ResourceSpentRecord  { ResId = "wood", Amount = def.WoodCost });
-        GM.Journal.Publish(new BuildingPlacedRecord { BuildingId = GM.NewId(),
-                                                      DefId = defId, Cell = cell, OwnerId = ownerId });
-    }
-}
+var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, origin);
+GM.Spawn.SpawnBuilding(def, cell);
+GM.Spawn.SpawnUnit(scene, position);
+GM.Spawn.SpawnOre(scene, cell);
 ```
 
-А система мира реагирует на документ — вот тут появляется нода и занимается сетка:
+Это **не** метод каталога: каталог только читает, а создание трогает сетку, реестр и дерево сцены. Смешаешь — справочник потащит за собой полмира.
+
+### 5.8 Узлы работы — WorkNode
+
+Игровой паттерн, на котором держится вся экономика. Идея: **месторождение и каркас — это одно и то же с точки зрения механики.** К обоим подключаются исполнители со своей мощностью инструмента, оба сами считают суммарный поток и сами двигают ресурсы. Каркас тянет из хранилища, месторождение отдаёт в хранилище.
 
 ```csharp
-public partial class WorldSystem : GameSystem
+public abstract partial class WorkNode : Node2D
 {
-    protected override void OnRegister()
-    {
-        GM.RegisterSystem(this, Phase.React);
-        GM.Journal.Stream<BuildingPlacedRecord>().Published += Spawn;
-    }
+    private readonly Dictionary<int, float> _connections = new();  // id исполнителя -> мощность
 
-    private void Spawn(BuildingPlacedRecord r)
-    {
-        var def = GM.Catalog.Building(r.DefId);
-        var node = def.Scene.Instantiate<Building>();
-        node.Init(r.BuildingId, r.OwnerId);
-        AddChild(node);
-        GM.Entities.Add(r.BuildingId, node);        // связь id -> нода
-        GM.Grid.Occupy(r.Cell, def.Size, r.BuildingId);
-    }
+    public float TotalPower { get; private set; }   // пересчитывается дельтой
+    public abstract bool NeedsWork { get; }         // по этому признаку боты ищут работу
+
+    public void AttachWorker(int workerId, float power);
+    public void DetachWorker(int workerId);
+    public abstract void Work(double dt);
+    protected void ReleaseWorkers();                // узел уходит — отпускает исполнителей
 }
 ```
 
-### 4.6 Сущности и компоненты (мини-ECS)
+Ключевое: **исполнитель только сообщает свою мощность, ресурсы двигает узел** — одним запросом к хранилищу за тик, а не обходом всех подключённых. Локальный реестр подключений живёт внутри самого узла.
 
-- **Видимое/физическое** (юнит, здание, снаряд) — нода (`Node2D`, `CharacterBody2D`, `Area2D`), потому что нужны отрисовка, коллайдеры, рейкасты, сигналы движка.
-- **Данные сущности** (`Health`, `Inventory`, `Owner`) — обычные C#-объекты, которыми владеет нода. Не плодим ноды на каждую характеристику.
-- У сущности стабильный `EntityId`, по которому её находят из документов и регистра сущностей.
+Не хватает ресурсов — стройка **замедляется пропорционально доступному**, а не встаёт колом: `AvailableFraction` возвращает долю, на которую узел масштабирует и прогресс, и списание.
 
-```csharp
-public partial class Building : Node2D
-{
-    public int Id { get; private set; }
-    public Owner Owner { get; private set; }
-    public Health Health { get; private set; } = new(100);
+### 5.9 Сигналы Godot — на границе с представлением
 
-    public void Init(int id, int ownerId) { Id = id; Owner = new(ownerId); }
-}
-```
-
-### 4.7 Планировщик и фазы кадра
-
-Свой планировщик даёт то, ради чего мы и отказались от голого `_Process`: явный порядок и фазы. Один `_PhysicsProcess` корня прогоняет кадр целиком.
-
-```csharp
-public enum Phase { Input, Simulate, React, Cleanup }
-
-public sealed class Scheduler
-{
-    private readonly Dictionary<Phase, List<GameSystem>> _byPhase = new();
-
-    public void Add(GameSystem s, Phase p) =>
-        (_byPhase.TryGetValue(p, out var l) ? l : _byPhase[p] = new()).Add(s);
-
-    public void RunFrame(double dt)
-    {
-        foreach (var s in Phase(Phase.Input))    s.Simulate(dt);   // сбор намерений
-        foreach (var s in Phase(Phase.Simulate)) s.Simulate(dt);   // движение, добыча, бой → документы
-        // регистры уже впитали документы в момент Publish (инкрементально)
-        foreach (var s in Phase(Phase.React))    s.React(dt);      // реакция на документы кадра
-        foreach (var s in Phase(Phase.Cleanup))  s.React(dt);      // отложенные удаления
-        GameManager.Instance.Journal.ClearTransient();            // чистка транзиентных потоков
-    }
-
-    private List<GameSystem> Phase(Phase p) => _byPhase.GetValueOrDefault(p) ?? _empty;
-    private static readonly List<GameSystem> _empty = new();
-}
-```
-
-Отрисовка и интерполяция визуала — в `_Process` соответствующих нод, вне тика симуляции.
-
-### 4.8 События-связки — сигналы Godot
-
-Там, где нужна конфигурируемая связь (особенно UI и подача эффектов), используем **сигналы Godot** — их соединяют и в редакторе визуально, и в коде. Это ровно та настраиваемость под геймдизайн, к которой мы шли; в Godot она родная.
-
-Правило разделения: **внутри симуляции связи идут через документы** (для сейва и порядка это надёжнее), **сигналы — на границе с презентацией** (регистр изменился → сигнал → полоска ресурса обновилась).
-
-```csharp
-public override void _Ready()
-{
-    GM.Registers.Get<StockpileRegister>().Changed += () => EmitSignal(SignalName.StockpileChanged);
-}
-```
+Правило разделения: **внутри симуляции связи идут через документы**, **сигналы — на границе с презентацией** (проекция изменилась → сигнал → полоска ресурса обновилась). Сигналы соединяются и в редакторе, и в коде — это та самая настраиваемость под геймдизайн, и в Godot она родная.
 
 ---
 
-## 5. Журналы: как ужимать и не сломать регистры
+## 6. Журналы: как ужимать и не сломать проекции
 
-Наивный журнал только дописывается и растёт всю сессию. Резать его нельзя бездумно: потребители читают по курсору `SequenceId`, а регистры проецируются из событий — обрежешь не то, и проекция разъедется.
+Наивный журнал только дописывается и растёт всю партию. Резать бездумно нельзя: потребители читают по курсору `SequenceId`, а проекции строятся из документов.
 
-**Ключевой принцип:** регистр — это проекция журнала. Обрезать журнал безопасно только до точки, которую все проекции и потребители уже впитали. Отсюда две дороги: либо сделать регистры независимыми от истории, либо знать «водяной знак» — докуда дошли все.
+**Ключевой принцип:** проекция — это свёртка журнала. Обрезать журнал безопасно только до точки, которую все проекции и потребители уже впитали. Отсюда две дороги: либо сделать проекции независимыми от истории, либо знать «водяной знак» — докуда дошли все.
 
-### Стратегия 1 — Инкрементальные регистры (основная, делает журнал необязательным для регистров)
+### Стратегия 1 — инкрементальные проекции (основная)
 
-Регистр обновляет агрегат дельтой в момент публикации записи (раздел 4.4), а не пересчётом из журнала. Тогда его состояние **не зависит от того, лежит запись в журнале или нет** — журнал можно резать свободно, регистр самодостаточен.
+Проекция обновляет агрегат дельтой в момент дозаписи, а не пересчётом. Тогда её состояние **не зависит от того, лежит запись в журнале или нет** — журнал можно резать свободно. Это дефолт проекта, и пока он соблюдается, обрезка журнала проекции в принципе не задевает.
 
-Это дефолт. Пока регистры инкрементальные, обрезка журнала их в принципе не задевает.
+### Стратегия 2 — фазовая очистка транзиентных записей
 
-### Стратегия 2 — Фазовая очистка транзиентных записей
+Большинство документов нужны только чтобы системы среагировали здесь и сейчас. Помечаем их `[TransientEvent]`, в конце кадра `ClearTransient` чистит такие потоки целиком. Курсоры не нужны. **Сейчас в проекте работает только эта стратегия плюс первая.**
 
-Большинство документов транзиентны: `EnemyDiedRecord`, `DamageRecord`, `ClickRecord` нужны только в этом кадре, чтобы системы среагировали. Помечаем такие типы маркером `ITransientRecord`; в фазе cleanup их потоки чистятся целиком (`Clear`), потому что все, кто должен был, уже отработали за кадр. Курсоры не нужны.
+### Стратегия 3 — водяной знак (для записей, живущих дольше кадра)
 
-```csharp
-public void ClearTransient()
-{
-    foreach (var stream in _transientStreams) stream.Clear();
-}
-```
-
-### Стратегия 3 — Водяной знак (для записей, живущих дольше кадра)
-
-Если запись читают несколько потребителей в разном темпе, поток держит по курсору на потребителя и режет всё ниже минимального. Потребитель двигает свой курсор после обработки; компакция — до `min(курсоров)`.
+Если запись читают несколько потребителей в разном темпе, поток держит по курсору на потребителя и режет всё ниже минимального:
 
 ```csharp
-// абсолютные SequenceId у курсоров, чтобы не сбивались при обрезке
-private readonly Dictionary<string, int> _cursor = new();
-
-public IEnumerable<T> ReadNew(string consumer)
-{
-    int from = _cursor.GetValueOrDefault(consumer, 0);
-    foreach (var r in _records) if (r.SequenceId > from) yield return r;
-    _cursor[consumer] = _records.Count > 0 ? _records[^1].SequenceId : from;
-}
-
 public void Compact()
 {
     int keep = _cursor.Count > 0 ? _cursor.Values.Min() : int.MaxValue;
@@ -402,62 +351,81 @@ public void Compact()
 }
 ```
 
-Берём это только там, где инкрементального регистра и фазовой чистки не хватает.
+Нумерация `SequenceId` при чистке **не сбрасывается** — иначе курсоры спутают новую запись со старой.
 
-### Стратегия 4 — Снапшоты + усечение (для сейвов и долгой истории)
+### Стратегия 4 — снапшоты и усечение (для сохранений)
 
-Если история нужна для сохранения (а в будущем — для сети): периодически снимаем снапшот состояния регистров и усекаем журнал до точки снапшота. Восстановление = снапшот + хвост журнала. Это классический event-sourcing snapshotting. Для одиночной игры снапшот регистров — это и есть основа сейва.
+Периодически снимаем снимок состояния проекций и усекаем журнал до точки снимка. Восстановление = снимок + хвост журнала. Для одиночной игры снимок проекций и есть основа сейва.
 
-### Стратегия 5 — Кольцевой буфер
+### Стратегия 5 — кольцевой буфер
 
-Для потоков с фиксированным горизонтом (нужны последние N событий) — кольцевой буфер: старое затирается новым, роста нет.
+Для потоков с фиксированным горизонтом (нужны последние N событий) — старое затирается новым, роста нет.
 
-### Правило, чтобы регистры не ломались
+### Правило, чтобы проекции не ломались
 
-- **Регистр инкрементальный (Стратегия 1)** — обрезка журнала его не трогает. Так по умолчанию.
-- **Если какой-то регистр всё же считается из журнала** (иногда так проще) — усечение обязано идти через водяной знак, который учитывает курсор этого регистра. Порядок: регистр фиксирует свой агрегат (снапшот) → и только потом разрешаем резать журнал до его курсора. Никогда не режем журнал ниже точки, которую регистр ещё не учёл.
-
-Практический дефолт для red_planet: **регистры инкрементальные + транзиентные документы чистятся по фазе + снапшот регистров для сейва.** Водяной знак — точечно, где реально нужен многопоточный разбор долгоживущих записей.
+- **Проекция инкрементальная** — обрезка журнала её не трогает. Так по умолчанию.
+- **Если проекция всё же считается из журнала** — усечение обязано идти через водяной знак с её курсором. Порядок: проекция фиксирует свой агрегат снимком → и только потом режем журнал до её курсора. Никогда не режем ниже точки, которую проекция ещё не учла.
 
 ---
 
-## 6. Связывание сущностей
+## 7. Связывание сущностей
 
-- У каждой сущности **стабильный `EntityId`** (счётчик в `GameManager.NewId()`).
-- **Документы несут `EntityId` и значения, а не ссылки на ноды.** Причины: нода может быть удалена (снаряд, погибший юнит), а документ должен пережить это; документы сериализуются для сейва; когда-нибудь — реплицируются.
-- **`EntityRegistry`** — словарь `EntityId → сущность/нода` — даёт обратный поиск, когда система реагирует на документ и ей нужна живая нода.
-- Внутри одного кадра ноды могут держать прямые ссылки для «горячих» связей. Но **всё, что пересекает слои** (документы, регистры, сейв), — только через id.
-- **`Owner` (playerId)** на сущности — под будущие co-op-права, даже если сейчас игрок один.
+- У каждой сущности **стабильный `EntityId`** (`GameManager.NewId()`).
+- **Документы носят `EntityId` и значения, а не ссылки на ноды.** Нода умирает, а документ должен пережить её и сохранение.
+- **`EntityStore`** даёт обратный перевод id → нода, когда система отреагировала на документ и ей нужна живая сущность.
+- Внутри кадра ноды могут держать прямые ссылки для «горячих» связей. Но всё, что пересекает слои, — только через id.
+- **`Owner` (playerId)** на сущности — задел под co-op, даже пока игрок один.
 
-```csharp
-public sealed class EntityRegistry
-{
-    private readonly Dictionary<int, Node> _byId = new();
-    public void Add(int id, Node node) => _byId[id] = node;
-    public void Remove(int id) => _byId.Remove(id);
-    public Node? Get(int id) => _byId.GetValueOrDefault(id);
-}
+---
+
+## 8. Подводные камни Godot + C#
+
+Собрано по граблям, на которые уже наступили.
+
+**Освобождённая нода бросает исключение при проверке.** `GodotObject.IsInstanceValid(x)` сам кидает `ObjectDisposedException`, если C#-обёртка уже освобождена. Поэтому любые ссылки на возможно-мёртвые ноды проверяем через `Alive.Is(...)`, а не напрямую.
+
+**Уходящий узел обязан отпустить тех, кто на него ссылается.** `WorkNode.ReleaseWorkers()` вызывается до `QueueFree()`: иначе юнит на следующем кадре обратится к мёртвому объекту. Плюс перед удалением узел снимается с групп и `SetProcess(false)`, чтобы по нему не прошёл ещё один кадр отрисовки.
+
+**Id выставляется до добавления в дерево.** Иначе нода успевает попасть в группу и получить работу с ещё нулевым `Id` — подключение к узлу работы запишется не на того исполнителя, а отключение потом не сработает и мощность зависнет навсегда.
+
+**Позицию курсора берём из события ввода, а не опросом.** `GetGlobalMousePosition()` возвращает системное положение мыши, которое расходится с координатами события — приказы уходят не туда.
+
+**Имена полей не должны пересекаться с именами типов.** Поле `Order` в `GameSystem` перекрыло класс `Order` и уронило сборку; поэтому поле называется `StepOrder`.
+
+---
+
+## 9. Размещение в проекте
+
+```
+scripts/
+├─ core/       GameManager, Scheduler, Spawner, EntityStore, WorldGrid, GameSystem, Const, Alive, Main
+├─ data/       EventRecord, EventStore, Projection, Events, Catalog
+│  ├─ Configs/     BuildableDef, UnitDef
+│  └─ Projections/ StockpileProjection
+├─ world/      WorkNode, Blueprint, OreDeposit, Building, сетка, камера, призрак, UnitSystem, WorkSystem, OreSpawnSystem
+├─ units/      Unit, Commander, Bot, Order, CommandSystem, BotAiSystem
+├─ buildings/  Factory, FactorySystem
+└─ ui/         Hud
+
+resources/     units/*.tres, buildables/*.tres
+scenes/        world/, units/, buildings/
 ```
 
----
-
-## 7. Размещение в проекте
-
-- `scripts/core/` — `GameManager`, `Scheduler`, `Phase`, `EntityRegistry`, базовые контракты (`GameSystem`).
-- `scripts/data/` — инфраструктура данных: `IRecord`/`ITransientRecord`, `RecordStream`, `Journal`, `Register`, `RegisterRegistry`, `Catalog`.
-- `scripts/data/Configs/` — подклассы `Resource` (`BuildingDef`, `UnitDef`). Экземпляры `.tres` — в `resources/`.
-- `scripts/data/Records/` — конкретные документы.
-- `scripts/data/Registers/` — конкретные регистры.
-- `scripts/units/`, `scripts/buildings/`, `scripts/world/` — ноды-сущности и их системы (либо, если удобнее, отдельная папка `scripts/systems/`).
-- `scripts/ui/` — UI, слушает сигналы регистров.
-
-Data-слой (`scripts/data`, `scripts/core`) почти не зависит от Godot — его можно покрывать обычными юнит-тестами без движка.
+Слой данных (`scripts/data`, большая часть `scripts/core`) почти не зависит от Godot — его можно покрывать обычными тестами без движка.
 
 ---
 
-## 8. Отложено / открытые вопросы
+## 10. Состояние и что дальше
 
-- Сеть и мультиплеер — отложены (документы = естественные кандидаты на репликацию, когда вернёмся).
-- Точный формат сейва (снапшот регистров + справочники + сущности).
-- Пафайндинг: `AStarGrid2D` по сетке застройки + движение в непрерывном пространстве.
-- Нужна ли отдельная папка `scripts/systems/` или системы живут по доменам — решим по мере роста.
+**Работает:** приказы коммандеру, добыча через узлы работы, слоты руды с респавном, стройка по сетке с матрицей, каркасы с вытягиванием ресурсов по суммарной мощности, завод (руда → метал), автономные боты (фабрикатор и копатель), HUD и панель строительства.
+
+**Роли юнитов задаются числами в `.tres`, а не классами:** коммандер `BuildPower 20 / MinePower 10`, фабрикатор `4/0`, копатель `0/4`. Универсальный бот делается правкой конфига.
+*(Мощности коммандера удвоены против исходных 10/5 — чтобы не ждать во время отладки.)*
+
+**Отложено:**
+
+- Ремонт — в конфиге есть задел, но урона в игре пока нет.
+- Здание-ассемблер (`CanAssemble` в справочнике) — выключено.
+- Пафайндинг: `AStarGrid2D` по сетке + движение в непрерывном пространстве. Сейчас юниты ходят по прямой.
+- Сохранения — снимок проекций плюс сущности; тогда же часть документов перестанет быть транзиентной.
+- Сеть и мультиплеер — документы естественные кандидаты на репликацию, когда вернёмся.

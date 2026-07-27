@@ -12,8 +12,12 @@ using Godot;
 ///
 /// Так у каждого изменения запаса есть след в журнале, и правило «состояние меняется
 /// только через документы» не обходится втихую.
+///
+/// Суффикс Projection в имени намеренный: у событий природу типа выдаёт прошедшее время
+/// (ResourceSpent), а существительное вроде Stockpile само по себе ничего не говорит —
+/// без суффикса тип читался бы как «просто склад».
 /// </summary>
-public sealed class Stockpile : Projection
+public sealed class StockpileProjection : Projection
 {
     private readonly Dictionary<ResourceKind, float> _amount = new()
     {

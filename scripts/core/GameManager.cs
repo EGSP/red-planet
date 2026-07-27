@@ -44,7 +44,7 @@ public partial class GameManager : Node
 
         // Порядок держим явным: если проекция читает другую, зависимость идёт раньше.
         // Сначала собираем состав, потом подписываем — тогда они могут ссылаться друг на друга.
-        Projections.Add(new Stockpile());
+        Projections.Add(new StockpileProjection());
         Projections.SubscribeAll(Events);
     }
 
@@ -55,5 +55,5 @@ public partial class GameManager : Node
     }
 
     /// <summary>Ярлык к самой ходовой проекции — общему хранилищу базы.</summary>
-    public Stockpile Stockpile => Projections.Get<Stockpile>();
+    public StockpileProjection Stockpile => Projections.Get<StockpileProjection>();
 }
