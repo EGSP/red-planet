@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="EnemyDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/Configs/EnemyDef.cs" id="1_script"]
+[ext_resource type="Resource" path="res://resources/weapons/skirmisher_smg.tres" id="2_weapon"]
+
+[resource]
+script = ExtResource("1_script")
+Id = "skirmisher"
+DisplayName = "Стрелок"
+MaxHealth = 70.0
+Speed = 3.4
+TurnSpeedDegrees = 220.0
+Radius = 0.32
+Weapon = ExtResource("2_weapon")
+SpawnWeight = 1.4
+StandoffFraction = 0.8
+Color = Color(0.95, 0.6, 0.2, 1)

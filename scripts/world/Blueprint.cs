@@ -4,16 +4,31 @@ using Godot;
 /// Каркас будущей постройки. Появляется в мире сразу при постановке.
 /// Сам тянет ресурсы из общего хранилища пропорционально суммарной мощности строителей.
 /// Не хватает ресурсов — стройка замедляется, а не встаёт.
+///
+/// Каркас — тоже цель для врага, и прочности у него доля от готовой постройки
+/// (Const.BlueprintHealthFactor): стройка под обстрелом должна быть рискованной затеей.
 /// </summary>
-public partial class Blueprint : WorkNode
+public partial class Blueprint : WorkNode, IFacing, IDamageable
 {
     public BuildableDef Def { get; private set; }
     public Vector2I Cell { get; private set; }
     public float Progress { get; private set; }
 
+    public Health Health { get; private set; }
+
     public override bool NeedsWork => Def != null && Progress < Def.TotalWork;
 
     public float Ratio => Def == null || Def.TotalWork <= 0f ? 0f : Progress / Def.TotalWork;
+
+    public int EntityId => Id;
+
+    public Faction Faction => Faction.Player;
+
+    public float Facing => Def != null ? Mathf.DegToRad(Def.FacingDegrees) : 0f;
+
+    public float HitRadius => Def != null
+        ? Mathf.Max(Def.Width, Def.Height) * Const.Unit * 0.5f
+        : Const.Unit * 0.5f;
 
     public void Init(int id, BuildableDef def, Vector2I cell)
     {
@@ -21,12 +36,16 @@ public partial class Blueprint : WorkNode
         Def = def;
         Cell = cell;
         Position = Const.AreaCenter(cell, def.Size);
+        Health = new Health(def.MaxHealth * Const.BlueprintHealthFactor);
     }
 
     public override void _Ready()
     {
+        Health ??= new Health(100f * Const.BlueprintHealthFactor);
+
         AddToGroup("work");
         AddToGroup("blueprint");
+        AddToGroup(Targeting.Group);
     }
 
     public override void _Process(double delta) => QueueRedraw();
@@ -87,12 +106,25 @@ public partial class Blueprint : WorkNode
         Retire();
     }
 
+    /// <summary>Каркас разбит: клетки освобождаются, вложенные ресурсы пропадают.</summary>
+    public void OnDestroyed()
+    {
+        var gm = GameManager.I;
+
+        if (Def != null)
+            gm.Grid.Free(Cell, Def);
+
+        gm.Entities.Remove(Id);
+        Retire();
+    }
+
     /// <summary>Выводим узел из игры до удаления, чтобы по нему не прошёл ещё один кадр.</summary>
     private void Retire()
     {
         ReleaseWorkers();
         RemoveFromGroup("work");
         RemoveFromGroup("blueprint");
+        RemoveFromGroup(Targeting.Group);
         SetProcess(false);
         Visible = false;
         QueueFree();
@@ -124,5 +156,7 @@ public partial class Blueprint : WorkNode
             DrawString(font, new Vector2(rect.Position.X, rect.End.Y + 16f),
                 $"строителей: {WorkerCount} ({TotalPower:0.#}/с)",
                 HorizontalAlignment.Left, -1, 11, new Color(0.8f, 0.9f, 1f));
+
+        HealthBar.Draw(this, Health, size.X * 0.9f, rect.Position.Y - 20f);
     }
 }

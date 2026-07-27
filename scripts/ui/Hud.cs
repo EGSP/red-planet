@@ -7,6 +7,7 @@ using Godot;
 public partial class Hud : CanvasLayer
 {
     private Label _resources;
+    private Label _combat;
     private Label _status;
     private VBoxContainer _buttons;
 
@@ -26,6 +27,11 @@ public partial class Hud : CanvasLayer
         _resources = new Label { Text = "руда 0   метал 0" };
         _resources.AddThemeFontSizeOverride("font_size", 18);
         box.AddChild(_resources);
+
+        _combat = new Label { Text = "врагов 0" };
+        _combat.AddThemeFontSizeOverride("font_size", 13);
+        _combat.AddThemeColorOverride("font_color", new Color(1f, 0.7f, 0.65f));
+        box.AddChild(_combat);
 
         box.AddChild(new HSeparator());
 
@@ -64,6 +70,13 @@ public partial class Hud : CanvasLayer
 
         _resources.Text = $"руда {stockpile.Get(ResourceKind.Ore):0}   " +
                           $"метал {stockpile.Get(ResourceKind.Metal):0}";
+
+        var combat = gm.Combat;
+        float commanderDamage = gm.Commander?.Health.TotalTaken ?? 0f;
+
+        _combat.Text = $"врагов на карте {combat.EnemiesAlive}   " +
+                       $"уничтожено {combat.EnemiesDestroyed}   потеряно {combat.LossesTaken}\n" +
+                       $"урон коммандеру {commanderDamage:0}";
 
         var pending = gm.Command?.Pending;
         _status.Text = pending != null

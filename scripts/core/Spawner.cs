@@ -70,6 +70,45 @@ public sealed class Spawner
         return blueprint;
     }
 
+    /// <summary>Враг ходит по миру и клеток не занимает — как и юнит игрока.</summary>
+    public Enemy SpawnEnemy(PackedScene scene, EnemyDef def, Vector2 position)
+    {
+        var enemy = scene.Instantiate<Enemy>();
+
+        int id = _gm.NewId();
+        enemy.Init(id, def, position);
+
+        _gm.WorldRoot.AddChild(enemy);
+        _gm.Entities.Add(id, enemy);
+
+        return enemy;
+    }
+
+    /// <summary>
+    /// Снаряд. Единственная сущность мира без EntityId: их за бой тысячи, они живут доли
+    /// секунды, и ссылаться на снаряд из документа некому — попадание носит id стрелка и цели.
+    /// </summary>
+    public Projectile SpawnProjectile(WeaponDef weapon, IArmed shooter, Vector2 from, float angle)
+    {
+        var direction = Heading.Forward(angle);
+
+        var projectile = new Projectile
+        {
+            Position = from + direction * weapon.ProjectileRadiusPx * 2f,
+            Velocity = direction * weapon.SpeedPx,
+            Damage = weapon.Damage,
+            Radius = weapon.ProjectileRadiusPx,
+            Life = weapon.Lifetime,
+            SourceId = shooter.EntityId,
+            TargetSide = shooter.Faction.Opposite(),
+            Tint = weapon.ProjectileColor,
+        };
+
+        _gm.WorldRoot.AddChild(projectile);
+
+        return projectile;
+    }
+
     /// <summary>Месторождение занимает свою клетку, пока не выработано.</summary>
     public OreDeposit SpawnOre(PackedScene scene, Vector2I cell)
     {

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/Configs/WeaponDef.cs" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+Id = "skirmisher_smg"
+DisplayName = "Скорострел"
+Range = 5.5
+Damage = 3.5
+FireInterval = 0.15
+ProjectileSpeed = 20.0
+SpreadDegrees = 7.0
+AimConeDegrees = 16.0
+ProjectileRadius = 0.05
+ProjectileColor = Color(1, 0.95, 0.5, 1)

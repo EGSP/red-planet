@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://scripts/core/Main.cs" id="1_main"]
 [ext_resource type="Script" path="res://scripts/world/GridRenderer.cs" id="2_grid"]
@@ -13,6 +13,12 @@
 [ext_resource type="PackedScene" path="res://scenes/units/Commander.tscn" id="11_commander"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="12_blueprint"]
 [ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="13_ore"]
+[ext_resource type="Script" path="res://scripts/enemies/EnemySpawnSystem.cs" id="14_enemyspawn"]
+[ext_resource type="Script" path="res://scripts/enemies/EnemySystem.cs" id="15_enemy"]
+[ext_resource type="Script" path="res://scripts/combat/WeaponSystem.cs" id="16_weapon"]
+[ext_resource type="Script" path="res://scripts/combat/ProjectileSystem.cs" id="17_projectile"]
+[ext_resource type="Script" path="res://scripts/combat/DamageSystem.cs" id="18_damage"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/Enemy.tscn" id="19_enemyscene"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -57,6 +63,32 @@ script = ExtResource("8_orespawn")
 Phase = 1
 StepOrder = 50
 OreScene = ExtResource("13_ore")
+
+[node name="EnemySpawnSystem" type="Node" parent="Systems"]
+script = ExtResource("14_enemyspawn")
+Phase = 1
+StepOrder = 55
+EnemyScene = ExtResource("19_enemyscene")
+
+[node name="EnemySystem" type="Node" parent="Systems"]
+script = ExtResource("15_enemy")
+Phase = 1
+StepOrder = 60
+
+[node name="WeaponSystem" type="Node" parent="Systems"]
+script = ExtResource("16_weapon")
+Phase = 1
+StepOrder = 70
+
+[node name="ProjectileSystem" type="Node" parent="Systems"]
+script = ExtResource("17_projectile")
+Phase = 1
+StepOrder = 80
+
+[node name="DamageSystem" type="Node" parent="Systems"]
+script = ExtResource("18_damage")
+Phase = 2
+StepOrder = 10
 
 [node name="Camera" type="Camera2D" parent="."]
 script = ExtResource("9_camera")

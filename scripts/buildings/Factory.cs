@@ -22,6 +22,14 @@ public partial class Factory : Building
 
     public override void _Process(double delta) => QueueRedraw();
 
+    /// <summary>Завод разрушен: снимаемся со своей группы, иначе система переработки
+    /// на следующем кадре обратится к мёртвой ноде.</summary>
+    public override void OnDestroyed()
+    {
+        RemoveFromGroup("factory");
+        base.OnDestroyed();
+    }
+
     public override void _Draw()
     {
         base._Draw();

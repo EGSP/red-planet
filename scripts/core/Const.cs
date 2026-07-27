@@ -18,6 +18,27 @@ public static class Const
     public const float OreRespawnDelay = 8f;
     public const float OreDepositAmount = 200f;
 
+    // Враги приходят из-за кольца руды: дальние месторождения лежат на линии их подхода
+    public const float EnemyRingFactor = 1.3f;
+
+    // Держим давление таким, чтобы коммандер в одиночку успевал отстреливаться:
+    // своих турелей у игрока пока нет, и толпа сносит базу за полминуты
+    public const int EnemyPopulation = 4;
+    public const float EnemySpawnDelay = 10f;
+    public const float EnemyFirstDelay = 30f;
+
+    /// <summary>Как часто враг переигрывает выбор цели, секунд.</summary>
+    public const float EnemyRetargetDelay = 1.5f;
+
+    /// <summary>
+    /// Доля прочности готовой постройки, которая есть у её каркаса.
+    /// Недостроенное ломается заметно легче — стройка под обстрелом должна быть рискованной.
+    /// </summary>
+    public const float BlueprintHealthFactor = 0.4f;
+
+    /// <summary>Радиус окружности появления врагов в пикселях.</summary>
+    public static float EnemySpawnRadiusPx => OreRingMax * EnemyRingFactor * Unit;
+
     public static Vector2 CellCorner(Vector2I cell) => new(cell.X * Unit, cell.Y * Unit);
 
     public static Vector2 CellCenter(Vector2I cell) =>

@@ -6,10 +6,10 @@ using Godot;
 /// </summary>
 public partial class WorkSystem : GameSystem
 {
-    public override void Step(double dt)
-    {
-        foreach (var node in GetTree().GetNodesInGroup("work"))
-            if (node is WorkNode work && Alive.Is(work) && !work.IsQueuedForDeletion())
-                work.Work(dt);
-    }
+	public override void Step(double dt)
+	{
+		foreach (var node in GetTree().GetNodesInGroup("work"))
+			if (node is WorkNode work && Alive.Is(work) && !work.IsQueuedForDeletion())
+				work.Work(dt);
+	}
 }

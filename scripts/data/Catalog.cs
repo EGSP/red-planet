@@ -21,13 +21,19 @@ public sealed class Catalog
 {
     private readonly Dictionary<string, BuildableDef> _buildables = new();
     private readonly Dictionary<string, UnitDef> _units = new();
+    private readonly Dictionary<string, EnemyDef> _enemies = new();
 
     public IReadOnlyCollection<BuildableDef> Buildables => _buildables.Values;
+
+    /// <summary>Виды врагов: из них система спавна и набирает поток по весам.</summary>
+    public IReadOnlyCollection<EnemyDef> Enemies => _enemies.Values;
 
     public BuildableDef Buildable(string id) =>
         _buildables.TryGetValue(id, out var def) ? def : null;
 
     public UnitDef Unit(string id) => _units.TryGetValue(id, out var def) ? def : null;
+
+    public EnemyDef Enemy(string id) => _enemies.TryGetValue(id, out var def) ? def : null;
 
     /// <summary>Что доступно строителю с этой ролью.</summary>
     public List<BuildableDef> AvailableFor(string role)
@@ -48,7 +54,11 @@ public sealed class Catalog
         foreach (var def in Load<UnitDef>("res://resources/units/"))
             _units[def.Id] = def;
 
-        GD.Print($"[Catalog] построек: {_buildables.Count}, юнитов: {_units.Count}");
+        foreach (var def in Load<EnemyDef>("res://resources/enemies/"))
+            _enemies[def.Id] = def;
+
+        GD.Print($"[Catalog] построек: {_buildables.Count}, юнитов: {_units.Count}, " +
+                 $"врагов: {_enemies.Count}");
     }
 
     private static List<T> Load<T>(string dir) where T : Resource

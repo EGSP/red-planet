@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="UnitDef" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="UnitDef" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/Configs/UnitDef.cs" id="1_script"]
+[ext_resource type="Resource" path="res://resources/weapons/commander_gun.tres" id="2_weapon"]
 
 [resource]
 script = ExtResource("1_script")
@@ -8,6 +9,10 @@ Id = "commander"
 DisplayName = "Коммандер"
 Role = "commander"
 Speed = 3.0
+TurnSpeedDegrees = 200.0
+MaxHealth = 300.0
+Radius = 0.38
+Weapon = ExtResource("2_weapon")
 BuildPower = 20.0
 MinePower = 10.0
 ToolRange = 3.0

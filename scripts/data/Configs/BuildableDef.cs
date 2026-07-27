@@ -28,6 +28,15 @@ public partial class BuildableDef : Resource
     /// <summary>Хук на будущее: постройка сама умеет строить в своём радиусе.</summary>
     [Export] public bool CanAssemble;
 
+    [Export] public float MaxHealth = 200f;
+
+    /// <summary>
+    /// Куда смотрит постройка, в градусах (0 — вправо). Здание статично и ноду не крутит:
+    /// визуал привязан к клеткам сетки. Ось нужна ради единого правила — направление
+    /// есть у любой сущности мира, — и пригодится турелям и воротам.
+    /// </summary>
+    [Export] public float FacingDegrees;
+
     [Export] public Color Color = new(0.6f, 0.6f, 0.65f);
 
     public int Width => Rows.Count > 0 ? Rows[0].Length : 1;
