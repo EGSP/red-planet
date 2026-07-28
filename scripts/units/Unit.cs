@@ -9,7 +9,7 @@ using Godot;
 /// Стрелять юнит начинает только без приказов: работа важнее, а огонь по площадям
 /// вместо стройки — не то, чего ждёшь от отданного приказа.
 /// </summary>
-public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
+public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision, IRepairable
 {
     [Export] public UnitDef Def;
 
@@ -39,6 +39,31 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
 
     public float HitRadius => Def?.RadiusPx ?? Const.Unit * 0.35f;
 
+    public float VisionRadius => Def?.VisionRadiusPx ?? 0f;
+
+    /// <summary>
+    /// Курс ремонта юнита берётся из справочника постройки с тем же ключом — того самого,
+    /// по которому его и собирают. Дублировать цену в UnitDef незачем: она уже есть,
+    /// и два числа рано или поздно разъехались бы.
+    ///
+    /// У коммандера такого справочника нет — значит и курса нет, и чинить его нечем.
+    /// Он и не нуждается: урон он копит, но не гибнет.
+    /// </summary>
+    public float HealthPerMetal
+    {
+        get
+        {
+            if (Def == null)
+                return 0f;
+
+            var buildable = GameManager.I.Catalog.Buildable(Def.Id);
+
+            // Прочность берём свою, а цену — из справочника сборки: чинить юнита с нуля
+            // должно стоить ровно столько же, сколько собрать его заново
+            return buildable is { CostMetal: > 0f } ? Def.MaxHealth / buildable.CostMetal : 0f;
+        }
+    }
+
     public WeaponDef Weapon => Def?.Weapon;
 
     /// <summary>
@@ -52,7 +77,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
     /// приказ игрока не должен перебиваться выбором «кто ближе».
     /// </summary>
     public IDamageable FireTarget =>
-        Current?.Kind == OrderKind.Attack ? Current.Victim as IDamageable : null;
+        Current?.Kind == OrderKind.Attack ? Current.Entity as IDamageable : null;
 
     public override void _Ready()
     {
@@ -62,10 +87,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
         AddToGroup(Targeting.Group);
         AddToGroup("armed");
 
-        // Коммандер — ходячая электростанция: без его собственного дохода первую
-        // настоящую электростанцию было бы не на что построить
-        if (Def != null && (Def.EnergyProduction > 0f || Def.MetalProduction > 0f))
-            AddToGroup(EconomySystem.Group);
+        // В экономике участвуют все юниты: коммандер — своим доходом (без него первую
+        // электростанцию было бы не на что строить), остальные — ремонтом
+        AddToGroup(EconomySystem.Group);
 
         QueueRedraw();
     }
@@ -77,6 +101,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
 
         ledger.AddIncome(ResourceKind.Energy, Def.EnergyProduction);
         ledger.AddIncome(ResourceKind.Metal, Def.MetalProduction);
+
+        // Ремонт — это и есть стройка тем же инструментом, поэтому и заявка та же:
+        // метал по строительной мощности плюс энергия на инструмент
+        if (RepairTarget != null)
+        {
+            ledger.Request(ResourceKind.Metal, Def.BuildPower);
+            ledger.Request(ResourceKind.Energy, Def.BuildPower * Def.BuildEnergyPerPower);
+        }
     }
 
     /// <summary>Своё производство идёт всегда, просадка производительности его не касается.</summary>
@@ -100,6 +132,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
                 Kind = ResourceKind.Metal,
                 Amount = Def.MetalProduction * (float)dt,
             });
+
+        RunRepair(dt, rates);
+    }
+
+    private void RunRepair(double dt, EconomyRates rates)
+    {
+        var target = RepairTarget;
+        if (target != null)
+            Repair.Run(target, Def.BuildPower, Def.BuildEnergyPerPower, dt, rates);
     }
 
     public void AimAt(Vector2 point, double dt)
@@ -144,10 +185,19 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
 
         var order = Orders[0];
 
-        if (order.Kind == OrderKind.Attack)
+        switch (order.Kind)
         {
-            StepAttack(order, dt);
-            return;
+            case OrderKind.Attack:
+                StepAttack(order, dt);
+                return;
+
+            case OrderKind.Repair:
+                StepRepair(order, dt);
+                return;
+
+            case OrderKind.Follow:
+                StepFollow(order, dt);
+                return;
         }
 
         Vector2 target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
@@ -202,7 +252,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
     {
         Detach();
 
-        var victim = order.Victim;
+        var victim = order.Entity;
         var target = victim as IDamageable;
         var to = victim.GlobalPosition;
 
@@ -220,18 +270,86 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
             GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
     }
 
+    /// <summary>
+    /// Ремонт: подойти на длину инструмента и стоять. Само восстановление прочности идёт
+    /// в Run — ремонт стоит ресурсов и потому проходит через экономику, как и стройка.
+    /// </summary>
+    private void StepRepair(Order order, double dt)
+    {
+        Detach();
+
+        var to = order.Entity.GlobalPosition;
+        AimAt(to, dt);
+
+        float stop = Def.ToolRange * Const.Unit;
+        if (GlobalPosition.DistanceTo(to) > stop)
+            GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
+    }
+
+    /// <summary>
+    /// Сопровождение: держаться рядом, но не наступать на пятки. Приказ не завершается сам —
+    /// его вытесняет работа, как только она появится.
+    /// </summary>
+    private void StepFollow(Order order, double dt)
+    {
+        Detach();
+
+        var to = order.Entity.GlobalPosition;
+        float distance = GlobalPosition.DistanceTo(to);
+
+        if (distance <= Const.FollowDistancePx)
+            return;
+
+        AimAt(to, dt);
+        GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
+    }
+
     private bool IsValid(Order order)
     {
-        if (order.Kind == OrderKind.Move)
-            return true;
+        switch (order.Kind)
+        {
+            case OrderKind.Move:
+                return true;
 
-        // Цель пала — приказ исчерпан, и юнит возвращается к обычному поведению
-        if (order.Kind == OrderKind.Attack)
-            return Targeting.IsValid(order.Victim);
+            // Цель пала — приказ исчерпан, и юнит возвращается к обычному поведению
+            case OrderKind.Attack:
+                return Targeting.IsValid(order.Entity);
+
+            // Починили — работа закончена сама собой
+            case OrderKind.Repair:
+                return Targeting.IsValid(order.Entity)
+                       && order.Entity is IRepairable { Health.Ratio: < 0.999f };
+
+            case OrderKind.Follow:
+                return Alive.Is(order.Entity) && !order.Entity.IsQueuedForDeletion();
+        }
 
         return Alive.Is(order.Target)
                && !order.Target.IsQueuedForDeletion()
                && order.Target.NeedsWork;
+    }
+
+    /// <summary>Кого чиним прямо сейчас: приказ ремонта, цель в пределах инструмента.</summary>
+    private IRepairable RepairTarget
+    {
+        get
+        {
+            var order = Current;
+
+            if (order?.Kind != OrderKind.Repair || Def == null || !Def.CanRepair)
+                return null;
+
+            if (order.Entity is not IRepairable repairable || !Targeting.IsValid(order.Entity))
+                return null;
+
+            if (order.Entity is Unit && !Def.CanRepairUnits)
+                return null;
+
+            float reach = Def.ToolRange * Const.Unit;
+            return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
+                ? repairable
+                : null;
+        }
     }
 
     private void Detach()
@@ -277,6 +395,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
 
         float radius = Def.RadiusPx;
 
+        VisionGizmo.Draw(this, Def.VisionRadiusPx, Def.Color);
         WeaponGizmo.Draw(this, Weapon, Def.Color);
 
         DrawCircle(Vector2.Zero, radius, Def.Color);
@@ -300,8 +419,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
 
         if (order.Kind == OrderKind.Move)
             DrawLine(Vector2.Zero, ToLocal(order.Pos), new Color(1f, 1f, 1f, 0.2f), 1f);
-        else if (order.Kind == OrderKind.Attack && Alive.Is(order.Victim))
-            DrawLine(Vector2.Zero, ToLocal(order.Victim.GlobalPosition),
+        else if (order.Kind == OrderKind.Attack && Alive.Is(order.Entity))
+            DrawLine(Vector2.Zero, ToLocal(order.Entity.GlobalPosition),
                 new Color(1f, 0.4f, 0.35f, 0.5f), 1.5f);
         else if (Alive.Is(order.Target))
             DrawLine(Vector2.Zero, ToLocal(order.Target.GlobalPosition),

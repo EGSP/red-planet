@@ -9,7 +9,7 @@ using Godot;
 /// стреляет (это WeaponSystem). Разделение то же, что у ботов игрока: поиск работы —
 /// дело системы, ход — дело сущности.
 /// </summary>
-public partial class Enemy : Node2D, IFacing, IDamageable, IArmed
+public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
 {
     public EnemyDef Def { get; private set; }
 
@@ -34,6 +34,8 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed
     public float Facing => Rotation;
 
     public float HitRadius => Def?.RadiusPx ?? Const.Unit * 0.4f;
+
+    public float VisionRadius => Def?.VisionRadiusPx ?? 0f;
 
     public WeaponDef Weapon => Def?.Weapon;
 
@@ -137,6 +139,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed
 
         float radius = Def.RadiusPx;
 
+        VisionGizmo.Draw(this, VisionRadius, Def.Color);
         WeaponGizmo.Draw(this, Weapon, Def.Color);
 
         DrawCircle(Vector2.Zero, radius, Def.Color);

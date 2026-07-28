@@ -7,7 +7,7 @@ using Godot;
 /// а поворот ноды сетку не поворачивает. Поэтому направление живёт отдельным числом
 /// из справочника и рисуется маркером — задел под турели и ворота.
 /// </summary>
-public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor
+public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVision, IRepairable
 {
     public int Id { get; private set; }
     public BuildableDef Def { get; private set; }
@@ -31,6 +31,11 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor
     public float HitRadius => Def != null
         ? Mathf.Max(Def.Width, Def.Height) * Const.Unit * 0.5f
         : Const.Unit * 0.5f;
+
+    public float VisionRadius => Def?.VisionRadiusPx ?? 0f;
+
+    /// <summary>Курс ремонта берётся прямо из справочника: прочность, делённая на цену.</summary>
+    public float HealthPerMetal => Def?.HealthPerMetal ?? 0f;
 
     public virtual void Init(int id, BuildableDef def, Vector2I cell)
     {
@@ -98,6 +103,8 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor
 
         var size = new Vector2(Def.Size.X, Def.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
+
+        VisionGizmo.Draw(this, VisionRadius, Def.Color);
 
         DrawRect(rect, Def.Color);
         DrawRect(rect, new Color(0f, 0f, 0f, 0.35f), false, 2f);

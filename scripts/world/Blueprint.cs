@@ -8,7 +8,7 @@ using Godot;
 /// Каркас — тоже цель для врага, и прочности у него доля от готовой постройки
 /// (Const.BlueprintHealthFactor): стройка под обстрелом должна быть рискованной затеей.
 /// </summary>
-public partial class Blueprint : WorkNode, IFacing, IDamageable
+public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
 {
     public BuildableDef Def { get; private set; }
     public Vector2I Cell { get; private set; }
@@ -32,6 +32,9 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable
     public float HitRadius => Def != null
         ? Mathf.Max(Def.Width, Def.Height) * Const.Unit * 0.5f
         : Const.Unit * 0.5f;
+
+    /// <summary>Каркас уже смотрит по сторонам — правда, вполглаза.</summary>
+    public float VisionRadius => Def != null ? Def.VisionRadiusPx * 0.5f : 0f;
 
     public void Init(int id, BuildableDef def, Vector2I cell)
     {
@@ -149,6 +152,8 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable
 
         var size = new Vector2(Def.Size.X, Def.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
+
+        VisionGizmo.Draw(this, VisionRadius, Def.Color);
 
         DrawRect(rect, new Color(Def.Color, 0.15f));
 

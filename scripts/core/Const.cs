@@ -20,6 +20,9 @@ public static class Const
     /// <summary>Сколько метала можно выкопать из одного месторождения.</summary>
     public const float OreDepositAmount = 200f;
 
+    /// <summary>На каком расстоянии бот держится от коммандера, когда идёт следом.</summary>
+    public static float FollowDistancePx => Unit * 3f;
+
     // Запас без единой постройки. Дальше потолок поднимают сами постройки (MetalStorage
     // и EnergyStorage в справочнике) — запас нужен как демпфер, иначе любой всплеск
     // спроса мгновенно роняет производительность базы

@@ -13,6 +13,7 @@ MaxHealth = 90.0
 Radius = 0.32
 BuildPower = 0.0
 MinePower = 4.0
+VisionRange = 8.0
 BuildEnergyPerPower = 5.0
 MineEnergyPerPower = 1.2
 ToolRange = 2.0

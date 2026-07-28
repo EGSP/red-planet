@@ -52,6 +52,18 @@ public partial class UnitDef : Resource
     [Export] public float ToolRange = 3f;
 
     /// <summary>
+    /// Радиус обзора в юнитах. Он же рабочая зона: фабрикатор чинит то, что видит.
+    /// </summary>
+    [Export] public float VisionRange = 8f;
+
+    /// <summary>
+    /// Берётся ли строитель чинить юнитов, а не только постройки. Отдельным переключателем,
+    /// потому что это вопрос не умения, а назначения: ремонтник поля боя и строитель базы —
+    /// разные роли при одном и том же инструменте.
+    /// </summary>
+    [Export] public bool CanRepairUnits;
+
+    /// <summary>
     /// Собственное производство, единиц в секунду. У коммандера оно есть с самого начала:
     /// без стартового дохода первую электростанцию было бы не на что строить.
     /// </summary>
@@ -65,6 +77,12 @@ public partial class UnitDef : Resource
 
     public bool CanMine => MinePower > 0f;
 
+    /// <summary>
+    /// Чинит тот же инструмент, что и строит: отдельной ремонтной мощности нет.
+    /// Так и в PA — build power одна на стройку, ремонт и достройку чужого.
+    /// </summary>
+    public bool CanRepair => CanBuild;
+
     /// <summary>Расход энергии в секунду при работе инструментом на полную.</summary>
     public float EnergyDrainFor(OrderKind kind) => kind == OrderKind.Mine
         ? MinePower * MineEnergyPerPower
@@ -73,6 +91,9 @@ public partial class UnitDef : Resource
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 
     public float RadiusPx => Radius * Const.Unit;
+
+    public float VisionRadiusPx => VisionRange * Const.Unit;
+
 
     public float SpeedPx => Speed * Const.Unit;
 }

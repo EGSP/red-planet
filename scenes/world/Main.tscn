@@ -18,6 +18,7 @@
 [ext_resource type="Script" uid="uid://dhkbabtkukh50" path="res://scripts/combat/ProjectileSystem.cs" id="17_projectile"]
 [ext_resource type="Script" uid="uid://dhy78rf5woxf3" path="res://scripts/combat/DamageSystem.cs" id="18_damage"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/Enemy.tscn" id="19_enemyscene"]
+[ext_resource type="Script" path="res://scripts/buildings/AssemblerSystem.cs" id="20_assembler"]
 
 [node name="Main" type="Node2D" unique_id=1379062383]
 script = ExtResource("1_main")
@@ -53,6 +54,10 @@ StepOrder = 30
 script = ExtResource("8_orespawn")
 OreScene = ExtResource("13_ore")
 StepOrder = 50
+
+[node name="AssemblerSystem" type="Node" parent="Systems"]
+script = ExtResource("20_assembler")
+StepOrder = 25
 
 [node name="EnemySpawnSystem" type="Node" parent="Systems" unique_id=629973124]
 script = ExtResource("14_enemyspawn")

@@ -36,8 +36,11 @@ public partial class BuildableDef : Resource
     /// <summary>Роли строителей, которым доступна эта постройка: commander, fabricator.</summary>
     [Export] public Godot.Collections.Array<string> BuildableBy = new() { "commander" };
 
-    /// <summary>Хук на будущее: постройка сама умеет строить в своём радиусе.</summary>
+    /// <summary>Постройка сама работает инструментом в своём радиусе — башня-сборщик.</summary>
     [Export] public bool CanAssemble;
+
+    /// <summary>Радиус обзора в юнитах. Он же рабочая зона для башни-сборщика.</summary>
+    [Export] public float VisionRange = 6f;
 
     [Export] public float MaxHealth = 200f;
 
@@ -66,6 +69,19 @@ public partial class BuildableDef : Resource
     public float TotalWork => CostMetal;
 
     public bool IsGenerator => EnergyProduction > 0f;
+
+    /// <summary>
+    /// Сколько прочности даёт единица метала при ремонте. Курс не выдуманный: он выведен
+    /// из самой постройки, поэтому починить её с нуля стоит ровно столько же, сколько
+    /// построить, и занимает столько же времени — инструмент-то один и тот же.
+    ///
+    /// Ноль означает «ремонту не подлежит»: у постройки без цены курса быть не может.
+    /// </summary>
+    public float HealthPerMetal => CostMetal > 0f ? MaxHealth / CostMetal : 0f;
+
+    public bool CanBeRepaired => HealthPerMetal > 0f;
+
+    public float VisionRadiusPx => VisionRange * Const.Unit;
 
     public bool AvailableFor(string role) => BuildableBy.Contains(role);
 

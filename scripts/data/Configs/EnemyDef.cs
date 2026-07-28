@@ -24,6 +24,9 @@ public partial class EnemyDef : Resource
     /// <summary>Радиус корпуса в юнитах: и рисуется по нему, и попадают в него.</summary>
     [Export] public float Radius = 0.4f;
 
+    /// <summary>Радиус обзора в юнитах.</summary>
+    [Export] public float VisionRange = 9f;
+
     [Export] public WeaponDef Weapon;
 
     /// <summary>
@@ -43,6 +46,8 @@ public partial class EnemyDef : Resource
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 
     public float RadiusPx => Radius * Const.Unit;
+
+    public float VisionRadiusPx => VisionRange * Const.Unit;
 
     public float SpeedPx => Speed * Const.Unit;
 }
