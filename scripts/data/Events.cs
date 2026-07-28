@@ -2,11 +2,15 @@ using Godot;
 
 /// <summary>
 /// Вид ресурса. Названо Kind, потому что слово Resource занято классом Godot.
+///
+/// Ресурса ровно два, и роли у них разные. Метал — материал: из него состоят постройки,
+/// он копится и тратится. Энергия — не материал, а пропускная способность: она ничего
+/// не образует, но без неё метал не потратить. Так же устроена экономика PA.
 /// </summary>
 public enum ResourceKind
 {
-    Ore,
     Metal,
+    Energy,
 }
 
 /// <summary>Ресурс поступил в общее хранилище базы.</summary>
@@ -37,6 +41,23 @@ public struct BlueprintPlaced : IEventRecord
     /// <summary>Ключ справочника, а не ссылка на ресурс — так запись переживёт сохранение.</summary>
     public string DefId;
 
+    public Vector2I Cell;
+}
+
+/// <summary>
+/// Постройка появилась в мире. Публикуется фабрикой сущностей — единственным местом,
+/// где постройки рождаются, поэтому документ ловит их все: и достроенные каркасом,
+/// и поставленные сразу, вроде стартовой базы.
+///
+/// Отдельно от ConstructionCompleted намеренно: та запись про то, что стройка ЗАВЕРШЕНА,
+/// а эта — про то, что сущность ЕСТЬ. Ёмкость хранилища зависит от второго, а не от первого.
+/// </summary>
+[TransientEvent]
+public struct BuildingSpawned : IEventRecord
+{
+    public int SequenceId { get; set; }
+    public int EntityId;
+    public string DefId;
     public Vector2I Cell;
 }
 
@@ -79,6 +100,10 @@ public struct EntityDestroyed : IEventRecord
 {
     public int SequenceId { get; set; }
     public int EntityId;
+
+    /// <summary>Ключ справочника: по нему хранилище узнаёт, сколько ёмкости ушло вместе с постройкой.</summary>
+    public string DefId;
+
     public Faction Side;
     public Vector2 Pos;
 }

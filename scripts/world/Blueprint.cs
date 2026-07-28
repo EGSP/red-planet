@@ -22,6 +22,9 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable
 
     public int EntityId => Id;
 
+    /// <summary>Каркас ёмкости хранилища ещё не даёт, поэтому в документ о гибели ключ не идёт.</summary>
+    public string DefId => "";
+
     public Faction Faction => Faction.Player;
 
     public float Facing => Def != null ? Mathf.DegToRad(Def.FacingDegrees) : 0f;
@@ -43,41 +46,50 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable
     {
         Health ??= new Health(100f * Const.BlueprintHealthFactor);
 
-        AddToGroup("work");
         AddToGroup("blueprint");
         AddToGroup(Targeting.Group);
+        AddToGroup(EconomySystem.Group);
     }
 
     public override void _Process(double delta) => QueueRedraw();
 
-    public override void Work(double dt)
+    /// <summary>
+    /// Спрос стройки: мощность строителей — это метал в секунду, а энергия — сумма
+    /// прожорливости их инструментов. У постройки своей энергоцены нет: одно и то же
+    /// здание обойдётся дороже, если его варит коммандер, и дешевле, если фабрикатор.
+    /// </summary>
+    public override void Declare(EconomyLedger ledger)
     {
-        if (Def == null || TotalPower <= 0f)
+        if (Def == null || TotalPower <= 0f || !NeedsWork)
             return;
 
-        float want = Mathf.Min((float)(TotalPower * dt), Def.TotalWork - Progress);
-        if (want <= 0f)
-            return;
+        ledger.Request(ResourceKind.Metal, TotalPower);
+        ledger.Request(ResourceKind.Energy, TotalEnergy);
+    }
 
-        // Доля от полного объёма работ, которую пытаемся закрыть в этот тик
-        float fraction = want / Def.TotalWork;
-        float needOre = Def.CostOre * fraction;
-        float needMetal = Def.CostMetal * fraction;
-
-        var stockpile = GameManager.I.Stockpile;
-        float scale = stockpile.AvailableFraction(needOre, needMetal);
-        if (scale <= 0f)
+    public override void Run(double dt, EconomyRates rates)
+    {
+        if (Def == null || TotalPower <= 0f || !NeedsWork)
             return;
 
         var events = GameManager.I.Events;
 
-        if (needOre > 0f)
-            events.Append(new ResourceSpent { Kind = ResourceKind.Ore, Amount = needOre * scale });
+        // Энергию стройка забирает по своей доле, а не по темпу работы: мощность оплачена
+        // целиком, даже когда стройка еле ползёт из-за нехватки метала. Лишнее сгорает —
+        // именно поэтому просадку по энергии лечат генераторами
+        float energy = (float)(TotalEnergy * dt) * rates.Energy;
+        if (energy > 0f)
+            events.Append(new ResourceSpent { Kind = ResourceKind.Energy, Amount = energy });
 
-        if (needMetal > 0f)
-            events.Append(new ResourceSpent { Kind = ResourceKind.Metal, Amount = needMetal * scale });
+        // А сама работа и метал идут по худшей из долей: цена постройки не меняется,
+        // меняется только скорость
+        float done = Mathf.Min((float)(TotalPower * dt) * rates.Work, Def.TotalWork - Progress);
+        if (done <= 0f)
+            return;
 
-        Progress += want * scale;
+        events.Append(new ResourceSpent { Kind = ResourceKind.Metal, Amount = done });
+
+        Progress += done;
 
         if (Progress >= Def.TotalWork - 0.001f)
             Complete();
@@ -122,9 +134,9 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable
     private void Retire()
     {
         ReleaseWorkers();
-        RemoveFromGroup("work");
         RemoveFromGroup("blueprint");
         RemoveFromGroup(Targeting.Group);
+        RemoveFromGroup(EconomySystem.Group);
         SetProcess(false);
         Visible = false;
         QueueFree();

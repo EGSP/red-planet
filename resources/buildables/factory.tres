@@ -6,10 +6,12 @@
 [resource]
 script = ExtResource("1_script")
 Id = "factory"
-DisplayName = "Завод"
+DisplayName = "Синтезатор"
 Rows = Array[String](["##", "##"])
-CostOre = 100.0
-CostMetal = 0.0
+CostMetal = 100.0
+EnergyProduction = 0.0
+MetalStorage = 100.0
+EnergyStorage = 0.0
 Scene = ExtResource("2_scene")
 IsUnit = false
 BuildableBy = Array[String](["commander", "fabricator"])

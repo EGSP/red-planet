@@ -11,9 +11,9 @@ public partial class Main : Node2D
     /// руду вручную. Публикуется документом, а не правкой проекции — запас меняется
     /// только через журнал, и у выдачи есть след.
     /// </summary>
-    [Export] public float StartingOre;
-
     [Export] public float StartingMetal;
+
+    [Export] public float StartingEnergy;
 
     public override void _Ready()
     {
@@ -37,11 +37,11 @@ public partial class Main : Node2D
     {
         var events = GameManager.I.Events;
 
-        if (StartingOre > 0f)
-            events.Append(new ResourceGained { Kind = ResourceKind.Ore, Amount = StartingOre });
-
         if (StartingMetal > 0f)
             events.Append(new ResourceGained { Kind = ResourceKind.Metal, Amount = StartingMetal });
+
+        if (StartingEnergy > 0f)
+            events.Append(new ResourceGained { Kind = ResourceKind.Energy, Amount = StartingEnergy });
     }
 
     private void SpawnBase()

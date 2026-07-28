@@ -19,6 +19,9 @@ public partial class GameManager : Node
     public WorldGrid Grid { get; } = new();
     public Scheduler Scheduler { get; } = new();
 
+    /// <summary>Баланс текущего кадра: доход, спрос и производительность базы.</summary>
+    public EconomyLedger Economy { get; } = new();
+
     /// <summary>Фабрика сущностей — единственное место, где рождаются объекты мира.</summary>
     public Spawner Spawn { get; private set; }
 

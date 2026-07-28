@@ -1,29 +1,66 @@
 using Godot;
 
 /// <summary>
-/// Завод: тянет руду из общего хранилища и кладёт туда метал.
-/// Сама переработка идёт в FactorySystem — здесь только параметры и состояние.
+/// Синтезатор метала: жжёт энергию и даёт метал. Раньше это был завод, перегонявший
+/// руду в метал, но ресурс остался один, и конвертировать стало нечего.
+///
+/// Смысл постройки в потоковой экономике — сброс излишков: когда генераторов больше,
+/// чем потребителей, лишняя энергия иначе просто сгорает на потолке хранилища.
+/// Курс намеренно невыгодный, синтезатор не должен заменять месторождения.
 /// </summary>
 public partial class Factory : Building
 {
-    /// <summary>Сколько руды потребляет в секунду.</summary>
-    [Export] public float OrePerSecond = 2f;
+    /// <summary>Сколько энергии потребляет в секунду при полной производительности.</summary>
+    [Export] public float EnergyDrain = 80f;
 
-    /// <summary>Сколько метала даёт из единицы руды.</summary>
-    [Export] public float MetalPerOre = 0.5f;
+    /// <summary>Сколько метала выдаёт в секунду при полной производительности.</summary>
+    [Export] public float MetalOutput = 4f;
 
-    public bool Working { get; set; }
+    public bool Working { get; private set; }
 
     public override void Init(int id, BuildableDef def, Vector2I cell)
     {
         base.Init(id, def, cell);
         AddToGroup("factory");
+        AddToGroup(EconomySystem.Group);
     }
 
     public override void _Process(double delta) => QueueRedraw();
 
-    /// <summary>Завод разрушен: снимаемся со своей группы, иначе система переработки
-    /// на следующем кадре обратится к мёртвой ноде.</summary>
+    public override void Declare(EconomyLedger ledger)
+    {
+        base.Declare(ledger);
+
+        ledger.Request(ResourceKind.Energy, EnergyDrain);
+        ledger.AddIncome(ResourceKind.Metal, MetalOutput);
+    }
+
+    public override void Run(double dt, EconomyRates rates)
+    {
+        base.Run(dt, rates);
+
+        // Синтезатору важна только энергия: метал он производит, и его нехватка
+        // работу не ограничивает
+        Working = rates.Energy > 0.01f;
+        if (!Working)
+            return;
+
+        var events = GameManager.I.Events;
+
+        events.Append(new ResourceSpent
+        {
+            Kind = ResourceKind.Energy,
+            Amount = EnergyDrain * (float)dt * rates.Energy,
+        });
+
+        events.Append(new ResourceGained
+        {
+            Kind = ResourceKind.Metal,
+            Amount = MetalOutput * (float)dt * rates.Energy,
+        });
+    }
+
+    /// <summary>Синтезатор разрушен: снимаемся со своей группы вместе с общими.</summary>
     public override void OnDestroyed()
     {
         RemoveFromGroup("factory");

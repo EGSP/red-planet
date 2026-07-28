@@ -13,8 +13,19 @@ public partial class BuildableDef : Resource
 
     [Export] public Godot.Collections.Array<string> Rows = new() { "#" };
 
-    [Export] public float CostOre;
+    /// <summary>
+    /// Полная стоимость в метале. Она же — объём работы: время стройки равно
+    /// стоимости, делённой на мощность строителей, как в PA.
+    /// </summary>
     [Export] public float CostMetal;
+
+    /// <summary>Сколько энергии постройка даёт в секунду. Больше нуля — это генератор.</summary>
+    [Export] public float EnergyProduction;
+
+    /// <summary>Насколько постройка поднимает потолок хранилища.</summary>
+    [Export] public float MetalStorage;
+
+    [Export] public float EnergyStorage;
 
     /// <summary>Что появляется в мире после достройки.</summary>
     [Export] public PackedScene Scene;
@@ -45,8 +56,16 @@ public partial class BuildableDef : Resource
 
     public Vector2I Size => new(Width, Height);
 
-    /// <summary>Полный объём работы — суммарная стоимость в единицах.</summary>
-    public float TotalWork => CostOre + CostMetal;
+    /// <summary>
+    /// Полный объём работы. Меряется металом: мощность строителя — это метал в секунду,
+    /// поэтому стройка на 100 метала при мощности 20 занимает пять секунд.
+    ///
+    /// Своей энергоцены у постройки нет намеренно: энергию тратит инструмент строителя,
+    /// и сколько именно — записано в его справочнике (BuildEnergyPerPower).
+    /// </summary>
+    public float TotalWork => CostMetal;
+
+    public bool IsGenerator => EnergyProduction > 0f;
 
     public bool AvailableFor(string role) => BuildableBy.Contains(role);
 

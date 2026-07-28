@@ -11,12 +11,20 @@ public static class Const
     /// <summary>Мир — квадрат 41x41 клетка с центром в (0,0).</summary>
     public const int WorldRadiusCells = 20;
 
-    // Руда появляется в кольце вокруг базы
+    // Месторождения появляются в кольце вокруг базы
     public const int OreRingMin = 6;
     public const int OreRingMax = 14;
     public const int OreSlots = 12;
     public const float OreRespawnDelay = 8f;
+
+    /// <summary>Сколько метала можно выкопать из одного месторождения.</summary>
     public const float OreDepositAmount = 200f;
+
+    // Запас без единой постройки. Дальше потолок поднимают сами постройки (MetalStorage
+    // и EnergyStorage в справочнике) — запас нужен как демпфер, иначе любой всплеск
+    // спроса мгновенно роняет производительность базы
+    public const float BaseMetalCapacity = 150f;
+    public const float BaseEnergyCapacity = 150f;
 
     // Враги приходят из-за кольца руды: дальние месторождения лежат на линии их подхода
     public const float EnemyRingFactor = 1.3f;

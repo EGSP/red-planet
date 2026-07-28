@@ -5,8 +5,7 @@
 [ext_resource type="Script" uid="uid://djhm5atkp2jws" path="res://scripts/units/CommandSystem.cs" id="3_command"]
 [ext_resource type="Script" uid="uid://tuanjuqquucf" path="res://scripts/units/BotAiSystem.cs" id="4_botai"]
 [ext_resource type="Script" uid="uid://pcwrq37i4108" path="res://scripts/world/UnitSystem.cs" id="5_unit"]
-[ext_resource type="Script" uid="uid://ghcmrcd5wiuh" path="res://scripts/world/WorkSystem.cs" id="6_work"]
-[ext_resource type="Script" uid="uid://bbuml370xnilm" path="res://scripts/buildings/FactorySystem.cs" id="7_factory"]
+[ext_resource type="Script" path="res://scripts/economy/EconomySystem.cs" id="6_economy"]
 [ext_resource type="Script" uid="uid://b33hfmq3q0spf" path="res://scripts/world/OreSpawnSystem.cs" id="8_orespawn"]
 [ext_resource type="Script" uid="uid://b0ki5uv7akvii" path="res://scripts/world/CameraRig.cs" id="9_camera"]
 [ext_resource type="Script" uid="uid://byltoatikqvmc" path="res://scripts/ui/Hud.cs" id="10_hud"]
@@ -24,7 +23,6 @@
 script = ExtResource("1_main")
 World = NodePath("World")
 CommanderScene = ExtResource("11_commander")
-StartingOre = 500.0
 StartingMetal = 250.0
 
 [node name="Grid" type="Node2D" parent="." unique_id=1237935807]
@@ -47,13 +45,9 @@ StepOrder = 10
 script = ExtResource("5_unit")
 StepOrder = 20
 
-[node name="WorkSystem" type="Node" parent="Systems" unique_id=1272234951]
-script = ExtResource("6_work")
+[node name="EconomySystem" type="Node" parent="Systems" unique_id=1272234951]
+script = ExtResource("6_economy")
 StepOrder = 30
-
-[node name="FactorySystem" type="Node" parent="Systems" unique_id=374921288]
-script = ExtResource("7_factory")
-StepOrder = 40
 
 [node name="OreSpawnSystem" type="Node" parent="Systems" unique_id=1824610141]
 script = ExtResource("8_orespawn")

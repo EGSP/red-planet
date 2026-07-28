@@ -13,5 +13,7 @@ MaxHealth = 90.0
 Radius = 0.32
 BuildPower = 4.0
 MinePower = 0.0
+BuildEnergyPerPower = 4.0
+MineEnergyPerPower = 1.5
 ToolRange = 2.0
 Color = Color(0.4, 0.9, 0.5, 1)

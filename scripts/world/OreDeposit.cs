@@ -21,24 +21,49 @@ public partial class OreDeposit : WorkNode
 
     public override void _Ready()
     {
-        AddToGroup("work");
         AddToGroup("ore");
+        AddToGroup(EconomySystem.Group);
     }
 
     public override void _Process(double delta) => QueueRedraw();
 
-    public override void Work(double dt)
+    /// <summary>
+    /// Добыча — и доход, и расход разом: буры дают метал, но сами едят энергию.
+    ///
+    /// Доход заявляется по номиналу, хотя реально он тоже просядет вместе с производительностью.
+    /// Так делает и PA: считать «сколько дохода будет при той производительности, которую
+    /// мы как раз и вычисляем» — это уравнение с самим собой. Погрешность в пользу игрока
+    /// и живёт один кадр.
+    /// </summary>
+    public override void Declare(EconomyLedger ledger)
     {
         if (TotalPower <= 0f || Amount <= 0f)
             return;
 
-        float extracted = Mathf.Min(Amount, (float)(TotalPower * dt));
+        ledger.AddIncome(ResourceKind.Metal, TotalPower);
+        ledger.Request(ResourceKind.Energy, TotalEnergy);
+    }
+
+    public override void Run(double dt, EconomyRates rates)
+    {
+        if (TotalPower <= 0f || Amount <= 0f)
+            return;
+
+        // Добыче нужна только энергия, метал она как раз производит — значит нехватка
+        // метала буры не тормозит, а нехватка энергии тормозит
+        float extracted = Mathf.Min(Amount, (float)(TotalPower * dt) * rates.Energy);
+        if (extracted <= 0f)
+            return;
+
         Amount -= extracted;
 
-        GameManager.I.Events.Append(new ResourceGained
+        var events = GameManager.I.Events;
+
+        events.Append(new ResourceGained { Kind = ResourceKind.Metal, Amount = extracted });
+        events.Append(new ResourceSpent
         {
-            Kind = ResourceKind.Ore,
-            Amount = extracted,
+            Kind = ResourceKind.Energy,
+            Amount = (float)(TotalEnergy * dt) * rates.Energy,
         });
 
         if (Amount <= 0.001f)
@@ -56,8 +81,8 @@ public partial class OreDeposit : WorkNode
 
         // Выводим узел из игры до удаления, чтобы по нему не прошёл ещё один кадр
         ReleaseWorkers();
-        RemoveFromGroup("work");
         RemoveFromGroup("ore");
+        RemoveFromGroup(EconomySystem.Group);
         SetProcess(false);
         Visible = false;
         QueueFree();
@@ -68,6 +93,7 @@ public partial class OreDeposit : WorkNode
         float half = Const.Unit * 0.5f;
         float ratio = Mathf.Clamp(Amount / Const.OreDepositAmount, 0f, 1f);
 
+        // Руда в земле — источник метала: отдельного ресурса «руда» в экономике нет
         var ore = new Color(0.85f, 0.45f, 0.2f);
         DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(ore, 0.25f));
         DrawCircle(Vector2.Zero, half * (0.35f + 0.55f * ratio), ore);

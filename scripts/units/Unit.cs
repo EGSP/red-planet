@@ -9,7 +9,7 @@ using Godot;
 /// Стрелять юнит начинает только без приказов: работа важнее, а огонь по площадям
 /// вместо стройки — не то, чего ждёшь от отданного приказа.
 /// </summary>
-public partial class Unit : Node2D, IFacing, IDamageable, IArmed
+public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor
 {
     [Export] public UnitDef Def;
 
@@ -28,6 +28,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
     public WeaponState Gun { get; } = new();
 
     public int EntityId => Id;
+
+    /// <summary>Юнита нет в справочнике построек, ёмкости хранилища он не даёт.</summary>
+    public string DefId => "";
 
     public virtual Faction Faction => Faction.Player;
 
@@ -58,7 +61,45 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
         AddToGroup("unit");
         AddToGroup(Targeting.Group);
         AddToGroup("armed");
+
+        // Коммандер — ходячая электростанция: без его собственного дохода первую
+        // настоящую электростанцию было бы не на что построить
+        if (Def != null && (Def.EnergyProduction > 0f || Def.MetalProduction > 0f))
+            AddToGroup(EconomySystem.Group);
+
         QueueRedraw();
+    }
+
+    public void Declare(EconomyLedger ledger)
+    {
+        if (Def == null)
+            return;
+
+        ledger.AddIncome(ResourceKind.Energy, Def.EnergyProduction);
+        ledger.AddIncome(ResourceKind.Metal, Def.MetalProduction);
+    }
+
+    /// <summary>Своё производство идёт всегда, просадка производительности его не касается.</summary>
+    public void Run(double dt, EconomyRates rates)
+    {
+        if (Def == null)
+            return;
+
+        var events = GameManager.I.Events;
+
+        if (Def.EnergyProduction > 0f)
+            events.Append(new ResourceGained
+            {
+                Kind = ResourceKind.Energy,
+                Amount = Def.EnergyProduction * (float)dt,
+            });
+
+        if (Def.MetalProduction > 0f)
+            events.Append(new ResourceGained
+            {
+                Kind = ResourceKind.Metal,
+                Amount = Def.MetalProduction * (float)dt,
+            });
     }
 
     public void AimAt(Vector2 point, double dt)
@@ -142,7 +183,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
         if (_attached != order.Target)
         {
             Detach();
-            order.Target.AttachWorker(Id, power);
+
+            // Узлу сообщаем и мощность, и собственную прожорливость инструмента:
+            // энергию тратит инструмент, а сколько именно — дело справочника юнита
+            order.Target.AttachWorker(Id, power, Def.EnergyDrainFor(order.Kind));
             _attached = order.Target;
         }
     }
@@ -216,7 +260,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
         GameManager.I.Entities.Remove(Id);
 
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
-        foreach (var group in new[] { "unit", "bot", "commander", Targeting.Group, "armed" })
+        foreach (var group in new[]
+                     { "unit", "bot", "commander", Targeting.Group, "armed", EconomySystem.Group })
             if (IsInGroup(group))
                 RemoveFromGroup(group);
 

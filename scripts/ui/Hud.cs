@@ -6,7 +6,9 @@ using Godot;
 /// </summary>
 public partial class Hud : CanvasLayer
 {
-    private Label _resources;
+    private Label _metal;
+    private Label _energy;
+    private Label _efficiency;
     private Label _combat;
     private Label _status;
     private VBoxContainer _buttons;
@@ -24,9 +26,19 @@ public partial class Hud : CanvasLayer
         box.AddThemeConstantOverride("separation", 6);
         panel.AddChild(box);
 
-        _resources = new Label { Text = "руда 0   метал 0" };
-        _resources.AddThemeFontSizeOverride("font_size", 18);
-        box.AddChild(_resources);
+        _metal = new Label { Text = "метал 0" };
+        _metal.AddThemeFontSizeOverride("font_size", 17);
+        _metal.AddThemeColorOverride("font_color", new Color(0.85f, 0.88f, 0.95f));
+        box.AddChild(_metal);
+
+        _energy = new Label { Text = "энергия 0" };
+        _energy.AddThemeFontSizeOverride("font_size", 17);
+        _energy.AddThemeColorOverride("font_color", new Color(1f, 0.92f, 0.5f));
+        box.AddChild(_energy);
+
+        _efficiency = new Label { Text = "производительность 100%" };
+        _efficiency.AddThemeFontSizeOverride("font_size", 13);
+        box.AddChild(_efficiency);
 
         _combat = new Label { Text = "врагов 0" };
         _combat.AddThemeFontSizeOverride("font_size", 13);
@@ -54,11 +66,8 @@ public partial class Hud : CanvasLayer
 
     private void AddBuildButton(BuildableDef def)
     {
-        string cost = def.CostOre > 0f
-            ? $"{def.CostOre:0} руды"
-            : $"{def.CostMetal:0} метала";
-
-        var button = new Button { Text = $"{def.DisplayName} — {cost}" };
+        // Энергоцены у постройки нет: энергию тратит инструмент строителя, а не здание
+        var button = new Button { Text = $"{def.DisplayName} — {def.CostMetal:0} метала" };
         button.Pressed += () => GameManager.I.Command?.BeginBuild(def);
         _buttons.AddChild(button);
     }
@@ -67,9 +76,22 @@ public partial class Hud : CanvasLayer
     {
         var gm = GameManager.I;
         var stockpile = gm.Stockpile;
+        var economy = gm.Economy;
 
-        _resources.Text = $"руда {stockpile.Get(ResourceKind.Ore):0}   " +
-                          $"метал {stockpile.Get(ResourceKind.Metal):0}";
+        _metal.Text = Line("метал", stockpile, ResourceKind.Metal,
+            economy.MetalIncome, economy.MetalDemand);
+
+        _energy.Text = Line("энергия", stockpile, ResourceKind.Energy,
+            economy.EnergyIncome, economy.EnergyDemand);
+
+        // Просадку показываем цветом: при полном ходе число не должно мозолить глаз
+        int percent = Mathf.RoundToInt(economy.Efficiency * 100f);
+        _efficiency.Text = $"производительность {percent}%";
+        _efficiency.AddThemeColorOverride("font_color", percent >= 95
+            ? new Color(0.6f, 0.85f, 0.6f)
+            : percent >= 50
+                ? new Color(0.95f, 0.8f, 0.4f)
+                : new Color(1f, 0.5f, 0.45f));
 
         var combat = gm.Combat;
         float commanderDamage = gm.Commander?.Health.TotalTaken ?? 0f;
@@ -82,5 +104,22 @@ public partial class Hud : CanvasLayer
         _status.Text = pending != null
             ? $"ставим: {pending.DisplayName}\nЛКМ — поставить, ПКМ — отмена"
             : "ПКМ — идти, копать или атаковать врага\nWASD и колесо — камера";
+    }
+
+    /// <summary>
+    /// Строка ресурса в духе PA: запас из потолка, а рядом приход и ЗАПРОШЕННЫЙ расход.
+    ///
+    /// Показываем именно спрос, а не то, сколько удалось влить. Ужатый расход всегда
+    /// выглядит почти сведённым с доходом — по нему не понять, чего и насколько не хватает,
+    /// а по спросу видно сразу: столько-то генераторов недостаёт.
+    /// </summary>
+    private static string Line(string name, StockpileProjection stockpile, ResourceKind kind,
+        float income, float demand)
+    {
+        float net = income - demand;
+        string sign = net >= 0f ? "+" : "−";
+
+        return $"{name} {stockpile.Get(kind):0}/{stockpile.Capacity(kind):0}   " +
+               $"{sign}{Mathf.Abs(net):0.#}/с   (+{income:0.#} −{demand:0.#})";
     }
 }

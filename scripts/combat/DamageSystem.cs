@@ -35,6 +35,7 @@ public partial class DamageSystem : GameSystem
             events.Append(new EntityDestroyed
             {
                 EntityId = target.EntityId,
+                DefId = target.DefId,
                 Side = target.Faction,
                 Pos = target.GlobalPosition,
             });

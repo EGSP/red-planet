@@ -7,7 +7,7 @@ using Godot;
 /// а поворот ноды сетку не поворачивает. Поэтому направление живёт отдельным числом
 /// из справочника и рисуется маркером — задел под турели и ворота.
 /// </summary>
-public partial class Building : Node2D, IFacing, IDamageable
+public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor
 {
     public int Id { get; private set; }
     public BuildableDef Def { get; private set; }
@@ -16,6 +16,8 @@ public partial class Building : Node2D, IFacing, IDamageable
     public Health Health { get; private set; }
 
     public int EntityId => Id;
+
+    public string DefId => Def?.Id ?? "";
 
     public Faction Faction => Faction.Player;
 
@@ -39,7 +41,35 @@ public partial class Building : Node2D, IFacing, IDamageable
         Health = new Health(def.MaxHealth);
         AddToGroup("building");
         AddToGroup(Targeting.Group);
+
+        // В экономику попадают только те, кому есть что заявить: обычный склад или стена
+        // каждый кадр систему не тревожат
+        if (def.IsGenerator)
+            AddToGroup(EconomySystem.Group);
+
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// Генератор заявляет свою мощность. Производство не зависит от производительности базы:
+    /// электростанция даёт энергию даже тогда, когда всё остальное еле шевелится.
+    /// </summary>
+    public virtual void Declare(EconomyLedger ledger)
+    {
+        if (Def != null)
+            ledger.AddIncome(ResourceKind.Energy, Def.EnergyProduction);
+    }
+
+    public virtual void Run(double dt, EconomyRates rates)
+    {
+        if (Def == null || Def.EnergyProduction <= 0f)
+            return;
+
+        GameManager.I.Events.Append(new ResourceGained
+        {
+            Kind = ResourceKind.Energy,
+            Amount = Def.EnergyProduction * (float)dt,
+        });
     }
 
     /// <summary>Постройку снесли: освободить клетки и выйти из реестра.</summary>
@@ -55,6 +85,7 @@ public partial class Building : Node2D, IFacing, IDamageable
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
         RemoveFromGroup("building");
         RemoveFromGroup(Targeting.Group);
+        RemoveFromGroup(EconomySystem.Group);
         SetProcess(false);
         Visible = false;
         QueueFree();

@@ -8,7 +8,6 @@ script = ExtResource("1_script")
 Id = "turret"
 DisplayName = "Турель"
 Rows = Array[String](["#"])
-CostOre = 0.0
 CostMetal = 80.0
 Scene = ExtResource("2_scene")
 IsUnit = false

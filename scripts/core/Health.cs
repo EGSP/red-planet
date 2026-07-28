@@ -59,6 +59,12 @@ public interface IDamageable
     /// <summary>Стабильный id сущности: документы носят его, а не ссылку на ноду.</summary>
     int EntityId { get; }
 
+    /// <summary>
+    /// Ключ справочника — уходит в документ о гибели. По нему хранилище понимает,
+    /// сколько ёмкости пропало вместе с постройкой. Пусто там, где справочника нет.
+    /// </summary>
+    string DefId { get; }
+
     Health Health { get; }
 
     Vector2 GlobalPosition { get; }

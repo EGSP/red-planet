@@ -37,6 +37,15 @@ public sealed class Spawner
         _gm.Grid.Occupy(cell, def, id);
         _gm.Entities.Add(id, building);
 
+        // Факт «постройка есть в мире» публикуем здесь, а не в каркасе: стартовая база
+        // появляется без всякой стройки, а ёмкость хранилища она поднимать обязана
+        _gm.Events.Append(new BuildingSpawned
+        {
+            EntityId = id,
+            DefId = def.Id,
+            Cell = cell,
+        });
+
         return building;
     }
 

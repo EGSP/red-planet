@@ -36,14 +36,39 @@ public partial class UnitDef : Resource
     /// <summary>Мощность бура, единиц в секунду.</summary>
     [Export] public float MinePower;
 
+    /// <summary>
+    /// Сколько энергии в секунду съедает единица строительной мощности.
+    ///
+    /// Энергозатраты живут здесь, а не в справочнике постройки: жрёт энергию инструмент,
+    /// а не бетон. Один и тот же каркас обойдётся дороже, если его сваривает прожорливый
+    /// коммандер, и дешевле, если экономный фабрикатор.
+    /// </summary>
+    [Export] public float BuildEnergyPerPower = 5f;
+
+    /// <summary>Сколько энергии в секунду съедает единица мощности бура.</summary>
+    [Export] public float MineEnergyPerPower = 1.5f;
+
     /// <summary>Дальность инструмента в юнитах.</summary>
     [Export] public float ToolRange = 3f;
+
+    /// <summary>
+    /// Собственное производство, единиц в секунду. У коммандера оно есть с самого начала:
+    /// без стартового дохода первую электростанцию было бы не на что строить.
+    /// </summary>
+    [Export] public float EnergyProduction;
+
+    [Export] public float MetalProduction;
 
     [Export] public Color Color = new(0.4f, 0.7f, 1f);
 
     public bool CanBuild => BuildPower > 0f;
 
     public bool CanMine => MinePower > 0f;
+
+    /// <summary>Расход энергии в секунду при работе инструментом на полную.</summary>
+    public float EnergyDrainFor(OrderKind kind) => kind == OrderKind.Mine
+        ? MinePower * MineEnergyPerPower
+        : BuildPower * BuildEnergyPerPower;
 
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 

@@ -26,6 +26,8 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed
 
     public int EntityId => Id;
 
+    public string DefId => Def?.Id ?? "";
+
     public Faction Faction => Faction.Hostile;
 
     /// <summary>Ось «вперёд» подвижной сущности — это поворот самой ноды.</summary>

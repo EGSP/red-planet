@@ -7,42 +7,64 @@ using Godot;
 /// исходя из суммарного потока. Один запрос за тик вместо обхода всех исполнителей.
 ///
 /// Каркас (Blueprint) тянет ресурсы из хранилища, месторождение (OreDeposit) — отдаёт в хранилище.
+/// И тот и другой — участники экономики: сначала объявляют свои потоки, потом работают
+/// с общей производительностью базы.
 /// </summary>
-public abstract partial class WorkNode : Node2D
+public abstract partial class WorkNode : Node2D, IEconomyActor
 {
-    /// <summary>Локальный реестр подключений: id исполнителя -> его мощность.</summary>
-    private readonly Dictionary<int, float> _connections = new();
+    /// <summary>
+    /// Локальный реестр подключений: id исполнителя -> его мощность и расход энергии.
+    /// Расход хранится вместе с мощностью, потому что у разных инструментов он разный,
+    /// а узлу нужна только сумма.
+    /// </summary>
+    private readonly Dictionary<int, (float Power, float Energy)> _connections = new();
 
     public int Id { get; set; }
 
     /// <summary>Суммарная мощность подключённых, пересчитывается дельтой.</summary>
     public float TotalPower { get; private set; }
 
+    /// <summary>Суммарный расход энергии подключённых инструментов, единиц в секунду.</summary>
+    public float TotalEnergy { get; private set; }
+
     public int WorkerCount => _connections.Count;
 
     /// <summary>Нужна ли ещё работа — по этому признаку боты ищут себе занятие.</summary>
     public abstract bool NeedsWork { get; }
 
-    public void AttachWorker(int workerId, float power)
+    public void AttachWorker(int workerId, float power, float energy)
     {
         if (_connections.TryGetValue(workerId, out var previous))
-            TotalPower -= previous;
+        {
+            TotalPower -= previous.Power;
+            TotalEnergy -= previous.Energy;
+        }
 
-        _connections[workerId] = power;
+        _connections[workerId] = (power, energy);
         TotalPower += power;
+        TotalEnergy += energy;
     }
 
     public void DetachWorker(int workerId)
     {
-        if (_connections.Remove(workerId, out var power))
-            TotalPower -= power;
+        if (_connections.Remove(workerId, out var previous))
+        {
+            TotalPower -= previous.Power;
+            TotalEnergy -= previous.Energy;
+        }
 
         if (TotalPower < 0.0001f)
             TotalPower = 0f;
+
+        if (TotalEnergy < 0.0001f)
+            TotalEnergy = 0f;
     }
 
-    /// <summary>Шаг работы узла: сам решает, сколько ресурсов запросить или отдать.</summary>
-    public abstract void Work(double dt);
+    /// <summary>Первый проход кадра: объявить свои потоки, единиц в секунду.</summary>
+    public abstract void Declare(EconomyLedger ledger);
+
+    /// <summary>Второй проход: отработать тик с долями, которые дала экономика.</summary>
+    public abstract void Run(double dt, EconomyRates rates);
 
     /// <summary>
     /// Узел уходит из игры: сам отпускает исполнителей, чтобы они не держали ссылку
@@ -55,5 +77,6 @@ public abstract partial class WorkNode : Node2D
 
         _connections.Clear();
         TotalPower = 0f;
+        TotalEnergy = 0f;
     }
 }
