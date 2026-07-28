@@ -47,7 +47,7 @@ public partial class Hud : CanvasLayer
 
         box.AddChild(new HSeparator());
 
-        _status = new Label { Text = "ПКМ — идти или копать" };
+        _status = new Label { Text = "ПКМ — идти, копать или атаковать" };
         _status.AddThemeFontSizeOverride("font_size", 12);
         box.AddChild(_status);
     }
@@ -81,6 +81,6 @@ public partial class Hud : CanvasLayer
         var pending = gm.Command?.Pending;
         _status.Text = pending != null
             ? $"ставим: {pending.DisplayName}\nЛКМ — поставить, ПКМ — отмена"
-            : "ПКМ — идти или копать\nWASD и колесо — камера";
+            : "ПКМ — идти, копать или атаковать врага\nWASD и колесо — камера";
     }
 }

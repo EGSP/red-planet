@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/Configs/WeaponDef.cs" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+Id = "turret_gun"
+DisplayName = "Орудие турели"
+Range = 7.0
+Damage = 10.0
+FireInterval = 0.5
+ProjectileSpeed = 18.0
+SpreadDegrees = 2.0
+AimConeDegrees = 8.0
+ProjectileRadius = 0.07
+ProjectileColor = Color(0.6, 0.9, 1, 1)

@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/buildings/Turret.cs" id="1_script"]
+[ext_resource type="Resource" path="res://resources/weapons/turret_gun.tres" id="2_gun"]
+
+[node name="Turret" type="Node2D"]
+z_index = 2
+script = ExtResource("1_script")
+Gun = ExtResource("2_gun")
+TurnSpeedDegrees = 90.0

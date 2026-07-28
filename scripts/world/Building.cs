@@ -19,7 +19,11 @@ public partial class Building : Node2D, IFacing, IDamageable
 
     public Faction Faction => Faction.Player;
 
-    public float Facing => Def != null ? Mathf.DegToRad(Def.FacingDegrees) : 0f;
+    /// <summary>
+    /// Ось «вперёд». У обычной постройки она из справочника и не меняется;
+    /// турель переопределяет её на поворот собственной ноды — башня крутится.
+    /// </summary>
+    public virtual float Facing => Def != null ? Mathf.DegToRad(Def.FacingDegrees) : 0f;
 
     /// <summary>Радиус попадания — по описанной окружности: по краю стены снаряд тоже попадает.</summary>
     public float HitRadius => Def != null

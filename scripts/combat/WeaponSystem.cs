@@ -38,8 +38,7 @@ public partial class WeaponSystem : GameSystem
             var from = armed.GlobalPosition;
             var to = target.GlobalPosition;
 
-            // Радиус меряем до края цели: по стене завода стрелять с её угла, а не с центра
-            if (from.DistanceTo(to) > weapon.RangePx + target.HitRadius)
+            if (!Targeting.InFiringRange(weapon, from, target))
                 continue;
 
             armed.AimAt(to, dt);

@@ -92,7 +92,11 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed
             return;
 
         var to = target.GlobalPosition;
-        AimAt(to, dt);
+
+        // В пределах дальности корпус доворачивает система стрельбы: второй доворот
+        // за тот же кадр удвоил бы скорость вращения и обесценил разницу видов
+        if (!Targeting.InFiringRange(Weapon, GlobalPosition, target))
+            AimAt(to, dt);
 
         if (GlobalPosition.DistanceTo(to) > StopDistance(target))
             GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
@@ -131,7 +135,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed
 
         float radius = Def.RadiusPx;
 
-        DrawWeaponRange();
+        WeaponGizmo.Draw(this, Weapon, Def.Color);
 
         DrawCircle(Vector2.Zero, radius, Def.Color);
         DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 24, new Color(0f, 0f, 0f, 0.45f), 2f);
@@ -140,23 +144,5 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed
         DrawLine(Vector2.Zero, new Vector2(radius * 1.5f, 0f), new Color(1f, 1f, 1f, 0.85f), 2.5f);
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
-    }
-
-    private void DrawWeaponRange()
-    {
-        var weapon = Weapon;
-        if (weapon == null)
-            return;
-
-        var tint = new Color(Def.Color, 0.22f);
-        DrawArc(Vector2.Zero, weapon.RangePx, 0f, Mathf.Tau, 64, tint, 1.5f);
-
-        // Конус прицеливания: пока цель вне его, враг только доворачивается.
-        // Рисуем короткими рёбрами — на всю дальность они превращают экран в паутину
-        float cone = weapon.AimCone;
-        float length = weapon.RangePx * 0.35f;
-        var edge = new Color(Def.Color, 0.35f);
-        DrawLine(Vector2.Zero, Heading.Forward(cone) * length, edge, 1f);
-        DrawLine(Vector2.Zero, Heading.Forward(-cone) * length, edge, 1f);
     }
 }

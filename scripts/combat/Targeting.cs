@@ -39,6 +39,21 @@ public static class Targeting
         return best;
     }
 
+    /// <summary>
+    /// Достаёт ли ствол до цели. Радиус меряем до края цели, а не до её центра:
+    /// по стене завода стреляют с угла, иначе крупные постройки было бы не достать.
+    ///
+    /// Одна формула на всех: по ней и система стрельбы решает, пора ли жать на спуск,
+    /// и сущность — пора ли ещё подходить.
+    /// </summary>
+    public static bool InFiringRange(WeaponDef weapon, Vector2 from, IDamageable target)
+    {
+        if (weapon == null || target == null)
+            return false;
+
+        return from.DistanceTo(target.GlobalPosition) <= weapon.RangePx + target.HitRadius;
+    }
+
     /// <summary>Годится ли цель: жива, не помечена на удаление, прочность не кончилась.</summary>
     public static bool IsValid(GodotObject obj)
     {

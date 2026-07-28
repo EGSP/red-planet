@@ -107,6 +107,14 @@ public partial class CommandSystem : GameSystem
         if (commander == null)
             return;
 
+        // Враг под курсором важнее клетки: щёлкнули по цели — значит приказ атаковать
+        var victim = EnemyUnderCursor();
+        if (victim != null)
+        {
+            commander.SetOrders(Order.Attack(victim));
+            return;
+        }
+
         var cell = Const.WorldToCell(_cursor);
 
         foreach (var node in GetTree().GetNodesInGroup("ore"))
@@ -119,6 +127,34 @@ public partial class CommandSystem : GameSystem
         }
 
         commander.SetOrders(Order.MoveTo(_cursor));
+    }
+
+    /// <summary>
+    /// Враг, по которому щёлкнули. Корпус небольшой, поэтому даём небольшой припуск —
+    /// попадать точно в кружок мышью неудобно, а промах уводит коммандера гулять.
+    /// </summary>
+    private Node2D EnemyUnderCursor()
+    {
+        Node2D best = null;
+        float bestDistance = float.MaxValue;
+
+        foreach (var node in GetTree().GetNodesInGroup("enemy"))
+        {
+            if (node is not Node2D enemy || !Targeting.IsValid(node))
+                continue;
+
+            float reach = (node as IDamageable)?.HitRadius ?? Const.Unit * 0.4f;
+            reach += Const.Unit * 0.25f;
+
+            float distance = enemy.GlobalPosition.DistanceTo(_cursor);
+            if (distance > reach || distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            best = enemy;
+        }
+
+        return best;
     }
 
     /// <summary>Цепочка приказов: далеко — сначала дойти, потом работать.</summary>

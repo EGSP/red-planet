@@ -6,6 +6,15 @@ public partial class Main : Node2D
     [Export] public Node2D World;
     [Export] public PackedScene CommanderScene;
 
+    /// <summary>
+    /// Отладочная выдача на старте: с ней можно смотреть поздние стадии, не выкапывая
+    /// руду вручную. Публикуется документом, а не правкой проекции — запас меняется
+    /// только через журнал, и у выдачи есть след.
+    /// </summary>
+    [Export] public float StartingOre;
+
+    [Export] public float StartingMetal;
+
     public override void _Ready()
     {
         World ??= GetNodeOrNull<Node2D>("World");
@@ -21,6 +30,18 @@ public partial class Main : Node2D
 
         SpawnBase();
         SpawnCommander();
+        GrantStartingResources();
+    }
+
+    private void GrantStartingResources()
+    {
+        var events = GameManager.I.Events;
+
+        if (StartingOre > 0f)
+            events.Append(new ResourceGained { Kind = ResourceKind.Ore, Amount = StartingOre });
+
+        if (StartingMetal > 0f)
+            events.Append(new ResourceGained { Kind = ResourceKind.Metal, Amount = StartingMetal });
     }
 
     private void SpawnBase()

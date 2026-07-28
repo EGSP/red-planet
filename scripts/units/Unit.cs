@@ -38,11 +38,18 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
 
     public WeaponDef Weapon => Def?.Weapon;
 
-    /// <summary>Огонь только без приказов: занятый юнит делом занят, а не стрельбой.</summary>
-    public virtual bool CanFire => Idle;
+    /// <summary>
+    /// Огонь без приказов — по ближайшему, по приказу «атака» — по назначенному.
+    /// На работе не стреляем: занятый юнит делом занят.
+    /// </summary>
+    public virtual bool CanFire => Idle || Current?.Kind == OrderKind.Attack;
 
-    /// <summary>Своей цели у юнита нет — ближайшую находит система стрельбы.</summary>
-    public IDamageable FireTarget => null;
+    /// <summary>
+    /// По приказу бьём именно назначенную жертву, даже если рядом мельтешит другая:
+    /// приказ игрока не должен перебиваться выбором «кто ближе».
+    /// </summary>
+    public IDamageable FireTarget =>
+        Current?.Kind == OrderKind.Attack ? Current.Victim as IDamageable : null;
 
     public override void _Ready()
     {
@@ -95,6 +102,13 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
         }
 
         var order = Orders[0];
+
+        if (order.Kind == OrderKind.Attack)
+        {
+            StepAttack(order, dt);
+            return;
+        }
+
         Vector2 target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
 
         float reach = order.Kind == OrderKind.Move
@@ -133,10 +147,43 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
         }
     }
 
+    /// <summary>
+    /// Приказ атаковать: подойти на дальность своего ствола и держаться. Сам выстрел —
+    /// дело WeaponSystem, сюда попадает только подход.
+    ///
+    /// Доворачиваемся, только пока идём: в пределах дальности корпус крутит система стрельбы,
+    /// и второй доворот за тот же кадр удвоил бы скорость вращения.
+    /// </summary>
+    private void StepAttack(Order order, double dt)
+    {
+        Detach();
+
+        var victim = order.Victim;
+        var target = victim as IDamageable;
+        var to = victim.GlobalPosition;
+
+        if (Weapon != null && Targeting.InFiringRange(Weapon, GlobalPosition, target))
+            return;
+
+        AimAt(to, dt);
+
+        // Безоружный юнит подходит на длину инструмента: приказ хотя бы не зависает
+        float stop = Weapon != null
+            ? Weapon.RangePx * 0.85f + (target?.HitRadius ?? 0f)
+            : Def.ToolRange * Const.Unit;
+
+        if (GlobalPosition.DistanceTo(to) > stop)
+            GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
+    }
+
     private bool IsValid(Order order)
     {
         if (order.Kind == OrderKind.Move)
             return true;
+
+        // Цель пала — приказ исчерпан, и юнит возвращается к обычному поведению
+        if (order.Kind == OrderKind.Attack)
+            return Targeting.IsValid(order.Victim);
 
         return Alive.Is(order.Target)
                && !order.Target.IsQueuedForDeletion()
@@ -185,9 +232,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
 
         float radius = Def.RadiusPx;
 
-        if (Weapon != null)
-            DrawArc(Vector2.Zero, Weapon.RangePx, 0f, Mathf.Tau, 64,
-                new Color(Def.Color, 0.16f), 1.5f);
+        WeaponGizmo.Draw(this, Weapon, Def.Color);
 
         DrawCircle(Vector2.Zero, radius, Def.Color);
         DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 24, new Color(0f, 0f, 0f, 0.4f), 2f);
@@ -210,6 +255,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed
 
         if (order.Kind == OrderKind.Move)
             DrawLine(Vector2.Zero, ToLocal(order.Pos), new Color(1f, 1f, 1f, 0.2f), 1f);
+        else if (order.Kind == OrderKind.Attack && Alive.Is(order.Victim))
+            DrawLine(Vector2.Zero, ToLocal(order.Victim.GlobalPosition),
+                new Color(1f, 0.4f, 0.35f, 0.5f), 1.5f);
         else if (Alive.Is(order.Target))
             DrawLine(Vector2.Zero, ToLocal(order.Target.GlobalPosition),
                 new Color(1f, 1f, 1f, 0.2f), 1f);
