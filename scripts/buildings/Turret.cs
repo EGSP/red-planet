@@ -4,7 +4,7 @@ using Godot;
 /// Турель: постройка со стволом. С места не сходит, но башню крутит — и потому
 /// единственная постройка, у которой ось «вперёд» живёт в Rotation ноды, а не в справочнике.
 ///
-/// Ведёт себя в бою ровно как все вооружённые: состоит в группе «armed», цель ей находит
+/// Ведёт себя в бою ровно как все вооружённые: реализует IArmed, цель ей находит
 /// WeaponSystem, доворот и конус — там же. Своего кода стрельбы у неё нет.
 ///
 /// Параметры ствола заданы на самой сцене, как у завода: скорость переработки у Factory
@@ -39,8 +39,6 @@ public partial class Turret : Building, IArmed
 
         // Смотрит наружу от базы: первый разворот не тратится на полкруга
         Rotation = Position.IsZeroApprox() ? 0f : Position.Angle();
-
-        AddToGroup("armed");
     }
 
     public override void _Process(double delta) => QueueRedraw();
@@ -52,12 +50,6 @@ public partial class Turret : Building, IArmed
 
         float desired = Heading.AngleTo(GlobalPosition, point);
         Rotation = Heading.TurnToward(Rotation, desired, TurnSpeed * (float)dt);
-    }
-
-    public override void OnDestroyed()
-    {
-        RemoveFromGroup("armed");
-        base.OnDestroyed();
     }
 
     public override void _Draw()

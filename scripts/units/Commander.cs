@@ -16,7 +16,6 @@ public partial class Commander : Unit
 
         Health.Invulnerable = true;
 
-        AddToGroup("commander");
         GameManager.I.Commander = this;
     }
 

@@ -13,69 +13,37 @@ using Godot;
 public static class Jobs
 {
     /// <summary>Ближайший каркас, которому ещё нужна работа.</summary>
-    public static WorkNode NearestBlueprint(SceneTree tree, Vector2 from,
-        float maxDistance = float.MaxValue)
-    {
-        WorkNode best = null;
-        float bestDistance = float.MaxValue;
-
-        foreach (var node in tree.GetNodesInGroup("blueprint"))
-        {
-            if (node is not WorkNode work || !Alive.Is(work)
-                || work.IsQueuedForDeletion() || !work.NeedsWork)
-                continue;
-
-            float distance = from.DistanceTo(work.GlobalPosition);
-            if (distance > maxDistance || distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            best = work;
-        }
-
-        return best;
-    }
+    public static WorkNode NearestBlueprint(Vector2 from, float maxDistance = float.MaxValue) =>
+        GameManager.I.Index.All<Blueprint>()
+            .Where(blueprint => blueprint.NeedsWork)
+            .Nearest(from, blueprint => blueprint.GlobalPosition, maxDistance);
 
     /// <summary>
     /// Ближайшее повреждённое, что можно починить. Ремонтом занимаются только в пределах
     /// обзора: бегать через полкарты чинить забор — не то поведение, которого ждёшь от бота.
     ///
-    /// Юниты в поиск попадают, только если строителю это разрешено переключателем:
-    /// ремонтник поля боя и строитель базы — разные роли при одном инструменте.
+    /// Ремонтник поля боя и строитель базы — разные роли при одном инструменте, поэтому
+    /// юниты в поиск попадают не всегда. Но решает это ВЫБОР РАЗРЕЗА, а не фильтр:
+    /// «юнит ли ты» — вопрос о типе, он не меняется ни разу за всю жизнь сущности,
+    /// и проверять его на каждом элементе каждого обхода незачем. Признак «чинится»
+    /// реализуют ровно постройки и юниты, поэтому широкий случай — весь IRepairable.
     /// </summary>
-    public static Node2D NearestDamaged(SceneTree tree, Vector2 from, float maxDistance,
+    public static Node2D NearestDamaged(Vector2 from, float maxDistance,
         bool includeUnits = false)
     {
-        Node2D best = null;
-        float bestDistance = float.MaxValue;
+        var index = GameManager.I.Index;
 
-        Scan(tree.GetNodesInGroup("building"));
-
-        if (includeUnits)
-            Scan(tree.GetNodesInGroup("unit"));
-
-        return best;
-
-        void Scan(Godot.Collections.Array<Node> nodes)
-        {
-            foreach (var node in nodes)
-            {
-                if (node is not Node2D { } candidate || candidate is not IRepairable repairable
-                    || !Targeting.IsValid(node))
-                    continue;
-
-                // Без цены курса ремонта взять неоткуда — чинить такое нечем
-                if (repairable.Health == null || repairable.Health.Ratio >= 0.999f
-                    || repairable.HealthPerMetal <= 0f)
-                    continue;
-
-                float distance = from.DistanceTo(candidate.GlobalPosition);
-                if (distance > maxDistance || distance >= bestDistance)
-                    continue;
-
-                bestDistance = distance;
-                best = candidate;
-            }
-        }
+        return includeUnits
+            ? Damaged(index.All<IRepairable>(), from, maxDistance)
+            : Damaged(index.All<Building>(), from, maxDistance);
     }
+
+    private static Node2D Damaged<T>(Slice<T> slice, Vector2 from, float maxDistance)
+        where T : class, IRepairable =>
+        slice.Where(NeedsRepair).Nearest(from, target => target.GlobalPosition, maxDistance)
+            as Node2D;
+
+    /// <summary>Есть ли что чинить и есть ли чем: без цены постройки курса ремонта нет.</summary>
+    private static bool NeedsRepair(IRepairable target) =>
+        target.Health != null && target.Health.Ratio < 0.999f && target.HealthPerMetal > 0f;
 }

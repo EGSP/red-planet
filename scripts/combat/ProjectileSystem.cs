@@ -9,9 +9,7 @@ public partial class ProjectileSystem : GameSystem
 {
     public override void Step(double dt)
     {
-        foreach (var node in GetTree().GetNodesInGroup("projectile"))
-            if (node is Projectile projectile && Alive.Is(projectile)
-                && !projectile.IsQueuedForDeletion())
-                projectile.Step(dt);
+        foreach (var projectile in GM.Index.All<Projectile>())
+            projectile.Step(dt);
     }
 }

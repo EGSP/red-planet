@@ -31,11 +31,7 @@ public partial class Projectile : Node2D
 
     public Color Tint = new(1f, 0.9f, 0.4f);
 
-    public override void _Ready()
-    {
-        AddToGroup("projectile");
-        ZIndex = 6;
-    }
+    public override void _Ready() => ZIndex = 6;
 
     public override void _Process(double delta) => QueueRedraw();
 
@@ -73,12 +69,10 @@ public partial class Projectile : Node2D
         IDamageable best = null;
         float bestDistance = float.MaxValue;
 
-        foreach (var node in GetTree().GetNodesInGroup(Targeting.Group))
+        // Разрез уже отсеял и чужую сторону, и всё, чего в мире больше нет
+        foreach (var target in GameManager.I.Targets[TargetSide])
         {
-            if (node is not IDamageable target || !Targeting.IsValid(node))
-                continue;
-
-            if (target.Faction != TargetSide)
+            if (target.Health.IsDead)
                 continue;
 
             var center = target.GlobalPosition;
@@ -102,7 +96,6 @@ public partial class Projectile : Node2D
 
     private void Retire()
     {
-        RemoveFromGroup("projectile");
         SetProcess(false);
         Visible = false;
         QueueFree();

@@ -11,13 +11,13 @@ public partial class EnemySystem : GameSystem
 {
     public override void Step(double dt)
     {
-        foreach (var node in GetTree().GetNodesInGroup("enemy"))
+        foreach (var enemy in GM.Index.All<Enemy>())
         {
-            if (node is not Enemy enemy || !Targeting.IsValid(enemy))
+            if (enemy.Health.IsDead)
                 continue;
 
             if (enemy.NeedsTarget)
-                enemy.SetTarget(Targeting.Nearest(GetTree(), enemy.GlobalPosition, Faction.Player));
+                enemy.SetTarget(Targeting.Nearest(enemy.GlobalPosition, Faction.Player));
 
             enemy.Step(dt);
         }

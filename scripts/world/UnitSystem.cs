@@ -5,8 +5,7 @@ public partial class UnitSystem : GameSystem
 {
     public override void Step(double dt)
     {
-        foreach (var node in GetTree().GetNodesInGroup("unit"))
-            if (node is Unit unit)
-                unit.Step(dt);
+        foreach (var unit in GM.Index.All<Unit>())
+            unit.Step(dt);
     }
 }

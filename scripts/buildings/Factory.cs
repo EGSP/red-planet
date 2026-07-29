@@ -18,13 +18,6 @@ public partial class Factory : Building
 
     public bool Working { get; private set; }
 
-    public override void Init(int id, BuildableDef def, Vector2I cell)
-    {
-        base.Init(id, def, cell);
-        AddToGroup("factory");
-        AddToGroup(EconomySystem.Group);
-    }
-
     public override void _Process(double delta) => QueueRedraw();
 
     public override void Declare(EconomyLedger ledger)
@@ -58,13 +51,6 @@ public partial class Factory : Building
             Kind = ResourceKind.Metal,
             Amount = MetalOutput * (float)dt * rates.Energy,
         });
-    }
-
-    /// <summary>Синтезатор разрушен: снимаемся со своей группы вместе с общими.</summary>
-    public override void OnDestroyed()
-    {
-        RemoveFromGroup("factory");
-        base.OnDestroyed();
     }
 
     public override void _Draw()

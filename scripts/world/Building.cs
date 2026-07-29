@@ -44,13 +44,6 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         Cell = cell;
         Position = Const.AreaCenter(cell, def.Size);
         Health = new Health(def.MaxHealth);
-        AddToGroup("building");
-        AddToGroup(Targeting.Group);
-
-        // В экономику попадают только те, кому есть что заявить: обычный склад или стена
-        // каждый кадр систему не тревожат
-        if (def.IsGenerator)
-            AddToGroup(EconomySystem.Group);
 
         QueueRedraw();
     }
@@ -87,10 +80,8 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
 
         gm.Entities.Remove(Id);
 
-        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
-        RemoveFromGroup("building");
-        RemoveFromGroup(Targeting.Group);
-        RemoveFromGroup(EconomySystem.Group);
+        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем.
+        // Из разрезов индекса нода выпадает сама, как только помечена на удаление
         SetProcess(false);
         Visible = false;
         QueueFree();

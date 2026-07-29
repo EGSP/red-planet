@@ -20,11 +20,8 @@ public partial class WeaponSystem : GameSystem
         if (GM.WorldRoot == null)
             return;
 
-        foreach (var node in GetTree().GetNodesInGroup("armed"))
+        foreach (var armed in GM.Index.All<IArmed>())
         {
-            if (node is not IArmed armed || !Targeting.IsValid(node))
-                continue;
-
             armed.Gun.Tick(dt);
 
             var weapon = armed.Weapon;
@@ -60,8 +57,7 @@ public partial class WeaponSystem : GameSystem
         if (own != null && Targeting.IsValid(own as GodotObject))
             return own;
 
-        return Targeting.Nearest(GetTree(), armed.GlobalPosition, armed.Faction.Opposite(),
-            weapon.RangePx);
+        return Targeting.Nearest(armed.GlobalPosition, armed.Faction.Opposite(), weapon.RangePx);
     }
 
     private void Fire(IArmed armed, WeaponDef weapon, Vector2 from, Vector2 to)

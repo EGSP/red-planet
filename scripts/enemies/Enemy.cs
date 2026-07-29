@@ -63,14 +63,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
         Rotation = Heading.AngleTo(position, Vector2.Zero);
     }
 
-    public override void _Ready()
-    {
-        Health ??= new Health(Def?.MaxHealth ?? 100f);
-
-        AddToGroup("enemy");
-        AddToGroup(Targeting.Group);
-        AddToGroup("armed");
-    }
+    public override void _Ready() => Health ??= new Health(Def?.MaxHealth ?? 100f);
 
     public override void _Process(double delta) => QueueRedraw();
 
@@ -124,9 +117,6 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
         GameManager.I.Entities.Remove(Id);
 
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
-        RemoveFromGroup("enemy");
-        RemoveFromGroup(Targeting.Group);
-        RemoveFromGroup("armed");
         SetProcess(false);
         Visible = false;
         QueueFree();

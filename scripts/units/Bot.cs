@@ -6,9 +6,4 @@ using Godot;
 /// </summary>
 public partial class Bot : Unit
 {
-    public override void _Ready()
-    {
-        base._Ready();
-        AddToGroup("bot");
-    }
 }

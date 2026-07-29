@@ -29,7 +29,7 @@ public partial class OreSpawnSystem : GameSystem
             return;
         }
 
-        if (GetTree().GetNodesInGroup("ore").Count >= Const.OreSlots)
+        if (GM.Index.All<OreDeposit>().Count >= Const.OreSlots)
             return;
 
         _timer -= (float)dt;

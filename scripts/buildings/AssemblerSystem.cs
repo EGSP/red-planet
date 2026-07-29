@@ -9,9 +9,7 @@ public partial class AssemblerSystem : GameSystem
 {
     public override void Step(double dt)
     {
-        foreach (var node in GetTree().GetNodesInGroup("assembler"))
-            if (node is Assembler assembler && Alive.Is(assembler)
-                && !assembler.IsQueuedForDeletion())
-                assembler.Think();
+        foreach (var assembler in GM.Index.All<Assembler>())
+            assembler.Think();
     }
 }

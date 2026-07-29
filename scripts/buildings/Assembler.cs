@@ -27,22 +27,14 @@ public partial class Assembler : Building
 
     public bool Working => Alive.Is(_attached) || Alive.Is(_repairTarget);
 
-    public override void Init(int id, BuildableDef def, Vector2I cell)
-    {
-        base.Init(id, def, cell);
-        AddToGroup("assembler");
-        AddToGroup(EconomySystem.Group);
-    }
-
     public override void _Process(double delta) => QueueRedraw();
 
     /// <summary>Выбор работы. Зовётся системой раз в кадр, до прохода экономики.</summary>
     public void Think()
     {
-        var tree = GetTree();
         float reach = VisionRadius;
 
-        var blueprint = Jobs.NearestBlueprint(tree, GlobalPosition, reach);
+        var blueprint = Jobs.NearestBlueprint(GlobalPosition, reach);
         if (blueprint != null)
         {
             _repairTarget = null;
@@ -51,7 +43,7 @@ public partial class Assembler : Building
         }
 
         Detach();
-        _repairTarget = Jobs.NearestDamaged(tree, GlobalPosition, reach, RepairUnits);
+        _repairTarget = Jobs.NearestDamaged(GlobalPosition, reach, RepairUnits);
     }
 
     private void Attach(WorkNode node)
@@ -94,7 +86,6 @@ public partial class Assembler : Building
     {
         Detach();
         _repairTarget = null;
-        RemoveFromGroup("assembler");
         base.OnDestroyed();
     }
 

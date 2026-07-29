@@ -83,14 +83,6 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     {
         Health ??= new Health(Def?.MaxHealth ?? 80f);
 
-        AddToGroup("unit");
-        AddToGroup(Targeting.Group);
-        AddToGroup("armed");
-
-        // В экономике участвуют все юниты: коммандер — своим доходом (без него первую
-        // электростанцию было бы не на что строить), остальные — ремонтом
-        AddToGroup(EconomySystem.Group);
-
         QueueRedraw();
     }
 
@@ -371,18 +363,13 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public override void _ExitTree() => Detach();
 
-    /// <summary>Прочность кончилась: отпустить узел работы, выйти из реестра и групп.</summary>
+    /// <summary>Прочность кончилась: отпустить узел работы и выйти из реестра.</summary>
     public virtual void OnDestroyed()
     {
         ClearOrders();
         GameManager.I.Entities.Remove(Id);
 
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
-        foreach (var group in new[]
-                     { "unit", "bot", "commander", Targeting.Group, "armed", EconomySystem.Group })
-            if (IsInGroup(group))
-                RemoveFromGroup(group);
-
         SetProcess(false);
         Visible = false;
         QueueFree();

@@ -115,15 +115,15 @@ public partial class CommandSystem : GameSystem
             return;
         }
 
+        // Кто занимает клетку — вопрос к сетке, а не к индексу: она и заведена ради него,
+        // и отвечает сразу, не перебирая месторождения
         var cell = Const.WorldToCell(_cursor);
+        var deposit = GM.Entities.Get<OreDeposit>(GM.Grid.OwnerOf(cell));
 
-        foreach (var node in GetTree().GetNodesInGroup("ore"))
+        if (deposit is { NeedsWork: true })
         {
-            if (node is OreDeposit deposit && deposit.Cell == cell && deposit.NeedsWork)
-            {
-                SendCommander(OrderKind.Mine, deposit);
-                return;
-            }
+            SendCommander(OrderKind.Mine, deposit);
+            return;
         }
 
         commander.SetOrders(Order.MoveTo(_cursor));
@@ -135,26 +135,12 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private Node2D EnemyUnderCursor()
     {
-        Node2D best = null;
-        float bestDistance = float.MaxValue;
+        var cursor = _cursor;
 
-        foreach (var node in GetTree().GetNodesInGroup("enemy"))
-        {
-            if (node is not Node2D enemy || !Targeting.IsValid(node))
-                continue;
-
-            float reach = (node as IDamageable)?.HitRadius ?? Const.Unit * 0.4f;
-            reach += Const.Unit * 0.25f;
-
-            float distance = enemy.GlobalPosition.DistanceTo(_cursor);
-            if (distance > reach || distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            best = enemy;
-        }
-
-        return best;
+        return GM.Index.All<Enemy>()
+            .Where(enemy => enemy.GlobalPosition.DistanceTo(cursor)
+                            <= enemy.HitRadius + Const.Unit * 0.25f)
+            .Nearest(cursor, enemy => enemy.GlobalPosition);
     }
 
     /// <summary>Цепочка приказов: далеко — сначала дойти, потом работать.</summary>

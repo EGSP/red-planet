@@ -7,32 +7,35 @@ using Godot;
 /// хватает ли ему ресурсов, и делал это по-своему. В потоковой экономике так нельзя —
 /// производительность общая, и считать её должен кто-то один.
 ///
-/// Три прохода по одной и той же группе:
+/// Три прохода по одному и тому же разрезу:
 ///   1. Declare — кто сколько производит и просит;
 ///   2. Resolve — производительность базы, одна на всех;
 ///   3. Run     — работа с этой производительностью и публикация документов о ресурсах.
+///
+/// Состав участников определяется интерфейсом, а не списком: реализовал IEconomyActor —
+/// значит участвуешь. Раньше в экономику записывали выборочно, чтобы обычный склад
+/// не тревожил систему каждый кадр, но экономия эта мнимая: заявка склада — пара
+/// сложений с нулём, зато забыть записаться было делом одной строки.
 /// </summary>
 public partial class EconomySystem : GameSystem
 {
-    public const string Group = "economy";
-
     public override void Step(double dt)
     {
         var ledger = GM.Economy;
-        var actors = GetTree().GetNodesInGroup(Group);
+        var actors = GM.Index.All<IEconomyActor>();
 
         ledger.BeginFrame();
 
-        foreach (var node in actors)
-            if (node is IEconomyActor actor && Alive.Is(node) && !node.IsQueuedForDeletion())
-                actor.Declare(ledger);
+        foreach (var actor in actors)
+            actor.Declare(ledger);
 
         ledger.Resolve(dt, GM.Stockpile);
 
         var rates = ledger.Rates;
 
-        foreach (var node in actors)
-            if (node is IEconomyActor actor && Alive.Is(node) && !node.IsQueuedForDeletion())
-                actor.Run(dt, rates);
+        // Разрез — окно, а не копия: тот, кто выработался посреди прохода, во второй
+        // обход уже не попадёт. Ровно то же делала прежняя проверка живости
+        foreach (var actor in actors)
+            actor.Run(dt, rates);
     }
 }

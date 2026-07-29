@@ -37,7 +37,7 @@ public partial class EnemySpawnSystem : GameSystem
         if (GM.WorldRoot == null || EnemyScene == null)
             return;
 
-        if (GetTree().GetNodesInGroup("enemy").Count >= Population)
+        if (GM.Index.All<Enemy>().Count >= Population)
             return;
 
         _timer -= (float)dt;

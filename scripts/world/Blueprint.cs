@@ -45,14 +45,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
         Health = new Health(def.MaxHealth * Const.BlueprintHealthFactor);
     }
 
-    public override void _Ready()
-    {
-        Health ??= new Health(100f * Const.BlueprintHealthFactor);
-
-        AddToGroup("blueprint");
-        AddToGroup(Targeting.Group);
-        AddToGroup(EconomySystem.Group);
-    }
+    public override void _Ready() => Health ??= new Health(100f * Const.BlueprintHealthFactor);
 
     public override void _Process(double delta) => QueueRedraw();
 
@@ -137,9 +130,6 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
     private void Retire()
     {
         ReleaseWorkers();
-        RemoveFromGroup("blueprint");
-        RemoveFromGroup(Targeting.Group);
-        RemoveFromGroup(EconomySystem.Group);
         SetProcess(false);
         Visible = false;
         QueueFree();

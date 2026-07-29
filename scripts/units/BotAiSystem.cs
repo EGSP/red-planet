@@ -15,9 +15,9 @@ public partial class BotAiSystem : GameSystem
 {
     public override void Step(double dt)
     {
-        foreach (var node in GetTree().GetNodesInGroup("bot"))
+        foreach (var bot in GM.Index.All<Bot>())
         {
-            if (node is not Bot bot || bot.Def == null || !IsFree(bot))
+            if (bot.Def == null || !IsFree(bot))
                 continue;
 
             var order = ChooseJob(bot);
@@ -36,22 +36,24 @@ public partial class BotAiSystem : GameSystem
 
         if (def.CanMine)
         {
-            var ore = Nearest(from, "ore");
+            var ore = GM.Index.All<OreDeposit>()
+                .Where(deposit => deposit.NeedsWork)
+                .Nearest(from, deposit => deposit.GlobalPosition);
+
             if (ore != null)
                 return Order.Work(OrderKind.Mine, ore);
         }
 
         if (def.CanBuild)
         {
-            var blueprint = Jobs.NearestBlueprint(GetTree(), from);
+            var blueprint = Jobs.NearestBlueprint(from);
             if (blueprint != null)
                 return Order.Work(OrderKind.Build, blueprint);
         }
 
         if (def.CanRepair)
         {
-            var damaged = Jobs.NearestDamaged(GetTree(), from, def.VisionRadiusPx,
-                def.CanRepairUnits);
+            var damaged = Jobs.NearestDamaged(from, def.VisionRadiusPx, def.CanRepairUnits);
 
             if (damaged != null)
                 return Order.Repair(damaged);
@@ -64,27 +66,5 @@ public partial class BotAiSystem : GameSystem
             return null;
 
         return Order.Follow(commander);
-    }
-
-    private WorkNode Nearest(Vector2 from, string group)
-    {
-        WorkNode best = null;
-        float bestDistance = float.MaxValue;
-
-        foreach (var node in GetTree().GetNodesInGroup(group))
-        {
-            if (node is not WorkNode work || !Alive.Is(work)
-                || work.IsQueuedForDeletion() || !work.NeedsWork)
-                continue;
-
-            float distance = from.DistanceSquaredTo(work.GlobalPosition);
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                best = work;
-            }
-        }
-
-        return best;
     }
 }

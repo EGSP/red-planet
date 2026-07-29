@@ -3,41 +3,20 @@ using Godot;
 /// <summary>
 /// Поиск целей. Один вход для всех, кто ищет, в кого стрелять или на кого бежать.
 ///
-/// Всё уязвимое состоит в одной группе, а сторона спрашивается у самой сущности —
-/// поэтому искать «ближайшую постройку ИЛИ каркас ИЛИ юнита» отдельными обходами не нужно.
-/// Добавили новый вид сущности — он попадает в поиск сам, стоит войти в группу.
+/// Всё уязвимое лежит в одном разрезе индекса — по признаку IDamageable, — и разложено
+/// по сторонам. Поэтому искать «ближайшую постройку ИЛИ каркас ИЛИ юнита» отдельными
+/// обходами не нужно, а чужих не приходится отсеивать поштучно: разрез по стороне сразу
+/// отдаёт только их. Новый вид сущности попадает в поиск сам, стоит ему реализовать
+/// интерфейс, — списывать его куда-либо руками не нужно.
 /// </summary>
 public static class Targeting
 {
-    public const string Group = "damageable";
-
     /// <summary>Ближайшая живая цель указанной стороны, не дальше maxDistance пикселей.</summary>
-    public static IDamageable Nearest(SceneTree tree, Vector2 from, Faction side,
-        float maxDistance = float.MaxValue)
-    {
-        IDamageable best = null;
-        float bestDistance = maxDistance >= float.MaxValue
-            ? float.MaxValue
-            : maxDistance * maxDistance;
-
-        foreach (var node in tree.GetNodesInGroup(Group))
-        {
-            if (node is not IDamageable candidate || !IsValid(node))
-                continue;
-
-            if (candidate.Faction != side)
-                continue;
-
-            float distance = from.DistanceSquaredTo(candidate.GlobalPosition);
-            if (distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            best = candidate;
-        }
-
-        return best;
-    }
+    public static IDamageable Nearest(Vector2 from, Faction side,
+        float maxDistance = float.MaxValue) =>
+        GameManager.I.Targets[side]
+            .Where(target => !target.Health.IsDead)
+            .Nearest(from, target => target.GlobalPosition, maxDistance);
 
     /// <summary>
     /// Достаёт ли ствол до цели. Радиус меряем до края цели, а не до её центра:

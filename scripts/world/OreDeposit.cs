@@ -19,12 +19,6 @@ public partial class OreDeposit : WorkNode
         Position = Const.CellCenter(cell);
     }
 
-    public override void _Ready()
-    {
-        AddToGroup("ore");
-        AddToGroup(EconomySystem.Group);
-    }
-
     public override void _Process(double delta) => QueueRedraw();
 
     /// <summary>
@@ -81,8 +75,6 @@ public partial class OreDeposit : WorkNode
 
         // Выводим узел из игры до удаления, чтобы по нему не прошёл ещё один кадр
         ReleaseWorkers();
-        RemoveFromGroup("ore");
-        RemoveFromGroup(EconomySystem.Group);
         SetProcess(false);
         Visible = false;
         QueueFree();
