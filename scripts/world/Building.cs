@@ -7,7 +7,8 @@ using Godot;
 /// а поворот ноды сетку не поворачивает. Поэтому направление живёт отдельным числом
 /// из справочника и рисуется маркером — задел под турели и ворота.
 /// </summary>
-public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVision, IRepairable
+public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVision, IRepairable,
+    IOrderable
 {
     public int Id { get; private set; }
     public BuildableDef Def { get; private set; }
@@ -15,9 +16,26 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
 
     public Health Health { get; private set; }
 
+    public OrderQueue Orders { get; }
+
+    public Building() => Orders = new OrderQueue(this);
+
     public int EntityId => Id;
 
     public string DefId => Def?.Id ?? "";
+
+    public string DisplayName => Def?.DisplayName ?? "постройка";
+
+    /// <summary>
+    /// Обычной постройке приказать нечего: склад, стена и генератор стоят и работают сами.
+    /// Пустой набор и есть способ это сказать — очередь у них общая со всеми, но пополнить
+    /// её невозможно. Турель и башня-сборщик свой набор переопределяют.
+    /// </summary>
+    public virtual OrderSet AllowedOrders => OrderSet.None;
+
+    public virtual void RunOrder(Order order, double dt) { }
+
+    public virtual void OnIdle(double dt) { }
 
     public Faction Faction => Faction.Player;
 

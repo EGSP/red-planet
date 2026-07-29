@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Godot;
 
 /// <summary>
@@ -8,20 +7,26 @@ using Godot;
 /// Он же цель для врага и он же носитель ствола, если ствол задан справочником.
 /// Стрелять юнит начинает только без приказов: работа важнее, а огонь по площадям
 /// вместо стройки — не то, чего ждёшь от отданного приказа.
+///
+/// Приказы юнит только ИСПОЛНЯЕТ. Кто их раздаёт — игрок через CommandSystem или мозговая
+/// система — его не касается, а чего ему отдать нельзя, отсекает набор AllowedOrders.
 /// </summary>
-public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision, IRepairable
+public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
+    IRepairable, IOrderable
 {
     [Export] public UnitDef Def;
 
     public int Id { get; set; }
 
-    protected readonly List<Order> Orders = new();
+    public OrderQueue Orders { get; }
 
     private WorkNode _attached;
 
-    public bool Idle => Orders.Count == 0;
+    public Unit() => Orders = new OrderQueue(this);
 
-    public Order Current => Orders.Count > 0 ? Orders[0] : null;
+    public bool Idle => Orders.Idle;
+
+    public Order Current => Orders.Current;
 
     public Health Health { get; protected set; }
 
@@ -32,7 +37,24 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>Юнита нет в справочнике построек, ёмкости хранилища он не даёт.</summary>
     public string DefId => "";
 
+    public string DisplayName => Def?.DisplayName ?? "юнит";
+
     public virtual Faction Faction => Faction.Player;
+
+    /// <summary>
+    /// Что юниту можно приказать. Выводится из умений, а не задаётся списком: нет бура —
+    /// нет приказа копать, нет ствола — нет атаки. Поэтому набор не может разойтись с тем,
+    /// что юнит на самом деле умеет.
+    /// </summary>
+    public virtual OrderSet AllowedOrders => Def == null
+        ? OrderSet.None
+        : OrderSet.None
+            .With(OrderKind.Move, Def.SpeedPx > 0f)
+            .With(OrderKind.Follow, Def.SpeedPx > 0f)
+            .With(OrderKind.Attack, Def.Weapon != null)
+            .With(OrderKind.Mine, Def.CanMine)
+            .With(OrderKind.Build, Def.CanBuild)
+            .With(OrderKind.Repair, Def.CanRepair);
 
     /// <summary>Ось «вперёд» подвижной сущности — это поворот самой ноды.</summary>
     public float Facing => Rotation;
@@ -125,11 +147,6 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
                 Amount = Def.MetalProduction * (float)dt,
             });
 
-        RunRepair(dt, rates);
-    }
-
-    private void RunRepair(double dt, EconomyRates rates)
-    {
         var target = RepairTarget;
         if (target != null)
             Repair.Run(target, Def.BuildPower, Def.BuildEnergyPerPower, dt, rates);
@@ -147,52 +164,42 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public override void _Process(double delta) => QueueRedraw();
 
-    public void SetOrders(params Order[] orders)
+    /// <summary>Приказов нет — отпускаем узел работы и стоим.</summary>
+    public void OnIdle(double dt) => Detach();
+
+    /// <summary>
+    /// Отработать приказ за кадр. Снимать невыполнимое с головы очереди не наше дело —
+    /// это уже сделала OrderSystem, сюда приказ приходит заведомо годным.
+    /// </summary>
+    public void RunOrder(Order order, double dt)
     {
-        ClearOrders();
-        Orders.AddRange(orders);
-    }
-
-    public void Enqueue(Order order) => Orders.Add(order);
-
-    public void ClearOrders()
-    {
-        Detach();
-        Orders.Clear();
-    }
-
-    public void Step(double dt)
-    {
-        while (Orders.Count > 0 && !IsValid(Orders[0]))
-        {
-            Detach();
-            Orders.RemoveAt(0);
-        }
-
-        if (Orders.Count == 0)
-        {
-            Detach();
+        if (Def == null)
             return;
-        }
-
-        var order = Orders[0];
 
         switch (order.Kind)
         {
             case OrderKind.Attack:
-                StepAttack(order, dt);
+                RunAttack(order, dt);
                 return;
 
             case OrderKind.Repair:
-                StepRepair(order, dt);
+                RunRepair(order, dt);
                 return;
 
             case OrderKind.Follow:
-                StepFollow(order, dt);
+                RunFollow(order, dt);
+                return;
+
+            default:
+                RunWork(order, dt);
                 return;
         }
+    }
 
-        Vector2 target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
+    /// <summary>Движение, копка и стройка: дойти, а дойдя — подключиться к узлу работы.</summary>
+    private void RunWork(Order order, double dt)
+    {
+        var target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
 
         float reach = order.Kind == OrderKind.Move
             ? Const.Unit * 0.2f
@@ -211,14 +218,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         if (order.Kind == OrderKind.Move)
         {
-            Orders.RemoveAt(0);
+            Orders.DropCurrent();
             return;
         }
 
         float power = order.Kind == OrderKind.Mine ? Def.MinePower : Def.BuildPower;
         if (power <= 0f)
         {
-            Orders.RemoveAt(0);
+            Orders.DropCurrent();
             return;
         }
 
@@ -240,7 +247,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Доворачиваемся, только пока идём: в пределах дальности корпус крутит система стрельбы,
     /// и второй доворот за тот же кадр удвоил бы скорость вращения.
     /// </summary>
-    private void StepAttack(Order order, double dt)
+    private void RunAttack(Order order, double dt)
     {
         Detach();
 
@@ -266,7 +273,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Ремонт: подойти на длину инструмента и стоять. Само восстановление прочности идёт
     /// в Run — ремонт стоит ресурсов и потому проходит через экономику, как и стройка.
     /// </summary>
-    private void StepRepair(Order order, double dt)
+    private void RunRepair(Order order, double dt)
     {
         Detach();
 
@@ -282,43 +289,17 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Сопровождение: держаться рядом, но не наступать на пятки. Приказ не завершается сам —
     /// его вытесняет работа, как только она появится.
     /// </summary>
-    private void StepFollow(Order order, double dt)
+    private void RunFollow(Order order, double dt)
     {
         Detach();
 
         var to = order.Entity.GlobalPosition;
-        float distance = GlobalPosition.DistanceTo(to);
 
-        if (distance <= Const.FollowDistancePx)
+        if (GlobalPosition.DistanceTo(to) <= Const.FollowDistancePx)
             return;
 
         AimAt(to, dt);
         GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
-    }
-
-    private bool IsValid(Order order)
-    {
-        switch (order.Kind)
-        {
-            case OrderKind.Move:
-                return true;
-
-            // Цель пала — приказ исчерпан, и юнит возвращается к обычному поведению
-            case OrderKind.Attack:
-                return Targeting.IsValid(order.Entity);
-
-            // Починили — работа закончена сама собой
-            case OrderKind.Repair:
-                return Targeting.IsValid(order.Entity)
-                       && order.Entity is IRepairable { Health.Ratio: < 0.999f };
-
-            case OrderKind.Follow:
-                return Alive.Is(order.Entity) && !order.Entity.IsQueuedForDeletion();
-        }
-
-        return Alive.Is(order.Target)
-               && !order.Target.IsQueuedForDeletion()
-               && order.Target.NeedsWork;
     }
 
     /// <summary>Кого чиним прямо сейчас: приказ ремонта, цель в пределах инструмента.</summary>
@@ -358,7 +339,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (_attached == node)
             _attached = null;
 
-        Orders.RemoveAll(order => order.Target == node);
+        Orders.DropAllFor(node);
     }
 
     public override void _ExitTree() => Detach();
@@ -366,7 +347,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>Прочность кончилась: отпустить узел работы и выйти из реестра.</summary>
     public virtual void OnDestroyed()
     {
-        ClearOrders();
+        Detach();
+        Orders.Clear();
         GameManager.I.Entities.Remove(Id);
 
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
@@ -393,24 +375,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
 
+        // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей
         if (Alive.Is(_attached))
-        {
             DrawLine(Vector2.Zero, ToLocal(_attached.GlobalPosition),
                 new Color(1f, 1f, 0.5f, 0.6f), 2f);
-            return;
-        }
-
-        var order = Current;
-        if (order == null)
-            return;
-
-        if (order.Kind == OrderKind.Move)
-            DrawLine(Vector2.Zero, ToLocal(order.Pos), new Color(1f, 1f, 1f, 0.2f), 1f);
-        else if (order.Kind == OrderKind.Attack && Alive.Is(order.Entity))
-            DrawLine(Vector2.Zero, ToLocal(order.Entity.GlobalPosition),
-                new Color(1f, 0.4f, 0.35f, 0.5f), 1.5f);
-        else if (Alive.Is(order.Target))
-            DrawLine(Vector2.Zero, ToLocal(order.Target.GlobalPosition),
-                new Color(1f, 1f, 1f, 0.2f), 1f);
     }
 }

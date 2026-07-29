@@ -1,7 +1,8 @@
+using System.Linq;
 using Godot;
 
 /// <summary>
-/// Интерфейс: ресурсы общего хранилища и панель построек коммандера.
+/// Интерфейс: ресурсы общего хранилища, выделение и панель построек коммандера.
 /// Кнопки только порождают намерение — постановку делает CommandSystem.
 /// </summary>
 public partial class Hud : CanvasLayer
@@ -10,6 +11,7 @@ public partial class Hud : CanvasLayer
     private Label _energy;
     private Label _efficiency;
     private Label _combat;
+    private Label _selection;
     private Label _status;
     private VBoxContainer _buttons;
 
@@ -44,6 +46,15 @@ public partial class Hud : CanvasLayer
         _combat.AddThemeFontSizeOverride("font_size", 13);
         _combat.AddThemeColorOverride("font_color", new Color(1f, 0.7f, 0.65f));
         box.AddChild(_combat);
+
+        box.AddChild(new HSeparator());
+
+        // Набор приказов выделенного показываем прямо здесь: он же и есть ответ
+        // на вопрос «что этому юниту вообще можно поручить»
+        _selection = new Label { Text = "" };
+        _selection.AddThemeFontSizeOverride("font_size", 12);
+        _selection.AddThemeColorOverride("font_color", new Color(0.65f, 0.95f, 0.75f));
+        box.AddChild(_selection);
 
         box.AddChild(new HSeparator());
 
@@ -100,10 +111,33 @@ public partial class Hud : CanvasLayer
                        $"уничтожено {combat.EnemiesDestroyed}   потеряно {combat.LossesTaken}\n" +
                        $"урон коммандеру {commanderDamage:0}";
 
+        _selection.Text = SelectionLine(gm.Command);
+
         var pending = gm.Command?.Pending;
         _status.Text = pending != null
             ? $"ставим: {pending.DisplayName}\nЛКМ — поставить, ПКМ — отмена"
-            : "ПКМ — идти, копать или атаковать врага\nWASD и колесо — камера";
+            : "ЛКМ — выделить или рамка, ПКМ — приказ по цели\n" +
+              "Shift — дописать в очередь, WASD и колесо — камера";
+    }
+
+    /// <summary>
+    /// Что выделено и что этому можно приказать. Набор берём у самой сущности: он же
+    /// и работает фильтром, поэтому показанное здесь и принятое на деле не разойдутся.
+    /// </summary>
+    private static string SelectionLine(CommandSystem command)
+    {
+        var selected = command?.Selected;
+
+        if (selected == null || selected.Count == 0)
+            return "не выделено никого — приказы идут коммандеру";
+
+        if (selected.Count > 1)
+            return $"выделено: {selected.Count}";
+
+        var actor = selected[0];
+        string kinds = string.Join(", ", actor.AllowedOrders.Kinds.Select(Order.Name));
+
+        return $"{actor.DisplayName} — можно: {kinds}\nв очереди приказов: {actor.Orders.Count}";
     }
 
     /// <summary>

@@ -9,7 +9,7 @@ using Godot;
 /// стреляет (это WeaponSystem). Разделение то же, что у ботов игрока: поиск работы —
 /// дело системы, ход — дело сущности.
 /// </summary>
-public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
+public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrderable
 {
     public EnemyDef Def { get; private set; }
 
@@ -19,12 +19,22 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
 
     public WeaponState Gun { get; } = new();
 
-    /// <summary>Цель хранится нодой, а интерфейс достаётся приведением: живость проверяется у ноды.</summary>
-    private Node2D _target;
+    public OrderQueue Orders { get; }
+
+    public Enemy() => Orders = new OrderQueue(this);
 
     private float _retarget;
 
     public int EntityId => Id;
+
+    public string DisplayName => Def?.DisplayName ?? "враг";
+
+    /// <summary>
+    /// Враг ходит и стреляет — этим его набор и исчерпывается. Ни копать, ни строить он
+    /// не умеет, и приказ такого рода до него не дойдёт, кто бы его ни отдал.
+    /// </summary>
+    public OrderSet AllowedOrders =>
+        OrderSet.None.With(OrderKind.Move).With(OrderKind.Attack);
 
     public string DefId => Def?.Id ?? "";
 
@@ -41,7 +51,9 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
 
     public bool CanFire => true;
 
-    public IDamageable Target => Targeting.IsValid(_target) ? _target as IDamageable : null;
+    /// <summary>Кого враг бьёт — это и есть его текущий приказ атаки, отдельного поля нет.</summary>
+    public IDamageable Target =>
+        Orders.Current?.Kind == OrderKind.Attack ? Orders.Current.Entity as IDamageable : null;
 
     /// <summary>Враг бьёт того, к кому шёл, а не первого попавшегося в радиус.</summary>
     public IDamageable FireTarget => Target;
@@ -50,7 +62,12 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
     /// Пора ли искать цель заново. Цель может и не погибнуть — просто рядом выросло что-то
     /// поближе, поэтому выбор переигрывается по таймеру, а не только по смерти прежней цели.
     /// </summary>
-    public bool NeedsTarget => Target == null || _retarget <= 0f;
+    public bool NeedsTarget => Orders.Idle || _retarget <= 0f;
+
+    /// <summary>Отсчёт до следующей переигровки ведёт мозг — он же и решает.</summary>
+    public void TickRetarget(double dt) => _retarget -= (float)dt;
+
+    public void NoteTargeted() => _retarget = Const.EnemyRetargetDelay;
 
     public void Init(int id, EnemyDef def, Vector2 position)
     {
@@ -67,12 +84,6 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
 
     public override void _Process(double delta) => QueueRedraw();
 
-    public void SetTarget(IDamageable target)
-    {
-        _target = target as Node2D;
-        _retarget = Const.EnemyRetargetDelay;
-    }
-
     public void AimAt(Vector2 point, double dt)
     {
         float desired = Heading.AngleTo(GlobalPosition, point);
@@ -80,12 +91,28 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
         Rotation = Heading.TurnToward(Rotation, desired, step);
     }
 
-    public void Step(double dt)
-    {
-        _retarget -= (float)dt;
+    /// <summary>Приказов нет — враг стоит: чем ему заняться, решает мозг, а не он сам.</summary>
+    public void OnIdle(double dt) { }
 
-        var target = Target;
-        if (target == null || Def == null)
+    public void RunOrder(Order order, double dt)
+    {
+        if (Def == null)
+            return;
+
+        if (order.Kind == OrderKind.Move)
+        {
+            if (GlobalPosition.DistanceTo(order.Pos) <= Const.Unit * 0.2f)
+            {
+                Orders.DropCurrent();
+                return;
+            }
+
+            AimAt(order.Pos, dt);
+            GlobalPosition = GlobalPosition.MoveToward(order.Pos, Def.SpeedPx * (float)dt);
+            return;
+        }
+
+        if (order.Entity is not IDamageable target)
             return;
 
         var to = target.GlobalPosition;
@@ -114,6 +141,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision
 
     public void OnDestroyed()
     {
+        Orders.Clear();
         GameManager.I.Entities.Remove(Id);
 
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем

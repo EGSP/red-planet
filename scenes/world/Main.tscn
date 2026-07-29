@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://cc1rudyjv07xp" path="res://scripts/world/GridRenderer.cs" id="2_grid"]
 [ext_resource type="Script" uid="uid://djhm5atkp2jws" path="res://scripts/units/CommandSystem.cs" id="3_command"]
 [ext_resource type="Script" uid="uid://tuanjuqquucf" path="res://scripts/units/BotAiSystem.cs" id="4_botai"]
-[ext_resource type="Script" uid="uid://pcwrq37i4108" path="res://scripts/world/UnitSystem.cs" id="5_unit"]
+[ext_resource type="Script" uid="uid://pcwrq37i4108" path="res://scripts/units/OrderSystem.cs" id="5_unit"]
 [ext_resource type="Script" path="res://scripts/economy/EconomySystem.cs" id="6_economy"]
 [ext_resource type="Script" uid="uid://b33hfmq3q0spf" path="res://scripts/world/OreSpawnSystem.cs" id="8_orespawn"]
 [ext_resource type="Script" uid="uid://b0ki5uv7akvii" path="res://scripts/world/CameraRig.cs" id="9_camera"]
@@ -13,7 +13,7 @@
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="12_blueprint"]
 [ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="13_ore"]
 [ext_resource type="Script" uid="uid://kcnnnrsbqpsl" path="res://scripts/enemies/EnemySpawnSystem.cs" id="14_enemyspawn"]
-[ext_resource type="Script" uid="uid://bs5pwbd0lbqxa" path="res://scripts/enemies/EnemySystem.cs" id="15_enemy"]
+[ext_resource type="Script" uid="uid://bs5pwbd0lbqxa" path="res://scripts/enemies/EnemyAiSystem.cs" id="15_enemy"]
 [ext_resource type="Script" uid="uid://dotcigshtufxu" path="res://scripts/combat/WeaponSystem.cs" id="16_weapon"]
 [ext_resource type="Script" uid="uid://dhkbabtkukh50" path="res://scripts/combat/ProjectileSystem.cs" id="17_projectile"]
 [ext_resource type="Script" uid="uid://dhy78rf5woxf3" path="res://scripts/combat/DamageSystem.cs" id="18_damage"]
@@ -42,7 +42,7 @@ Phase = 0
 script = ExtResource("4_botai")
 StepOrder = 10
 
-[node name="UnitSystem" type="Node" parent="Systems" unique_id=2090753542]
+[node name="OrderSystem" type="Node" parent="Systems" unique_id=2090753542]
 script = ExtResource("5_unit")
 StepOrder = 20
 
@@ -57,16 +57,16 @@ StepOrder = 50
 
 [node name="AssemblerSystem" type="Node" parent="Systems"]
 script = ExtResource("20_assembler")
-StepOrder = 25
+StepOrder = 15
 
 [node name="EnemySpawnSystem" type="Node" parent="Systems" unique_id=629973124]
 script = ExtResource("14_enemyspawn")
 EnemyScene = ExtResource("19_enemyscene")
 StepOrder = 55
 
-[node name="EnemySystem" type="Node" parent="Systems" unique_id=1109605934]
+[node name="EnemyAiSystem" type="Node" parent="Systems" unique_id=1109605934]
 script = ExtResource("15_enemy")
-StepOrder = 60
+StepOrder = 12
 
 [node name="WeaponSystem" type="Node" parent="Systems" unique_id=1816555396]
 script = ExtResource("16_weapon")

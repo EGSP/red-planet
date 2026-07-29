@@ -28,8 +28,15 @@ public partial class Turret : Building, IArmed
 
     public bool CanFire => true;
 
-    /// <summary>Своей цели нет: ближайшего врага в радиусе находит система стрельбы.</summary>
-    public IDamageable FireTarget => null;
+    /// <summary>Турель не ходит, поэтому весь её набор — один приказ: бей вот этого.</summary>
+    public override OrderSet AllowedOrders => OrderSet.None.With(OrderKind.Attack);
+
+    /// <summary>
+    /// Приказали цель — бьём её, не приказали — ближайшую в радиусе найдёт система стрельбы.
+    /// Своего кода наведения у турели по-прежнему нет.
+    /// </summary>
+    public IDamageable FireTarget =>
+        Orders.Current?.Kind == OrderKind.Attack ? Orders.Current.Entity as IDamageable : null;
 
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 

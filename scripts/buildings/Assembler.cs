@@ -29,21 +29,47 @@ public partial class Assembler : Building
 
     public override void _Process(double delta) => QueueRedraw();
 
-    /// <summary>Выбор работы. Зовётся системой раз в кадр, до прохода экономики.</summary>
-    public void Think()
+    /// <summary>Башня стоит на месте, поэтому ходить ей некуда — только работать.</summary>
+    public override OrderSet AllowedOrders =>
+        OrderSet.None.With(OrderKind.Build).With(OrderKind.Repair);
+
+    /// <summary>
+    /// Чем заняться, если приказа нет. Решение принимает AssemblerSystem — она же и ставит
+    /// приказ; башня его только исполняет. Порядок общий с ботами: сначала стройка,
+    /// потом ремонт, и всё в пределах своего круга.
+    /// </summary>
+    public Order ChooseJob()
     {
         float reach = VisionRadius;
 
         var blueprint = Jobs.NearestBlueprint(GlobalPosition, reach);
         if (blueprint != null)
-        {
-            _repairTarget = null;
-            Attach(blueprint);
-            return;
-        }
+            return Order.Work(OrderKind.Build, blueprint);
 
+        var damaged = Jobs.NearestDamaged(GlobalPosition, reach, RepairUnits);
+        return damaged != null ? Order.Repair(damaged) : null;
+    }
+
+    public override void RunOrder(Order order, double dt)
+    {
+        switch (order.Kind)
+        {
+            case OrderKind.Build:
+                _repairTarget = null;
+                Attach(order.Target);
+                return;
+
+            case OrderKind.Repair:
+                Detach();
+                _repairTarget = order.Entity;
+                return;
+        }
+    }
+
+    public override void OnIdle(double dt)
+    {
         Detach();
-        _repairTarget = Jobs.NearestDamaged(GlobalPosition, reach, RepairUnits);
+        _repairTarget = null;
     }
 
     private void Attach(WorkNode node)
