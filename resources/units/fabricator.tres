@@ -11,6 +11,7 @@ Speed = 4.0
 TurnSpeedDegrees = 240.0
 MaxHealth = 90.0
 Radius = 0.32
+Buildbar = "fabricator"
 BuildPower = 4.0
 MinePower = 0.0
 VisionRange = 9.0

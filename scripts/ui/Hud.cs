@@ -1,19 +1,31 @@
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 
 /// <summary>
-/// Интерфейс: ресурсы общего хранилища, выделение и панель построек коммандера.
+/// Интерфейс: ресурсы общего хранилища, выделение и строительная панель.
 /// Кнопки только порождают намерение — постановку делает CommandSystem.
 /// </summary>
 public partial class Hud : CanvasLayer
 {
+    /// <summary>Размер ячейки строительной панели. Один на все кнопки — иначе сетка поплывёт.</summary>
+    private static readonly Vector2 Cell = new(112, 28);
+
     private Label _metal;
     private Label _energy;
     private Label _efficiency;
     private Label _combat;
     private Label _selection;
     private Label _status;
-    private VBoxContainer _buttons;
+
+    private VBoxContainer _buildbar;
+
+    /// <summary>
+    /// Отпечаток выделения: список панелей выделенных строителей. Пересобираем сетку
+    /// только когда он сменился — иначе кнопки перестраивались бы каждый кадр,
+    /// теряя наведение и нажатие.
+    /// </summary>
+    private string _buildbarKey = "";
 
     public override void _Ready()
     {
@@ -56,18 +68,10 @@ public partial class Hud : CanvasLayer
         _selection.AddThemeColorOverride("font_color", new Color(0.65f, 0.95f, 0.75f));
         box.AddChild(_selection);
 
-        box.AddChild(new HSeparator());
-
-        var title = new Label { Text = "Строительство" };
-        title.AddThemeFontSizeOverride("font_size", 13);
-        box.AddChild(title);
-
-        _buttons = new VBoxContainer();
-        box.AddChild(_buttons);
-
-        // Справочник берём у контента напрямую: панель построек не зависит от сессии
-        foreach (var def in Content.Catalog.AvailableFor("commander"))
-            AddBuildButton(def);
+        // Строительная панель пуста, пока не выделен строитель, и места тогда не занимает
+        _buildbar = new VBoxContainer { Visible = false };
+        _buildbar.AddThemeConstantOverride("separation", 4);
+        box.AddChild(_buildbar);
 
         box.AddChild(new HSeparator());
 
@@ -87,14 +91,6 @@ public partial class Hud : CanvasLayer
         var button = new Button { Text = "Пауза (Esc)" };
         button.Pressed += () => this.Ancestor<Session>()?.TogglePause();
         parent.AddChild(button);
-    }
-
-    private void AddBuildButton(BuildableDef def)
-    {
-        // Энергоцены у постройки нет: энергию тратит инструмент строителя, а не здание
-        var button = new Button { Text = $"{def.DisplayName} — {def.CostMetal:0} метала" };
-        button.Pressed += () => GameManager.I.Command?.BeginBuild(def);
-        _buttons.AddChild(button);
     }
 
     public override void _Process(double delta)
@@ -130,11 +126,127 @@ public partial class Hud : CanvasLayer
 
         _selection.Text = SelectionLine(gm.Command);
 
+        RefreshBuildbar(gm.Command);
+
         var pending = gm.Command?.Pending;
         _status.Text = pending != null
             ? $"ставим: {pending.DisplayName}\nЛКМ — поставить, ПКМ — отмена"
             : "ЛКМ — выделить или рамка, ПКМ — приказ по цели\n" +
               "Shift — дописать в очередь, WASD и колесо — камера";
+    }
+
+    // ── строительная панель ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Панели выделенных строителей. Тот, кто строить не умеет, панели не имеет вовсе,
+    /// поэтому отдельной проверки «есть ли среди выделенных строитель» не нужно:
+    /// пустой список и есть ответ.
+    /// </summary>
+    private static List<BuildbarDef> BarsOf(CommandSystem command)
+    {
+        var bars = new List<BuildbarDef>();
+
+        if (command == null)
+            return bars;
+
+        foreach (var actor in command.Selected)
+        {
+            if (actor is not Unit { Def: { CanBuild: true } def })
+                continue;
+
+            var bar = Content.Catalog.Buildbar(def.Buildbar);
+
+            if (bar != null && !bars.Contains(bar))
+                bars.Add(bar);
+        }
+
+        return bars;
+    }
+
+    private void RefreshBuildbar(CommandSystem command)
+    {
+        var bars = BarsOf(command);
+        string key = string.Join('|', bars.Select(bar => bar.Id).OrderBy(id => id));
+
+        if (key == _buildbarKey)
+            return;
+
+        _buildbarKey = key;
+
+        foreach (var child in _buildbar.GetChildren())
+            child.QueueFree();
+
+        if (bars.Count == 0)
+        {
+            _buildbar.Visible = false;
+            return;
+        }
+
+        _buildbar.Visible = true;
+        BuildSections(BuildbarLayout.Merge(bars));
+    }
+
+    private void BuildSections(BuildbarLayout layout)
+    {
+        _buildbar.AddChild(new HSeparator());
+
+        foreach (var section in layout.Sections)
+        {
+            var title = new Label { Text = section.Title };
+            title.AddThemeFontSizeOverride("font_size", 13);
+            title.AddThemeColorOverride("font_color", new Color(0.75f, 0.78f, 0.85f));
+            _buildbar.AddChild(title);
+
+            // Снизу вверх в справочнике — сверху вниз на экране
+            for (int y = section.Rows.Count - 1; y >= 0; y--)
+                AddRow(section.Rows[y]);
+        }
+    }
+
+    private void AddRow(BuildbarLayout.Row row)
+    {
+        var line = new HBoxContainer();
+        line.AddThemeConstantOverride("separation", 4);
+        _buildbar.AddChild(line);
+
+        foreach (var buildableId in row.Cells)
+        {
+            // Пустая ячейка держит место: без распорки соседи съехали бы влево
+            // и позиции разошлись бы с другими панелями
+            if (buildableId == null)
+            {
+                line.AddChild(new Control { CustomMinimumSize = Cell });
+                continue;
+            }
+
+            var def = Content.Catalog.Buildable(buildableId);
+
+            if (def == null)
+            {
+                GD.PushWarning($"[Hud] в строительной панели неизвестная постройка: {buildableId}");
+                line.AddChild(new Control { CustomMinimumSize = Cell });
+                continue;
+            }
+
+            line.AddChild(BuildButton(def));
+        }
+    }
+
+    private static Button BuildButton(BuildableDef def)
+    {
+        // Энергоцены у постройки нет: энергию тратит инструмент строителя, а не здание
+        var button = new Button
+        {
+            Text = def.DisplayName,
+            CustomMinimumSize = Cell,
+            ClipText = true,
+            TooltipText = $"{def.DisplayName}\n{def.CostMetal:0} метала",
+        };
+
+        button.AddThemeFontSizeOverride("font_size", 12);
+        button.Pressed += () => GameManager.I?.Command?.BeginBuild(def);
+
+        return button;
     }
 
     /// <summary>

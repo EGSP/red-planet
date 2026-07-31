@@ -1,0 +1,39 @@
+# Строительная панель коммандера.
+# Главенство 1 — самое высокое: её разметка задаёт основу при слиянии,
+# и позиции её кнопок не сдвигаются никогда.
+#
+# Координаты в секции считаются от левого нижнего угла: X вправо, Y вверх.
+# Правила слияния и соглашение о согласованных координатах — в buildbar.md.
+
+id = "commander"
+priority = 1
+
+[[sections]]
+id = "economy"
+title = "Экономика"
+order = 0
+cells = [
+	# y = 1 — верхний ряд: продвинутое
+	{ x = 0, y = 1, build = "generator_t2" },
+	{ x = 1, y = 1, build = "assembler" },
+	# y = 0 — нижний ряд: базовое
+	{ x = 0, y = 0, build = "generator" },
+	{ x = 1, y = 0, build = "factory" },
+]
+
+[[sections]]
+id = "defence"
+title = "Оборона"
+order = 1
+cells = [
+	{ x = 0, y = 0, build = "turret" },
+]
+
+[[sections]]
+id = "units"
+title = "Юниты"
+order = 2
+cells = [
+	{ x = 0, y = 0, build = "fabricator" },
+	{ x = 1, y = 0, build = "digger" },
+]

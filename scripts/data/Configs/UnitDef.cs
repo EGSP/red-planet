@@ -33,6 +33,13 @@ public partial class UnitDef : Resource
     /// <summary>Мощность строительного инструмента, единиц в секунду.</summary>
     [Export] public float BuildPower;
 
+    /// <summary>
+    /// Идентификатор строительной панели из resources/buildbars/. Пусто у того, кто
+    /// строить не умеет; у строителя панель и есть ответ на вопрос «что ему доступно» —
+    /// отдельного списка построек юнит не держит.
+    /// </summary>
+    [Export] public string Buildbar = "";
+
     /// <summary>Мощность бура, единиц в секунду.</summary>
     [Export] public float MinePower;
 

@@ -1,10 +1,11 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cfqco250xtafv"]
 
-[ext_resource type="Script" path="res://scripts/core/Root.cs" id="1_root"]
+[ext_resource type="Script" uid="uid://7vq7pnmjerua" path="res://scripts/core/Root.cs" id="1_root"]
 [ext_resource type="PackedScene" path="res://scenes/MainMenu.tscn" id="2_menu"]
 [ext_resource type="PackedScene" path="res://scenes/Session.tscn" id="3_session"]
 
-[node name="Root" type="Node"]
+[node name="Root" type="Node" unique_id=1841448420]
 script = ExtResource("1_root")
 MainMenuScene = ExtResource("2_menu")
 SessionScene = ExtResource("3_session")
+StartSessionOnLaunch = true

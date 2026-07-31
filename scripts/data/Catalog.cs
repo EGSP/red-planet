@@ -23,6 +23,12 @@ public sealed class Catalog
     private readonly Dictionary<string, UnitDef> _units = new();
     private readonly Dictionary<string, EnemyDef> _enemies = new();
 
+    /// <summary>
+    /// Строительные панели. Лежат не ресурсами, а файлами .toml, поэтому и грузятся
+    /// отдельно от прочего — см. BuildbarLoader о том, почему выбран текстовый формат.
+    /// </summary>
+    private readonly Dictionary<string, BuildbarDef> _buildbars = new();
+
     public IReadOnlyCollection<BuildableDef> Buildables => _buildables.Values;
 
     /// <summary>Виды врагов: из них система спавна и набирает поток по весам.</summary>
@@ -34,6 +40,9 @@ public sealed class Catalog
     public UnitDef Unit(string id) => _units.TryGetValue(id, out var def) ? def : null;
 
     public EnemyDef Enemy(string id) => _enemies.TryGetValue(id, out var def) ? def : null;
+
+    public BuildbarDef Buildbar(string id) =>
+        id != null && _buildbars.TryGetValue(id, out var def) ? def : null;
 
     /// <summary>Что доступно строителю с этой ролью.</summary>
     public List<BuildableDef> AvailableFor(string role)
@@ -57,8 +66,38 @@ public sealed class Catalog
         foreach (var def in Load<EnemyDef>("res://resources/enemies/"))
             _enemies[def.Id] = def;
 
+        foreach (var def in LoadBuildbars("res://resources/buildbars/"))
+            _buildbars[def.Id] = def;
+
         GD.Print($"[Catalog] построек: {_buildables.Count}, юнитов: {_units.Count}, " +
-                 $"врагов: {_enemies.Count}");
+                 $"врагов: {_enemies.Count}, панелей: {_buildbars.Count}");
+    }
+
+    /// <summary>
+    /// Панели лежат текстом, а не ресурсом, поэтому идут мимо ResourceLoader.
+    /// Соседний buildbar.md в выборку не попадает — берём только .toml.
+    /// </summary>
+    private static List<BuildbarDef> LoadBuildbars(string dir)
+    {
+        var result = new List<BuildbarDef>();
+        using var access = DirAccess.Open(dir);
+
+        if (access == null)
+        {
+            GD.PushWarning($"[Catalog] каталог не найден: {dir}");
+            return result;
+        }
+
+        foreach (var file in access.GetFiles())
+        {
+            if (!file.EndsWith(".toml"))
+                continue;
+
+            if (BuildbarLoader.Load(dir + file) is { } bar)
+                result.Add(bar);
+        }
+
+        return result;
     }
 
     private static List<T> Load<T>(string dir) where T : Resource

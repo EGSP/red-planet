@@ -162,6 +162,7 @@ _gm.Playground.Add(WorldLayer.Projectiles, projectile);
 | `EventStore` + документы | чистый C# в корне | `ResourceSpent`, `OreDepleted` |
 | `ProjectionStore` + проекции | чистый C# в корне | `StockpileProjection` |
 | Справочники | **`Resource`** (`.tres`) | `BuildableDef`, `UnitDef` |
+| Строительные панели | **`.toml`** + чистый C# | `BuildbarDef` — сетка с координатами, её правят руками |
 | Системы | **нода** с `[Export]` | `UnitSystem`, `OreSpawnSystem` |
 | Видимые сущности | **нода** (`Node2D`) | `Unit`, `Building`, `Blueprint` |
 | Данные сущности | чистый C#, которым владеет нода | инвентарь, здоровье |
@@ -741,8 +742,8 @@ public void Compact()
 scripts/
 ├─ core/       Root, Session, GameManager, Scheduler, Spawner, EntityStore, Index, Slice,
 │              WorldGrid, GameSystem, NodeExtensions, Const, Alive, Heading, Health, Vision
-├─ data/       Content, EventRecord, EventStore, Projection, Events, Catalog
-│  ├─ Configs/     BuildableDef, UnitDef, EnemyDef, WeaponDef
+├─ data/       Content, EventRecord, EventStore, Projection, Events, Catalog, BuildbarLoader
+│  ├─ Configs/     BuildableDef, UnitDef, EnemyDef, WeaponDef, BuildbarDef
 │  └─ Projections/ StockpileProjection, CombatProjection
 ├─ world/      Playground, WorkNode, Blueprint, OreDeposit, Building, сетка, камера,
 │              призрак, OreSpawnSystem
@@ -752,9 +753,10 @@ scripts/
 ├─ combat/     Faction, Weapon, Targeting, Projectile, WeaponSystem, ProjectileSystem, DamageSystem
 ├─ economy/    EconomyLedger, EconomySystem, Jobs, Repair
 ├─ buildings/  Factory, Turret, Assembler, AssemblerSystem
-└─ ui/         Hud, MainMenu, PauseMenu, UiFrame, HealthBar, OrderOverlay
+└─ ui/         Hud, BuildbarLayout, MainMenu, PauseMenu, UiFrame, HealthBar, OrderOverlay
 
-resources/     units/*.tres, buildables/*.tres, enemies/*.tres, weapons/*.tres
+resources/     units/*.tres, buildables/*.tres, enemies/*.tres, weapons/*.tres,
+               buildbars/*.toml (+ buildbar.md — формат и соглашение о координатах)
 scenes/        Root.tscn, MainMenu.tscn, Session.tscn, world/, units/, buildings/, enemies/
 ```
 
