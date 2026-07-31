@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 /// <summary>
@@ -49,8 +50,21 @@ public partial class GameManager : Node
     /// <summary>Коммандер игрока — цель приказов.</summary>
     public Commander Commander { get; set; }
 
-    /// <summary>Система приказов — к ней обращается интерфейс строительства.</summary>
-    public CommandSystem Command { get; set; }
+    /// <summary>
+    /// Система по типу: <c>GM.System&lt;CommandSystem&gt;()</c>. Раньше каждая система,
+    /// нужная другим, получала здесь собственное свойство, и корень разрастался с каждой
+    /// новой. Ответом может быть null — систему в сцену могли и не положить.
+    /// </summary>
+    public T System<T>() where T : GameSystem => Scheduler.Get<T>();
+
+    /// <summary>Ярлык к самой спрашиваемой системе — к ней обращается интерфейс строительства.</summary>
+    public CommandSystem Command => System<CommandSystem>();
+
+    /// <summary>
+    /// Вторая фаза инициализации пройдена. По этому признаку система, добавленная
+    /// в дерево уже после сборки сессии, связывается сразу при регистрации.
+    /// </summary>
+    internal bool SystemsLinked { get; private set; }
 
     /// <summary>
     /// Цели, разложенные по сторонам. Самый горячий разрез в игре: в него смотрит
@@ -84,6 +98,24 @@ public partial class GameManager : Node
         Projections.Add(new StockpileProjection());
         Projections.Add(new CombatProjection());
         Projections.SubscribeAll(Events);
+    }
+
+    /// <summary>
+    /// Вторая фаза инициализации систем. Наш _Ready приходит после _Ready всех дочерних
+    /// узлов, поэтому здесь состав систем заведомо полон — это и есть та единственная
+    /// общая точка «все зарегистрированы», ради которой иначе понадобился бы пул
+    /// с разбором графа зависимостей. Взаимные ссылки работают сами собой.
+    /// </summary>
+    public override void _Ready()
+    {
+        // Список копируем: связывание может добавить систему в дерево, и тогда обход
+        // живого состава сорвался бы прямо посреди фазы
+        var systems = new List<GameSystem>(Scheduler.Systems);
+
+        foreach (var system in systems)
+            system.Link();
+
+        SystemsLinked = true;
     }
 
     /// <summary>

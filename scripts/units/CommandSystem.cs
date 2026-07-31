@@ -44,7 +44,16 @@ public partial class CommandSystem : GameSystem
 
     public Rect2 Band => new Rect2(_bandStart, _cursor - _bandStart).Abs();
 
-    protected override void OnRegister() => GM.Command = this;
+    /// <summary>
+    /// Вторая фаза: площадка мира к этому мигу собрана, поэтому служебную графику
+    /// заводим здесь, один раз, а не проверяем её наличие в каждом кадре.
+    /// Проверка в EnsureNodes при этом остаётся: ноды могут быть освобождены позже.
+    /// </summary>
+    protected override void OnLink()
+    {
+        if (GM.Playground != null)
+            EnsureNodes();
+    }
 
     public void BeginBuild(BuildableDef def)
     {

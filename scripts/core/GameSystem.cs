@@ -8,6 +8,12 @@ using Godot;
 /// принадлежит тому корню, под которым висит. Разница видна на сносе сессии — выход
 /// из дерева идёт сверху вниз, и к тому мигу, когда очередь доходит до системы,
 /// статической ссылки уже нет, а своя — есть.
+///
+/// ИНИЦИАЛИЗАЦИЯ В ДВЕ ФАЗЫ. В <see cref="OnRegister"/> система настраивает саму себя
+/// и не вправе рассчитывать, что соседи уже существуют: порядок _Ready определяется
+/// расстановкой узлов в сцене. В <see cref="OnLink"/> состав систем полон, поэтому
+/// здесь можно связываться с соседями. Взаимные ссылки при этом работают без всякого
+/// разбора графа зависимостей: к началу второй фазы существуют все участники разом.
 /// </summary>
 public partial class GameSystem : Node
 {
@@ -17,6 +23,8 @@ public partial class GameSystem : Node
     [Export] public int StepOrder;
 
     protected GameManager GM { get; private set; }
+
+    private bool _linked;
 
     public override void _EnterTree()
     {
@@ -30,9 +38,27 @@ public partial class GameSystem : Node
     {
         GM?.Scheduler.Add(this);
         OnRegister();
+
+        // Систему, добавленную после сборки сессии, связываем сразу: общей точки
+        // «все зарегистрированы» для неё уже не будет, она её опоздала застать
+        if (GM is { SystemsLinked: true })
+            Link();
     }
 
     public override void _ExitTree() => GM?.Scheduler.Remove(this);
+
+    /// <summary>
+    /// Вторая фаза. Зовёт композиционный корень, повторный вызов ничего не делает —
+    /// иначе поздно добавленная система связалась бы дважды.
+    /// </summary>
+    internal void Link()
+    {
+        if (_linked)
+            return;
+
+        _linked = true;
+        OnLink();
+    }
 
     /// <summary>Ближайший предок нужного рода: системы обычно дети корня, но не обязаны.</summary>
     private T Ancestor<T>() where T : Node
@@ -44,8 +70,19 @@ public partial class GameSystem : Node
         return null;
     }
 
-    /// <summary>Подписки и начальная настройка.</summary>
+    /// <summary>Первая фаза: настройка самой системы. Соседей здесь ещё может не быть.</summary>
     protected virtual void OnRegister() { }
+
+    /// <summary>
+    /// Вторая фаза: связывание с другими системами через <c>GM.System&lt;T&gt;()</c>.
+    ///
+    /// Что здесь ЕЩЁ НЕ готово: мир пуст. Стартовые сущности сессии — база, коммандер,
+    /// начальный запас — создаются в <see cref="Session"/>, а его _Ready приходит позже
+    /// нашего. Поэтому работа, которой нужен населённый мир, по-прежнему откладывается
+    /// до первого кадра, как это делает OreSpawnSystem: месторождения нельзя расставлять
+    /// раньше базы, иначе они займут её клетки.
+    /// </summary>
+    protected virtual void OnLink() { }
 
     /// <summary>Шаг системы в своей фазе кадра.</summary>
     public virtual void Step(double dt) { }
