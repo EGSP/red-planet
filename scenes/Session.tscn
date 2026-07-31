@@ -1,0 +1,114 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/core/Session.cs" id="1_session"]
+[ext_resource type="Script" path="res://scripts/core/GameManager.cs" id="2_manager"]
+[ext_resource type="Script" path="res://scripts/world/Playground.cs" id="3_playground"]
+[ext_resource type="Script" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
+[ext_resource type="Script" path="res://scripts/units/CommandSystem.cs" id="5_command"]
+[ext_resource type="Script" path="res://scripts/units/BotAiSystem.cs" id="6_botai"]
+[ext_resource type="Script" path="res://scripts/units/OrderSystem.cs" id="7_order"]
+[ext_resource type="Script" path="res://scripts/economy/EconomySystem.cs" id="8_economy"]
+[ext_resource type="Script" path="res://scripts/world/OreSpawnSystem.cs" id="9_orespawn"]
+[ext_resource type="Script" path="res://scripts/buildings/AssemblerSystem.cs" id="10_assembler"]
+[ext_resource type="Script" path="res://scripts/enemies/EnemySpawnSystem.cs" id="11_enemyspawn"]
+[ext_resource type="Script" path="res://scripts/enemies/EnemyAiSystem.cs" id="12_enemyai"]
+[ext_resource type="Script" path="res://scripts/combat/WeaponSystem.cs" id="13_weapon"]
+[ext_resource type="Script" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
+[ext_resource type="Script" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
+[ext_resource type="Script" path="res://scripts/world/CameraRig.cs" id="16_camera"]
+[ext_resource type="Script" path="res://scripts/ui/Hud.cs" id="17_hud"]
+[ext_resource type="PackedScene" path="res://scenes/units/Commander.tscn" id="18_commander"]
+[ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
+[ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="20_ore"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/Enemy.tscn" id="21_enemy"]
+
+[node name="Session" type="Node2D"]
+script = ExtResource("1_session")
+Systems = NodePath("Systems")
+Playground = NodePath("Playground")
+CommanderScene = ExtResource("18_commander")
+StartingMetal = 250.0
+
+[node name="Systems" type="Node" parent="."]
+script = ExtResource("2_manager")
+Playground = NodePath("../Playground")
+
+[node name="CommandSystem" type="Node" parent="Systems"]
+script = ExtResource("5_command")
+BlueprintScene = ExtResource("19_blueprint")
+Phase = 0
+
+[node name="BotAiSystem" type="Node" parent="Systems"]
+script = ExtResource("6_botai")
+StepOrder = 10
+
+[node name="EnemyAiSystem" type="Node" parent="Systems"]
+script = ExtResource("12_enemyai")
+StepOrder = 12
+
+[node name="AssemblerSystem" type="Node" parent="Systems"]
+script = ExtResource("10_assembler")
+StepOrder = 15
+
+[node name="OrderSystem" type="Node" parent="Systems"]
+script = ExtResource("7_order")
+StepOrder = 20
+
+[node name="EconomySystem" type="Node" parent="Systems"]
+script = ExtResource("8_economy")
+StepOrder = 30
+
+[node name="OreSpawnSystem" type="Node" parent="Systems"]
+script = ExtResource("9_orespawn")
+OreScene = ExtResource("20_ore")
+StepOrder = 50
+
+[node name="EnemySpawnSystem" type="Node" parent="Systems"]
+script = ExtResource("11_enemyspawn")
+EnemyScene = ExtResource("21_enemy")
+StepOrder = 55
+
+[node name="WeaponSystem" type="Node" parent="Systems"]
+script = ExtResource("13_weapon")
+StepOrder = 70
+
+[node name="ProjectileSystem" type="Node" parent="Systems"]
+script = ExtResource("14_projectile")
+StepOrder = 80
+
+[node name="DamageSystem" type="Node" parent="Systems"]
+script = ExtResource("15_damage")
+Phase = 2
+StepOrder = 10
+
+[node name="Playground" type="Node2D" parent="."]
+script = ExtResource("3_playground")
+Terrain = NodePath("Terrain")
+Deposits = NodePath("Deposits")
+Structures = NodePath("Structures")
+Actors = NodePath("Actors")
+Projectiles = NodePath("Projectiles")
+Effects = NodePath("Effects")
+
+[node name="Terrain" type="Node2D" parent="Playground"]
+
+[node name="Grid" type="Node2D" parent="Playground/Terrain"]
+script = ExtResource("4_grid")
+
+[node name="Deposits" type="Node2D" parent="Playground"]
+
+[node name="Structures" type="Node2D" parent="Playground"]
+
+[node name="Actors" type="Node2D" parent="Playground"]
+
+[node name="Projectiles" type="Node2D" parent="Playground"]
+
+[node name="Effects" type="Node2D" parent="Playground"]
+
+[node name="View" type="Node2D" parent="."]
+
+[node name="Camera" type="Camera2D" parent="View"]
+script = ExtResource("16_camera")
+
+[node name="Hud" type="CanvasLayer" parent="View"]
+script = ExtResource("17_hud")

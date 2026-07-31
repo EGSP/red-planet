@@ -34,7 +34,7 @@ public partial class EnemySpawnSystem : GameSystem
 
     public override void Step(double dt)
     {
-        if (GM.WorldRoot == null || EnemyScene == null)
+        if (GM.Playground == null || EnemyScene == null)
             return;
 
         if (GM.Index.All<Enemy>().Count >= Population)

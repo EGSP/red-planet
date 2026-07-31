@@ -31,8 +31,6 @@ public partial class Projectile : Node2D
 
     public Color Tint = new(1f, 0.9f, 0.4f);
 
-    public override void _Ready() => ZIndex = 6;
-
     public override void _Process(double delta) => QueueRedraw();
 
     public void Step(double dt)

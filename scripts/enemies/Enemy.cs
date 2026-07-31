@@ -142,7 +142,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
     public void OnDestroyed()
     {
         Orders.Clear();
-        GameManager.I.Entities.Remove(Id);
+        GameManager.I?.Entities.Remove(Id);
 
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
         SetProcess(false);

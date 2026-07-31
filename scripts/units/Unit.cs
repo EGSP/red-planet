@@ -349,7 +349,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     {
         Detach();
         Orders.Clear();
-        GameManager.I.Entities.Remove(Id);
+        GameManager.I?.Entities.Remove(Id);
 
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
         SetProcess(false);

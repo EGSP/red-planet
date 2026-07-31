@@ -22,6 +22,10 @@ using Godot;
 /// Порядок внутри важен: id и позиция выставляются ДО добавления в дерево.
 /// Иначе нода успевает получить работу с ещё нулевым Id, а подключение к узлу работы
 /// запишется не на того исполнителя.
+///
+/// Слой мира выбирается здесь же и по той же причине: род сущности известен ровно тут.
+/// Порядок отрисовки перестал быть россыпью ZIndex по коду и стал следствием структуры —
+/// снаряд летит поверх юнита не потому, что кто-то однажды выписал ему шестёрку.
 /// </summary>
 public sealed class Spawner
 {
@@ -39,7 +43,7 @@ public sealed class Spawner
         int id = _gm.NewId();
         building.Init(id, def, cell);
 
-        _gm.WorldRoot.AddChild(building);
+        _gm.Playground.Add(WorldLayer.Structures, building);
         _gm.Grid.Occupy(cell, def, id);
         _gm.Entities.Add(id, building);
         _gm.Index.Add(building);
@@ -65,7 +69,7 @@ public sealed class Spawner
         unit.Id = id;
         unit.Position = position;
 
-        _gm.WorldRoot.AddChild(unit);
+        _gm.Playground.Add(WorldLayer.Actors, unit);
         _gm.Entities.Add(id, unit);
         _gm.Index.Add(unit);
 
@@ -80,7 +84,7 @@ public sealed class Spawner
         int id = _gm.NewId();
         blueprint.Init(id, def, cell);
 
-        _gm.WorldRoot.AddChild(blueprint);
+        _gm.Playground.Add(WorldLayer.Structures, blueprint);
         _gm.Grid.Occupy(cell, def, id);
         _gm.Entities.Add(id, blueprint);
         _gm.Index.Add(blueprint);
@@ -96,7 +100,7 @@ public sealed class Spawner
         int id = _gm.NewId();
         enemy.Init(id, def, position);
 
-        _gm.WorldRoot.AddChild(enemy);
+        _gm.Playground.Add(WorldLayer.Actors, enemy);
         _gm.Entities.Add(id, enemy);
         _gm.Index.Add(enemy);
 
@@ -123,7 +127,7 @@ public sealed class Spawner
             Tint = weapon.ProjectileColor,
         };
 
-        _gm.WorldRoot.AddChild(projectile);
+        _gm.Playground.Add(WorldLayer.Projectiles, projectile);
         _gm.Index.Add(projectile);
 
         return projectile;
@@ -137,7 +141,7 @@ public sealed class Spawner
         int id = _gm.NewId();
         deposit.Init(id, cell);
 
-        _gm.WorldRoot.AddChild(deposit);
+        _gm.Playground.Add(WorldLayer.Deposits, deposit);
         _gm.Grid.Occupy(cell, id);
         _gm.Entities.Add(id, deposit);
         _gm.Index.Add(deposit);

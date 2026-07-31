@@ -11,24 +11,14 @@ config_version=5
 [application]
 
 config/name="red_planet"
-run/main_scene="res://scenes/world/Main.tscn"
+run/main_scene="res://scenes/Root.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
 
-
-
-
-
-
-
-
-
-
-
-GameManager="*res://scripts/core/GameManager.cs"
+Content="*res://scripts/data/Content.cs"
 
 [display]
 

@@ -16,8 +16,8 @@ public partial class WeaponSystem : GameSystem
 
     public override void Step(double dt)
     {
-        // Снарядам нужен контейнер мира: до того, как Main его назначил, стрелять некуда
-        if (GM.WorldRoot == null)
+        // Снарядам нужен слой в мире: без площадки стрелять попросту некуда
+        if (GM.Playground == null)
             return;
 
         foreach (var armed in GM.Index.All<IArmed>())

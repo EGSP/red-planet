@@ -1,12 +1,27 @@
 using Godot;
 
 /// <summary>
-/// Композиционный корень: держит журнал, регистры, справочники, сетку и планировщик.
-/// Автозагрузка — единая точка, где видны все зависимости.
+/// Композиционный корень сессии: держит журнал, регистры, справочники, сетку и планировщик,
+/// а системы висят на нём детьми — так «система принадлежит менеджеру» перестаёт быть
+/// договорённостью на словах и становится фактом дерева сцены.
+///
+/// ПОЧЕМУ НЕ АВТОЗАГРУЗКА. Раньше менеджер был именно ею, и срок его жизни равнялся сроку
+/// жизни приложения, тогда как системы и мир пересоздавались вместе со сценой. Стоило бы
+/// появиться перезапуску сессии — и в новый мир перешли бы старый склад, занятые клетки
+/// и разошедшийся счётчик идентификаторов. Теперь менеджер живёт ровно столько, сколько
+/// сессия: снесли ветку <see cref="Session"/> — и всё производное состояние ушло с ней.
+/// Заодно даром досталась пауза: <c>ProcessMode</c> на этой ветке останавливает кадр
+/// симуляции, не трогая меню и камеру.
+///
+/// Статическая ссылка <see cref="I"/> осталась как удобный ярлык для сущностей мира, но
+/// теперь она отпускается при выходе из дерева — и только если уходит текущий владелец.
 /// </summary>
 public partial class GameManager : Node
 {
     public static GameManager I { get; private set; }
+
+    /// <summary>Мир сессии: сюда Spawner складывает всё рождённое.</summary>
+    [Export] public Playground Playground;
 
     /// <summary>Журнал документов — шина, через которую системы говорят друг с другом.</summary>
     public EventStore Events { get; } = new();
@@ -14,7 +29,9 @@ public partial class GameManager : Node
     /// <summary>Производное состояние, собранное из документов.</summary>
     public ProjectionStore Projections { get; } = new();
 
-    public Catalog Catalog { get; } = new();
+    /// <summary>Справочники живут дольше сессии — они лежат в автозагрузке контента.</summary>
+    public Catalog Catalog => Content.Catalog;
+
     public EntityStore Entities { get; } = new();
 
     /// <summary>Всё живое в мире и разрезы над ним — так системы находят, с кем работать.</summary>
@@ -28,9 +45,6 @@ public partial class GameManager : Node
 
     /// <summary>Фабрика сущностей — единственное место, где рождаются объекты мира.</summary>
     public Spawner Spawn { get; private set; }
-
-    /// <summary>Контейнер игровых сущностей в мире, назначает Main.</summary>
-    public Node2D WorldRoot { get; set; }
 
     /// <summary>Коммандер игрока — цель приказов.</summary>
     public Commander Commander { get; set; }
@@ -52,8 +66,14 @@ public partial class GameManager : Node
     {
         I = this;
 
+        // Площадка — сестринская ветка, и к этому мигу она уже собрана: дерево сцены
+        // создаётся целиком до того, как хоть кто-то в нём получит _EnterTree
+        Playground ??= GetNodeOrNull<Playground>("../Playground");
+
+        if (Playground == null)
+            GD.PushError("[GameManager] не найдена площадка мира");
+
         Spawn = new Spawner(this);
-        Catalog.LoadAll();
 
         // Постоянные разрезы заводим здесь же, где и проекции: состав производного
         // состояния должен быть виден в одном месте, а не всплывать по коду систем
@@ -64,6 +84,17 @@ public partial class GameManager : Node
         Projections.Add(new StockpileProjection());
         Projections.Add(new CombatProjection());
         Projections.SubscribeAll(Events);
+    }
+
+    /// <summary>
+    /// Сверка на «текущего владельца» обязательна: при пересборке сессии новый менеджер
+    /// успевает встать на место раньше, чем догорит старый, и безусловное обнуление
+    /// стёрло бы живую ссылку.
+    /// </summary>
+    public override void _ExitTree()
+    {
+        if (I == this)
+            I = null;
     }
 
     public override void _PhysicsProcess(double dt)

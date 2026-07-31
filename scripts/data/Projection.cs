@@ -32,7 +32,7 @@ public abstract class Projection
     /// <summary>
     /// Подписаться на потоки документов. Зовётся один раз при старте игры
     /// (ProjectionStore.SubscribeAll), поэтому тяжёлую работу тут делать можно,
-    /// а вот отписываться потом никто не будет — проекции живут всю партию.
+    /// а вот отписываться потом никто не будет — проекции живут всю сессию.
     /// </summary>
     public abstract void Subscribe(EventStore events);
 }

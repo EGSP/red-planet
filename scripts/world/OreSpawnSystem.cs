@@ -16,10 +16,10 @@ public partial class OreSpawnSystem : GameSystem
 
     public override void Step(double dt)
     {
-        // Стартовое заполнение — уже после того, как Main назначил WorldRoot
+        // Стартовое заполнение — первым же кадром, когда площадка мира уже собрана
         if (!_seeded)
         {
-            if (GM.WorldRoot == null)
+            if (GM.Playground == null)
                 return;
 
             for (int i = 0; i < Const.OreSlots; i++)

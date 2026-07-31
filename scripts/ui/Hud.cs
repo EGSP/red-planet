@@ -65,7 +65,8 @@ public partial class Hud : CanvasLayer
         _buttons = new VBoxContainer();
         box.AddChild(_buttons);
 
-        foreach (var def in GameManager.I.Catalog.AvailableFor("commander"))
+        // Справочник берём у контента напрямую: панель построек не зависит от сессии
+        foreach (var def in Content.Catalog.AvailableFor("commander"))
             AddBuildButton(def);
 
         box.AddChild(new HSeparator());
@@ -86,6 +87,9 @@ public partial class Hud : CanvasLayer
     public override void _Process(double delta)
     {
         var gm = GameManager.I;
+        if (gm == null)
+            return;
+
         var stockpile = gm.Stockpile;
         var economy = gm.Economy;
 

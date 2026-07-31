@@ -63,7 +63,7 @@ public partial class CommandSystem : GameSystem
 
     public override void Step(double dt)
     {
-        if (GM.WorldRoot == null)
+        if (GM.Playground == null)
             return;
 
         EnsureNodes();
@@ -82,7 +82,7 @@ public partial class CommandSystem : GameSystem
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (GM.WorldRoot == null)
+        if (GM?.Playground == null)
             return;
 
         if (@event is InputEventMouse mouseEvent)
@@ -340,16 +340,12 @@ public partial class CommandSystem : GameSystem
 
     private void EnsureNodes()
     {
+        // Порядок призрака и оверлея внутри слоя эффектов задан тем, кто заведён первым:
+        // призрак постройки должен лежать под отрисовкой приказов
         if (_ghost == null || !IsInstanceValid(_ghost))
-        {
-            _ghost = new PlacementGhost { ZIndex = 10 };
-            GM.WorldRoot.AddChild(_ghost);
-        }
+            _ghost = GM.Playground.Add(WorldLayer.Effects, new PlacementGhost());
 
         if (_overlay == null || !IsInstanceValid(_overlay))
-        {
-            _overlay = new OrderOverlay { ZIndex = 9 };
-            GM.WorldRoot.AddChild(_overlay);
-        }
+            _overlay = GM.Playground.Add(WorldLayer.Effects, new OrderOverlay());
     }
 }
