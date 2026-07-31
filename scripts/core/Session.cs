@@ -28,6 +28,35 @@ public partial class Session : Node2D
 
     [Export] public float StartingEnergy;
 
+    /// <summary>Состояние паузы сменилось. На него подписан <see cref="PauseMenu"/>.</summary>
+    [Signal] public delegate void PauseChangedEventHandler(bool paused);
+
+    /// <summary>Идёт ли пауза. Останавливается только симуляция, не весь кадр.</summary>
+    public bool Paused { get; private set; }
+
+    /// <summary>
+    /// Пауза выключает обработку у ветки Systems, и этого достаточно: кадр симуляции
+    /// целиком гоняется из одного _PhysicsProcess композиционного корня, а логика систем
+    /// живёт под ним. Заодно к системам перестаёт поступать ввод, поэтому на паузе нельзя
+    /// ни отдать приказ, ни поставить постройку.
+    ///
+    /// Почему не GetTree().Paused: остановка всего дерева заморозила бы и наблюдателей.
+    /// Здесь же камера продолжает слушаться WASD и колеса, и поле боя на паузе можно
+    /// осмотреть — для стратегии это осмысленно, а мир при этом стоит намертво.
+    /// </summary>
+    public void SetPaused(bool paused)
+    {
+        if (Paused == paused || Systems == null)
+            return;
+
+        Paused = paused;
+        Systems.ProcessMode = paused ? ProcessModeEnum.Disabled : ProcessModeEnum.Inherit;
+
+        EmitSignal(SignalName.PauseChanged, paused);
+    }
+
+    public void TogglePause() => SetPaused(!Paused);
+
     public override void _Ready()
     {
         Systems ??= GetNodeOrNull<GameManager>("Systems");

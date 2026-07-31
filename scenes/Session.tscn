@@ -17,6 +17,7 @@
 [ext_resource type="Script" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
 [ext_resource type="Script" path="res://scripts/world/CameraRig.cs" id="16_camera"]
 [ext_resource type="Script" path="res://scripts/ui/Hud.cs" id="17_hud"]
+[ext_resource type="Script" path="res://scripts/ui/PauseMenu.cs" id="22_pause"]
 [ext_resource type="PackedScene" path="res://scenes/units/Commander.tscn" id="18_commander"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
 [ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="20_ore"]
@@ -112,3 +113,6 @@ script = ExtResource("16_camera")
 
 [node name="Hud" type="CanvasLayer" parent="View"]
 script = ExtResource("17_hud")
+
+[node name="PauseMenu" type="CanvasLayer" parent="View"]
+script = ExtResource("22_pause")

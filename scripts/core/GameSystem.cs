@@ -28,7 +28,7 @@ public partial class GameSystem : Node
 
     public override void _EnterTree()
     {
-        GM = Ancestor<GameManager>() ?? GameManager.I;
+        GM = this.Ancestor<GameManager>() ?? GameManager.I;
 
         if (GM == null)
             GD.PushError($"[{Name}] система вне сессии: композиционный корень не найден");
@@ -58,16 +58,6 @@ public partial class GameSystem : Node
 
         _linked = true;
         OnLink();
-    }
-
-    /// <summary>Ближайший предок нужного рода: системы обычно дети корня, но не обязаны.</summary>
-    private T Ancestor<T>() where T : Node
-    {
-        for (var node = GetParent(); node != null; node = node.GetParent())
-            if (node is T found)
-                return found;
-
-        return null;
     }
 
     /// <summary>Первая фаза: настройка самой системы. Соседей здесь ещё может не быть.</summary>

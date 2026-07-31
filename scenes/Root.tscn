@@ -1,8 +1,10 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/core/Root.cs" id="1_root"]
-[ext_resource type="PackedScene" path="res://scenes/Session.tscn" id="2_session"]
+[ext_resource type="PackedScene" path="res://scenes/MainMenu.tscn" id="2_menu"]
+[ext_resource type="PackedScene" path="res://scenes/Session.tscn" id="3_session"]
 
 [node name="Root" type="Node"]
 script = ExtResource("1_root")
-SessionScene = ExtResource("2_session")
+MainMenuScene = ExtResource("2_menu")
+SessionScene = ExtResource("3_session")

@@ -74,6 +74,19 @@ public partial class Hud : CanvasLayer
         _status = new Label { Text = "ПКМ — идти, копать или атаковать" };
         _status.AddThemeFontSizeOverride("font_size", 12);
         box.AddChild(_status);
+
+        AddPauseButton(box);
+    }
+
+    /// <summary>
+    /// Кнопка паузы просит сессию переключить состояние, а не показывает меню сама:
+    /// решение о паузе принимается в одном месте, поэтому клавиша и кнопка не разойдутся.
+    /// </summary>
+    private void AddPauseButton(Node parent)
+    {
+        var button = new Button { Text = "Пауза (Esc)" };
+        button.Pressed += () => this.Ancestor<Session>()?.TogglePause();
+        parent.AddChild(button);
     }
 
     private void AddBuildButton(BuildableDef def)

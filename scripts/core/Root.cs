@@ -1,9 +1,10 @@
 using Godot;
 
 /// <summary>
-/// Корень приложения. Правил игры не знает — он лишь создаёт и удаляет сессию
-/// целиком, а сам живёт от запуска до выхода. Отсюда со временем вырастут меню, настройки
-/// и выбор карты; сеть тоже причалит сюда, потому что подключение переживает сессию.
+/// Корень приложения. Правил игры не знает — он лишь переключает две взаимоисключающие
+/// ветки: главное меню и сессию. Одновременно существует ровно одна из них, поэтому
+/// при открытом меню сессии в дереве нет вовсе, а вместе с нею нет ни журнала,
+/// ни проекций, ни единой сущности мира.
 ///
 /// Смысл разделения в одной фразе: что умирает вместе — живёт вместе. Сессия — это дерево
 /// под <see cref="Session"/>, и уничтожается оно одним движением, вместе с журналом,
@@ -12,27 +13,34 @@ using Godot;
 /// </summary>
 public partial class Root : Node
 {
+    [Export] public PackedScene MainMenuScene;
     [Export] public PackedScene SessionScene;
 
-    /// <summary>Начинать сессию сразу при запуске. Появится меню — снимем.</summary>
-    [Export] public bool StartOnLaunch = true;
+    /// <summary>Отладка: начинать игру сразу, минуя главное меню.</summary>
+    [Export] public bool StartSessionOnLaunch;
 
-    /// <summary>Отладочная клавиша пересборки сессии: ею и проверяется, что снос чист.</summary>
+    /// <summary>Отладочная клавиша пересборки сессии: ею проверяется, что удаление чисто.</summary>
     [Export] public Key RestartKey = Key.F5;
 
-    /// <summary>Текущая сессия или null, если её сейчас нет.</summary>
-    public Session Current { get; private set; }
+    /// <summary>Текущая сессия или null, если открыто главное меню.</summary>
+    public Session Session { get; private set; }
+
+    /// <summary>Главное меню или null, если идёт игра.</summary>
+    public MainMenu Menu { get; private set; }
 
     public override void _Ready()
     {
-        if (StartOnLaunch)
-            Start();
+        if (StartSessionOnLaunch)
+            NewGame();
+        else
+            OpenMainMenu();
     }
 
-    /// <summary>Новая сессия с чистого листа. Прежняя, если была, сносится до создания новой.</summary>
-    public Session Start()
+    /// <summary>Новая игра с чистого листа. Меню и прежняя сессия закрываются.</summary>
+    public Session NewGame()
     {
-        Stop();
+        CloseMainMenu();
+        CloseSession();
 
         if (SessionScene == null)
         {
@@ -40,30 +48,78 @@ public partial class Root : Node
             return null;
         }
 
-        Current = SessionScene.Instantiate<Session>();
-        AddChild(Current);
+        Session = SessionScene.Instantiate<Session>();
+        AddChild(Session);
 
-        return Current;
+        return Session;
     }
 
     /// <summary>
-    /// Снос сессии. Сначала вынимаем из дерева, и только потом освобождаем: выход из дерева
-    /// происходит здесь же, синхронно, поэтому GameManager успевает отпустить статическую
-    /// ссылку на себя ДО того, как на его место встанет менеджер следующей сессии.
-    /// Один лишь QueueFree дал бы обратный порядок — и новый корень погасил бы сам себя.
+    /// Перезапуск текущей игры. В главном меню бессмыслен, поэтому там не делает ничего:
+    /// перезапускать нечего, а создание сессии втихую увело бы игрока из меню.
     /// </summary>
-    public void Stop()
+    public void RestartSession()
     {
-        if (Current == null)
+        if (Session == null)
             return;
 
-        if (IsInstanceValid(Current))
+        GD.Print("[Root] перезапуск сессии");
+        NewGame();
+    }
+
+    /// <summary>Выход в главное меню: сессия удаляется целиком, состояние игры теряется.</summary>
+    public void OpenMainMenu()
+    {
+        CloseSession();
+
+        if (Menu != null)
+            return;
+
+        if (MainMenuScene == null)
         {
-            RemoveChild(Current);
-            Current.QueueFree();
+            GD.PushError("[Root] не задана сцена главного меню");
+            return;
         }
 
-        Current = null;
+        Menu = MainMenuScene.Instantiate<MainMenu>();
+        AddChild(Menu);
+    }
+
+    public void QuitGame() => GetTree().Quit();
+
+    /// <summary>
+    /// Удаление сессии. Сначала вынимаем из дерева, и только потом освобождаем: выход
+    /// из дерева происходит здесь же, синхронно, поэтому GameManager успевает отпустить
+    /// статическую ссылку на себя ДО того, как на его место встанет менеджер следующей
+    /// сессии. Один лишь QueueFree дал бы обратный порядок — и новый корень погасил бы
+    /// сам себя.
+    /// </summary>
+    private void CloseSession()
+    {
+        if (Session == null)
+            return;
+
+        if (IsInstanceValid(Session))
+        {
+            RemoveChild(Session);
+            Session.QueueFree();
+        }
+
+        Session = null;
+    }
+
+    private void CloseMainMenu()
+    {
+        if (Menu == null)
+            return;
+
+        if (IsInstanceValid(Menu))
+        {
+            RemoveChild(Menu);
+            Menu.QueueFree();
+        }
+
+        Menu = null;
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -71,8 +127,7 @@ public partial class Root : Node
         if (@event is not InputEventKey { Pressed: true, Echo: false } key || key.Keycode != RestartKey)
             return;
 
-        GD.Print("[Root] перезапуск сессии");
-        Start();
+        RestartSession();
         GetViewport().SetInputAsHandled();
     }
 }

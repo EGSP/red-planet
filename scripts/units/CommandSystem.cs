@@ -70,6 +70,32 @@ public partial class CommandSystem : GameSystem
             _ghost.Visible = false;
     }
 
+    /// <summary>
+    /// Отменить текущее состояние — по шагу за вызов: сначала режим постройки, затем
+    /// выделение. Возвращает false, когда отменять было нечего.
+    ///
+    /// Escape ловит меню паузы и спрашивает нас первыми: пока есть что сбрасывать,
+    /// клавиша работает по-старому, и только на пустом месте открывает паузу.
+    /// Отсюда и пошаговость — сбрасывать разом режим и выделение значило бы, что игрок,
+    /// отменяя постройку, заодно теряет отряд.
+    /// </summary>
+    public bool CancelContext()
+    {
+        if (Pending != null)
+        {
+            CancelBuild();
+            return true;
+        }
+
+        if (_selected.Count > 0)
+        {
+            _selected.Clear();
+            return true;
+        }
+
+        return false;
+    }
+
     public override void Step(double dt)
     {
         if (GM.Playground == null)
@@ -96,13 +122,6 @@ public partial class CommandSystem : GameSystem
 
         if (@event is InputEventMouse mouseEvent)
             _cursor = GetViewport().GetCanvasTransform().AffineInverse() * mouseEvent.Position;
-
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
-        {
-            CancelBuild();
-            _selected.Clear();
-            return;
-        }
 
         if (@event is not InputEventMouseButton mouse)
             return;
