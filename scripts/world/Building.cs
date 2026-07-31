@@ -33,6 +33,8 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     /// </summary>
     public virtual OrderSet AllowedOrders => OrderSet.None;
 
+    public SelectionGroup SelectionGroup => SelectionGroup.Structures;
+
     public virtual void RunOrder(Order order, double dt) { }
 
     public virtual void OnIdle(double dt) { }

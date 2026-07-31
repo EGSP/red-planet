@@ -17,6 +17,13 @@ public partial class CommandSystem : GameSystem
 {
     [Export] public PackedScene BlueprintScene;
 
+    /// <summary>
+    /// Промежуток между щелчками, в который повтор считается двойным выбором, секунды.
+    /// Вынесено в инспектор: привычный темп у игроков разный, а системная настройка
+    /// двойного щелчка движку недоступна.
+    /// </summary>
+    [Export] public float DoubleTapInterval = 0.35f;
+
     /// <summary>Насколько промахивается мышь: припуск к радиусу цели, в пикселях.</summary>
     private const float PickSlack = Const.Unit * 0.25f;
 
@@ -30,6 +37,12 @@ public partial class CommandSystem : GameSystem
     private Vector2 _cursor;
 
     private readonly List<IOrderable> _selected = new();
+
+    /// <summary>
+    /// Двойной выбор. Про мышь не знает: любой другой источник — палец, геймпад,
+    /// горячая клавиша — зовёт тот же Register со своей целью.
+    /// </summary>
+    private readonly DoubleTap _doubleTap = new();
 
     private Vector2 _bandStart;
     private bool _banding;
@@ -51,6 +64,8 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     protected override void OnLink()
     {
+        _doubleTap.Interval = DoubleTapInterval;
+
         if (GM.Playground != null)
             EnsureNodes();
     }
@@ -169,17 +184,57 @@ public partial class CommandSystem : GameSystem
         if (_bandStart.DistanceTo(_cursor) < BandThreshold)
         {
             var one = ActorUnderCursor();
-            if (one != null && !_selected.Contains(one))
+
+            // Повтор по той же цели означает «и всех таких же». Прямое указание игрока,
+            // поэтому ни родство, ни преобладание здесь не применяются
+            if (_doubleTap.Register(one))
+                SelectSameKind(one);
+            else if (one != null && !_selected.Contains(one))
                 _selected.Add(one);
 
             return;
         }
 
         var band = Band;
+        var caught = new List<IOrderable>();
+
+        foreach (var actor in GM.Index.All<IOrderable>())
+            if (Commandable(actor) && band.HasPoint(actor.GlobalPosition))
+                caught.Add(actor);
+
+        // Два разных правила на два разных случая. Если игрок уже что-то держит, рамка
+        // добирает родню — намерение высказано первым щелчком, и спорить с ним незачем.
+        // Если выделение пустое, судить можно только по улову: рамка почти всегда
+        // захватывает лишнее, поэтому оставляем преобладающий род.
+        //
+        // Прежнее выделение оба правила не пересматривают: отсеивается только улов
+        if (_selected.Count > 0)
+            SelectionGroups.KeepAkin(caught, _selected);
+        else
+            SelectionGroups.KeepDominant(caught);
+
+        foreach (var actor in caught)
+            if (!_selected.Contains(actor))
+                _selected.Add(actor);
+    }
+
+    /// <summary>
+    /// Все такие же на карте. Область не ограничена видимой частью намеренно: «выделить
+    /// всех копателей» — приказ о составе отряда, а не о том, что сейчас попало в кадр,
+    /// и результат не должен меняться от положения камеры.
+    ///
+    /// Тип опознаём по DisplayName — по той же строке, которой подписана панель выделения.
+    /// </summary>
+    private void SelectSameKind(IOrderable sample)
+    {
+        string kind = sample.DisplayName;
+
+        if (!_selected.Contains(sample))
+            _selected.Add(sample);
 
         foreach (var actor in GM.Index.All<IOrderable>())
         {
-            if (!Commandable(actor) || !band.HasPoint(actor.GlobalPosition))
+            if (!Commandable(actor) || actor.DisplayName != kind)
                 continue;
 
             if (!_selected.Contains(actor))

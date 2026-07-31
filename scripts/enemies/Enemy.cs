@@ -36,6 +36,9 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
     public OrderSet AllowedOrders =>
         OrderSet.None.With(OrderKind.Move).With(OrderKind.Attack);
 
+    /// <summary>Враг ходит, значит бот. В рамку игрока он всё равно не попадает.</summary>
+    public SelectionGroup SelectionGroup => SelectionGroup.Bots;
+
     public string DefId => Def?.Id ?? "";
 
     public Faction Faction => Faction.Hostile;

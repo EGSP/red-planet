@@ -112,6 +112,9 @@ public interface IOrderable
     /// <summary>Что этой сущности вообще можно приказать. Пустой набор — ничего.</summary>
     OrderSet AllowedOrders { get; }
 
+    /// <summary>Род при выделении рамкой — см. <see cref="SelectionGroups"/>.</summary>
+    SelectionGroup SelectionGroup { get; }
+
     OrderQueue Orders { get; }
 
     /// <summary>Отработать текущий приказ за кадр.</summary>

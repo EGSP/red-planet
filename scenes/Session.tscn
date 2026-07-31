@@ -19,6 +19,9 @@
 [ext_resource type="Script" path="res://scripts/ui/Hud.cs" id="17_hud"]
 [ext_resource type="Script" path="res://scripts/ui/PauseMenu.cs" id="22_pause"]
 [ext_resource type="Script" path="res://scripts/ui/Buildbar.cs" id="23_buildbar"]
+[ext_resource type="Script" path="res://scripts/ui/ResourceBar.cs" id="24_resources"]
+[ext_resource type="Script" path="res://scripts/ui/SelectionPanel.cs" id="25_selection"]
+[ext_resource type="Script" path="res://scripts/ui/CommandPanel.cs" id="26_commands"]
 [ext_resource type="PackedScene" path="res://scenes/units/Commander.tscn" id="18_commander"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
 [ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="20_ore"]
@@ -38,6 +41,7 @@ Playground = NodePath("../Playground")
 [node name="CommandSystem" type="Node" parent="Systems"]
 script = ExtResource("5_command")
 BlueprintScene = ExtResource("19_blueprint")
+DoubleTapInterval = 0.35
 Phase = 0
 
 [node name="BotAiSystem" type="Node" parent="Systems"]
@@ -114,6 +118,15 @@ script = ExtResource("16_camera")
 
 [node name="Hud" type="CanvasLayer" parent="View"]
 script = ExtResource("17_hud")
+
+[node name="ResourceBar" type="CanvasLayer" parent="View"]
+script = ExtResource("24_resources")
+
+[node name="SelectionPanel" type="CanvasLayer" parent="View"]
+script = ExtResource("25_selection")
+
+[node name="CommandPanel" type="CanvasLayer" parent="View"]
+script = ExtResource("26_commands")
 
 [node name="Buildbar" type="CanvasLayer" parent="View"]
 script = ExtResource("23_buildbar")

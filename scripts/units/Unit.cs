@@ -56,6 +56,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             .With(OrderKind.Build, Def.CanBuild)
             .With(OrderKind.Repair, Def.CanRepair);
 
+    public SelectionGroup SelectionGroup => SelectionGroup.Bots;
+
     /// <summary>Ось «вперёд» подвижной сущности — это поворот самой ноды.</summary>
     public float Facing => Rotation;
 
