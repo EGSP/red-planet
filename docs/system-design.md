@@ -109,7 +109,8 @@ Root (Node)                     ← приложение: живёт от зап
     │   └── Effects
     └── View (Node2D)           ← наблюдатели
         ├── Camera (CameraRig)
-        ├── Hud (CanvasLayer)
+        ├── Hud (CanvasLayer)        — состояние базы, слева вверху
+        ├── Buildbar (CanvasLayer)   — строительная панель, внизу по центру
         └── PauseMenu (CanvasLayer, слой 10)
 
 Content (автозагрузка)          ← справочники: переживают любую сессию
@@ -154,7 +155,7 @@ _gm.Playground.Add(WorldLayer.Projectiles, projectile);
 | Слой | Форма в Godot | Пример |
 |---|---|---|
 | `Root`, `Session` | **нода** | приложение и сессия: заводят и сносят ветки дерева |
-| `MainMenu`, `PauseMenu`, `Hud` | **нода** (`CanvasLayer`) | деревья интерфейса, разметка собирается кодом |
+| `MainMenu`, `Hud`, `Buildbar`, `PauseMenu` | **нода** (`CanvasLayer`) | деревья интерфейса, разметка собирается кодом |
 | `GameManager` | **нода сессии** | держит журнал, проекции, сетку, планировщик |
 | `Content` | **нода-автозагрузка** | справочники и всё, что переживает сессию |
 | `Playground` | **нода** (`Node2D`) | контейнер мира со слоями отрисовки |
@@ -258,14 +259,15 @@ public partial class BuildableDef : Resource
     [Export] public float EnergyProduction; // больше нуля — это генератор
     [Export] public float VisionRange;      // радиус обзора, он же рабочая зона
     [Export] public PackedScene Scene;
-    [Export] public Godot.Collections.Array<string> BuildableBy = new() { "commander" };
 }
 ```
+
+Списка «кому эта постройка доступна» у постройки нет намеренно: на вопрос отвечает строительная панель строителя, и держать тот же факт с двух сторон значило бы однажды их рассогласовать.
 
 Каталог нужен по трём причинам, и первая — главная:
 
 1. **Документы носят строковый `DefId`, а не ссылку на ресурс** — так они переживут сохранение. Кто-то должен превращать этот id обратно в определение, иначе запись «поставлен `factory` в клетке (5,2)» нечем восстановить.
-2. Надо уметь **перечислить** доступное роли — из этого HUD строит панель. Добавил `.tres` — кнопка появилась сама.
+2. Надо уметь **найти определение по id** — по нему строительная панель превращает ячейку `build = "turret"` в кнопку со стоимостью и сценой.
 3. Загрузка один раз на старте, пути к ресурсам не размазаны по коду.
 
 Каталог — **только чтение**. Он ничего не создаёт и не знает о живых сущностях: создание в `Spawner`, живые экземпляры в `EntityStore`.
@@ -753,7 +755,8 @@ scripts/
 ├─ combat/     Faction, Weapon, Targeting, Projectile, WeaponSystem, ProjectileSystem, DamageSystem
 ├─ economy/    EconomyLedger, EconomySystem, Jobs, Repair
 ├─ buildings/  Factory, Turret, Assembler, AssemblerSystem
-└─ ui/         Hud, BuildbarLayout, MainMenu, PauseMenu, UiFrame, HealthBar, OrderOverlay
+└─ ui/         Hud, Buildbar, BuildbarLayout, MainMenu, PauseMenu, UiFrame,
+               HealthBar, OrderOverlay
 
 resources/     units/*.tres, buildables/*.tres, enemies/*.tres, weapons/*.tres,
                buildbars/*.toml (+ buildbar.md — формат и соглашение о координатах)

@@ -6,7 +6,6 @@
 script = ExtResource("1_script")
 Id = "digger"
 DisplayName = "Копатель"
-Role = "fabricator"
 Speed = 4.0
 TurnSpeedDegrees = 240.0
 MaxHealth = 90.0

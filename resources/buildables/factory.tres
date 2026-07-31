@@ -14,7 +14,6 @@ MetalStorage = 100.0
 EnergyStorage = 0.0
 Scene = ExtResource("2_scene")
 IsUnit = false
-BuildableBy = Array[String](["commander", "fabricator"])
 CanAssemble = false
 MaxHealth = 400.0
 FacingDegrees = -90.0

@@ -12,7 +12,6 @@ EnergyProduction = 45.0
 MetalStorage = 0.0
 EnergyStorage = 50.0
 IsUnit = false
-BuildableBy = Array[String](["commander", "fabricator"])
 CanAssemble = false
 MaxHealth = 200.0
 Color = Color(0.95, 0.85, 0.35, 1)

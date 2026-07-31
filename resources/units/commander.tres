@@ -7,7 +7,6 @@
 script = ExtResource("1_script")
 Id = "commander"
 DisplayName = "Коммандер"
-Role = "commander"
 TurnSpeedDegrees = 200.0
 MaxHealth = 300.0
 Radius = 0.38

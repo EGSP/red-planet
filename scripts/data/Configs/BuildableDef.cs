@@ -33,9 +33,6 @@ public partial class BuildableDef : Resource
     /// <summary>Юнит не занимает клетки после достройки — он ходит.</summary>
     [Export] public bool IsUnit;
 
-    /// <summary>Роли строителей, которым доступна эта постройка: commander, fabricator.</summary>
-    [Export] public Godot.Collections.Array<string> BuildableBy = new() { "commander" };
-
     /// <summary>Постройка сама работает инструментом в своём радиусе — башня-сборщик.</summary>
     [Export] public bool CanAssemble;
 
@@ -82,8 +79,6 @@ public partial class BuildableDef : Resource
     public bool CanBeRepaired => HealthPerMetal > 0f;
 
     public float VisionRadiusPx => VisionRange * Const.Unit;
-
-    public bool AvailableFor(string role) => BuildableBy.Contains(role);
 
     /// <summary>Клетки, занимаемые постройкой при начале в origin.</summary>
     public IEnumerable<Vector2I> Cells(Vector2I origin)

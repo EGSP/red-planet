@@ -11,7 +11,6 @@ Rows = Array[String](["#"])
 CostMetal = 80.0
 Scene = ExtResource("2_scene")
 IsUnit = false
-BuildableBy = Array[String](["commander", "fabricator"])
 CanAssemble = false
 MaxHealth = 250.0
 Color = Color(0.6, 0.85, 1, 1)

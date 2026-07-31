@@ -10,9 +10,6 @@ public partial class UnitDef : Resource
     [Export] public string Id = "";
     [Export] public string DisplayName = "";
 
-    /// <summary>Роль для списка доступных построек: commander или fabricator.</summary>
-    [Export] public string Role = "fabricator";
-
     /// <summary>Скорость в юнитах в секунду.</summary>
     [Export] public float Speed = 3f;
 

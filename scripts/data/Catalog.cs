@@ -44,16 +44,6 @@ public sealed class Catalog
     public BuildbarDef Buildbar(string id) =>
         id != null && _buildbars.TryGetValue(id, out var def) ? def : null;
 
-    /// <summary>Что доступно строителю с этой ролью.</summary>
-    public List<BuildableDef> AvailableFor(string role)
-    {
-        var result = new List<BuildableDef>();
-        foreach (var def in _buildables.Values)
-            if (def.AvailableFor(role))
-                result.Add(def);
-        result.Sort((a, b) => a.TotalWork.CompareTo(b.TotalWork));
-        return result;
-    }
 
     public void LoadAll()
     {

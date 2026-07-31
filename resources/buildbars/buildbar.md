@@ -21,10 +21,10 @@ id = "economy"
 title = "Экономика"
 order = 0
 cells = [
-    { x = 0, y = 1, build = "generator_t2" },
-    { x = 1, y = 1, build = "assembler" },
-    { x = 0, y = 0, build = "generator" },
-    { x = 1, y = 0, build = "factory" },
+	{ x = 0, y = 1, build = "generator_t2" },
+	{ x = 1, y = 1, build = "assembler" },
+	{ x = 0, y = 0, build = "generator" },
+	{ x = 1, y = 0, build = "factory" },
 ]
 ```
 
