@@ -122,10 +122,11 @@ public sealed class UnitDefinition
     public float FacingDegrees;
 
     /// <summary>
-    /// Ставится только на клетку с точкой метала. Признак принадлежит месту, а не постройке,
-    /// поэтому и живёт рядом с формой: и то, и другое отвечает на вопрос «куда это встанет».
-    /// Проверяет его WorldGrid.CanPlace, причём в обе стороны — постройка без этого признака
-    /// на точку не встанет вовсе, чтобы не занять её безвозвратно.
+    /// Ставится только на точку метала и обязана её накрыть. Признак принадлежит месту,
+    /// а не постройке, поэтому и живёт рядом с формой: и то, и другое отвечает на вопрос
+    /// «куда это встанет». Проверяет его Placement.CanPlace, причём в обе стороны —
+    /// постройка без этого признака на точку не встанет вовсе, чтобы не занять её
+    /// безвозвратно. Он же включает притяжение призрака к точке под курсором.
     /// </summary>
     public bool RequiresMetalSpot;
 
@@ -229,8 +230,11 @@ public sealed class UnitDefinition
     public bool IsStructure => Class is UnitClass.Structure or UnitClass.Factory
         or UnitClass.Turret or UnitClass.Assembler;
 
-    /// <summary>Занимает ли сущность клетки: у каркаса — на время стройки, у постройки — всегда.</summary>
-    public bool OccupiesCells => Rows.Length > 0;
+    /// <summary>
+    /// Занимает ли сущность место: у каркаса — на время стройки, у постройки — всегда.
+    /// Форма задаёт и размер занятого прямоугольника, и сам факт занятости.
+    /// </summary>
+    public bool Occupies => Rows.Length > 0;
 
     public bool IsMobile => Speed > 0f;
 
@@ -276,16 +280,4 @@ public sealed class UnitDefinition
 
     /// <summary>Прочность каркаса на время стройки.</summary>
     public float FrameHealth => Assembly?.FrameHealth ?? 100f;
-
-    /// <summary>Клетки, занимаемые сущностью при начале в origin.</summary>
-    public IEnumerable<Vector2I> Cells(Vector2I origin)
-    {
-        for (int y = 0; y < Rows.Length; y++)
-        {
-            string row = Rows[y];
-            for (int x = 0; x < row.Length; x++)
-                if (row[x] == '#')
-                    yield return new Vector2I(origin.X + x, origin.Y + y);
-        }
-    }
 }

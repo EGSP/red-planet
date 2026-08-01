@@ -1,18 +1,25 @@
 using Godot;
 
 /// <summary>
-/// Готовая постройка: занимает клетки по матрице своего справочника.
+/// Готовая постройка: занимает прямоугольник по форме своего справочника.
 ///
-/// Ось «вперёд» у здания есть, но ноду оно не крутит: визуал привязан к клеткам сетки,
-/// а поворот ноды сетку не поворачивает. Поэтому направление живёт отдельным числом
-/// из справочника и рисуется маркером — задел под турели и ворота.
+/// Ось «вперёд» у здания есть, но ноду оно не крутит: занимаемый прямоугольник
+/// осепараллелен, а поворот ноды его не поворачивает. Поэтому направление живёт отдельным
+/// числом из справочника и рисуется маркером — задел под турели и ворота.
 /// </summary>
 public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVision, IRepairable,
-    IOrderable
+    IOrderable, IObstacle
 {
     public int Id { get; private set; }
     public UnitDefinition Definition { get; private set; }
-    public Vector2I Cell { get; private set; }
+
+    /// <summary>
+    /// Занимаемое место. Считается от позиции и формы, а НЕ от поворота ноды: у турели
+    /// в Rotation живёт ось башни, и корпус от её вращения шевелиться не должен.
+    /// </summary>
+    public Rect2 Footprint => Definition == null
+        ? new Rect2(GlobalPosition, Vector2.Zero)
+        : Placement.Footprint(Definition, GlobalPosition);
 
     public Health Health { get; private set; }
 
@@ -57,12 +64,11 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     /// <summary>Курс ремонта берётся прямо из справочника: прочность, делённая на цену.</summary>
     public float HealthPerMetal => Definition?.HealthPerMetal ?? 0f;
 
-    public virtual void Init(int id, UnitDefinition def, Vector2I cell)
+    public virtual void Init(int id, UnitDefinition def, Vector2 center)
     {
         Id = id;
         Definition = def;
-        Cell = cell;
-        Position = Const.AreaCenter(cell, def.Size);
+        Position = center;
         Health = new Health(def.MaxHealth);
 
         QueueRedraw();
@@ -121,12 +127,12 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         }
     }
 
-    /// <summary>Постройку снесли: вывести из игры. Сетку и EntityStore снимает Spawner.</summary>
+    /// <summary>Постройку снесли: вывести из игры. Место и EntityStore освобождает Spawner.</summary>
     public virtual void OnDestroyed()
     {
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем.
         // Из разрезов индекса нода выпадает сама, как только помечена на удаление;
-        // сетку и реестр по id чистит подписка Spawner на выбытие из индекса.
+        // карту препятствий и реестр по id чистит подписка Spawner на выбытие из индекса.
         SetProcess(false);
         Visible = false;
         QueueFree();

@@ -14,21 +14,18 @@ using Godot;
 ///
 /// Отсюда и то, чем точка НЕ является. Она не узел работы: подключаться к ней некому.
 /// Она не участник экономики: метал производит экстрактор, а не земля под ним. Она не
-/// занимает клетку сетки: занятость означает «здесь кто-то стоит», а точка — это сама
-/// местность, и на ней ещё предстоит построить. Запрет ставить на неё что попало живёт
-/// в правиле постановки (WorldGrid.CanPlace), а не в занятости.
+/// препятствие: занятость означает «здесь кто-то стоит», а точка — это сама местность,
+/// и на ней ещё предстоит построить. Запрет ставить на неё что попало живёт в правиле
+/// постановки (<see cref="Placement.CanPlace"/>), а не в занятости.
 /// </summary>
 public partial class MetalSpot : Node2D
 {
     public int Id { get; private set; }
 
-    public Vector2I Cell { get; private set; }
-
-    public void Init(int id, Vector2I cell)
+    public void Init(int id, Vector2 position)
     {
         Id = id;
-        Cell = cell;
-        Position = Const.CellCenter(cell);
+        Position = position;
     }
 
     /// <summary>

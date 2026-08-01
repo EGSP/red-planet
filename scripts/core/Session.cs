@@ -131,10 +131,7 @@ public partial class Session : Node2D
             return;
         }
 
-        // 3x3 с центром в (0,0) начинается в клетке (-1,-1)
-        var origin = new Vector2I(-(def.Width / 2), -(def.Height / 2));
-
-        Systems.Spawn.SpawnBuilding(def, origin);
+        Systems.Spawn.SpawnBuilding(def, Const.LandingPoint);
     }
 
     private void SpawnCommander()

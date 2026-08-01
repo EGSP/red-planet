@@ -9,7 +9,7 @@ using Godot;
 /// стреляет (это WeaponSystem). Разделение то же, что у ботов игрока: поиск работы —
 /// дело системы, ход — дело сущности.
 /// </summary>
-public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrderable
+public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrderable, IMobile
 {
     public UnitDefinition Definition { get; private set; }
 
@@ -20,6 +20,9 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
     public WeaponState Gun { get; } = new();
 
     public OrderQueue Orders { get; }
+
+    /// <summary>Намерение двигаться. Ход, обход и выталкивание делает MovementSystem.</summary>
+    public Movement Movement { get; } = new();
 
     public Enemy() => Orders = new OrderQueue(this);
 
@@ -104,14 +107,17 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
 
         if (order.Kind == OrderKind.Move)
         {
-            if (GlobalPosition.DistanceTo(order.Pos) <= Const.Unit * 0.2f)
+            float reach = Const.Unit * 0.2f;
+
+            // Ближе не пройти из-за своих — приказ исполнен: всей толпе в одну точку
+            // не поместиться, и ждать этого бессмысленно
+            if (Movement.Settled || GlobalPosition.DistanceTo(order.Pos) <= reach)
             {
                 Orders.DropCurrent();
                 return;
             }
 
-            AimAt(order.Pos, dt);
-            GlobalPosition = GlobalPosition.MoveToward(order.Pos, Definition.SpeedPx * (float)dt);
+            Movement.Seek(order.Pos, reach);
             return;
         }
 
@@ -119,14 +125,13 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
             return;
 
         var to = target.GlobalPosition;
+        float stop = StopDistance(target);
 
-        // В пределах дальности корпус доворачивает система стрельбы: второй доворот
-        // за тот же кадр удвоил бы скорость вращения и обесценил разницу видов
-        if (!Targeting.InFiringRange(Weapon, GlobalPosition, target))
-            AimAt(to, dt);
-
-        if (GlobalPosition.DistanceTo(to) > StopDistance(target))
-            GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
+        // Доворот на подходе делает система движения, в пределах дальности — система
+        // стрельбы. Два доворота за кадр удвоили бы скорость вращения и обесценили
+        // разницу видов
+        if (GlobalPosition.DistanceTo(to) > stop)
+            Movement.Seek(to, stop);
     }
 
     /// <summary>

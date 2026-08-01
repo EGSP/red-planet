@@ -2,7 +2,8 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Композиционный корень сессии: держит журнал, регистры, справочники, сетку и планировщик,
+/// Композиционный корень сессии: держит журнал, регистры, справочники, карту препятствий
+/// с растром навигации и планировщик,
 /// а системы висят на нём детьми — так «система принадлежит менеджеру» перестаёт быть
 /// договорённостью на словах и становится фактом дерева сцены.
 ///
@@ -38,7 +39,18 @@ public partial class GameManager : Node
     /// <summary>Всё живое в мире и разрезы над ним — так системы находят, с кем работать.</summary>
     public Index Index { get; } = new();
 
-    public WorldGrid Grid { get; } = new();
+    /// <summary>
+    /// Занятое место в непрерывных координатах. Заменило сетку застройки: истина о том,
+    /// где стоит здание, принадлежит самому зданию, а не клеткам под ним.
+    /// </summary>
+    public ObstacleMap Obstacles { get; } = new();
+
+    /// <summary>
+    /// Растр навигации. Выводится из <see cref="Obstacles"/> и пересобирается сам,
+    /// когда те менялись, — поэтому обновлять его никто не обязан.
+    /// </summary>
+    public NavGrid Nav { get; private set; }
+
     public Scheduler Scheduler { get; } = new();
 
     /// <summary>Баланс текущего кадра: доход, спрос и производительность базы.</summary>
@@ -87,6 +99,7 @@ public partial class GameManager : Node
         if (Playground == null)
             GD.PushError("[GameManager] не найдена площадка мира");
 
+        Nav = new NavGrid(Obstacles);
         Spawn = new Spawner(this);
 
         // Постоянные разрезы заводим здесь же, где и проекции: состав производного

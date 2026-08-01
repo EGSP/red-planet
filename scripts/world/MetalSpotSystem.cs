@@ -6,7 +6,7 @@ using Godot;
 /// и на этом заканчивает работу. Респавна нет и быть не может — точка вечна.
 ///
 /// ПОЧЕМУ ЭТО СИСТЕМА, А НЕ ВЫЗОВ ИЗ СЕССИИ. Расставлять точки можно только тогда, когда
-/// стартовая база уже стоит: иначе точки займут её клетки. Стартовую раздачу делает Session
+/// стартовая база уже стоит: иначе точки встанут прямо под неё. Стартовую раздачу делает Session
 /// в своём _Ready, а он приходит позже _Ready систем, поэтому единственный момент, когда мир
 /// заведомо собран, — первый кадр симуляции. Тем же способом это делалось и раньше.
 ///
@@ -20,7 +20,7 @@ public partial class MetalSpotSystem : GameSystem
     private const int Attempts = 60;
 
     private readonly RandomNumberGenerator _rng = new();
-    private readonly List<Vector2I> _placed = new();
+    private readonly List<Vector2> _placed = new();
 
     private bool _seeded;
 
@@ -58,13 +58,13 @@ public partial class MetalSpotSystem : GameSystem
     {
         for (int attempt = 0; attempt < Attempts; attempt++)
         {
-            var cell = RandomCell(minRadius, maxRadius);
+            var position = RandomPoint(minRadius, maxRadius);
 
-            if (!Suitable(cell))
+            if (!Suitable(position))
                 continue;
 
-            GM.Spawn.SpawnMetalSpot(cell);
-            _placed.Add(cell);
+            GM.Spawn.SpawnMetalSpot(position);
+            _placed.Add(position);
             return true;
         }
 
@@ -72,31 +72,49 @@ public partial class MetalSpotSystem : GameSystem
     }
 
     /// <summary>
-    /// Случайная клетка кольца. Радиус берётся через корень намеренно: площадь кольца растёт
+    /// Случайная точка кольца. Радиус берётся через корень намеренно: площадь кольца растёт
     /// вместе с радиусом, и равномерный выбор радиуса сгущал бы точки к центру — как раз туда,
     /// где они нужны меньше всего.
+    ///
+    /// Точка садится в центр клетки, хотя постановка давно свободна от сетки. Причина
+    /// не в правилах, а в опрятности: экстрактор притягивается к точке, и раскладка,
+    /// выровненная по клеткам, читается глазом как порядок, а не как рассыпанная горсть.
     /// </summary>
-    private Vector2I RandomCell(int minRadius, int maxRadius)
+    private Vector2 RandomPoint(int minRadius, int maxRadius)
     {
         float angle = _rng.RandfRange(0f, Mathf.Tau);
         float squared = _rng.RandfRange(minRadius * minRadius, maxRadius * maxRadius);
         float radius = Mathf.Sqrt(squared);
 
-        return new Vector2I(
+        var cell = new Vector2I(
             Mathf.RoundToInt(Mathf.Cos(angle) * radius),
             Mathf.RoundToInt(Mathf.Sin(angle) * radius));
+
+        return Const.CellCenter(cell);
     }
 
-    /// <summary>Клетка в границах, свободна, ещё не помечена и не липнет к соседней точке.</summary>
-    private bool Suitable(Vector2I cell)
+    /// <summary>
+    /// Место в границах, свободно и не липнет к соседней точке.
+    ///
+    /// Свободным считается место под экстрактор, а не под саму точку: точка ничего
+    /// не занимает, но бесполезна там, где экстрактор не встанет.
+    /// </summary>
+    private bool Suitable(Vector2 position)
     {
-        if (!GM.Grid.InBounds(cell) || GM.Grid.IsOccupied(cell) || GM.Grid.HasMetal(cell))
+        float half = Const.Unit * 0.5f;
+        var area = new Rect2(position - new Vector2(half, half), Const.Unit, Const.Unit);
+
+        if (!Const.WorldBounds.Encloses(area))
             return false;
 
-        int spacing = Const.MetalSpotSpacing * Const.MetalSpotSpacing;
+        if (GM.Obstacles.Overlaps(area.Grow(Const.BuildMarginPx)))
+            return false;
+
+        float spacing = Const.MetalSpotSpacing * Const.Unit;
+        float spacingSquared = spacing * spacing;
 
         foreach (var placed in _placed)
-            if ((placed - cell).LengthSquared() < spacing)
+            if (placed.DistanceSquaredTo(position) < spacingSquared)
                 return false;
 
         return true;

@@ -43,9 +43,9 @@ public partial class Turret : Building, IArmed
 
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 
-    public override void Init(int id, UnitDefinition def, Vector2I cell)
+    public override void Init(int id, UnitDefinition def, Vector2 center)
     {
-        base.Init(id, def, cell);
+        base.Init(id, def, center);
 
         // Смотрит наружу от базы: первый разворот не тратится на полкруга
         Rotation = Position.IsZeroApprox() ? 0f : Position.Angle();

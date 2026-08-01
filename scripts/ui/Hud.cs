@@ -1,70 +1,55 @@
 using Godot;
 
 /// <summary>
-/// Общие сведения о ходе игры: счёт боя, подсказки управления и пауза.
+/// Кнопка паузы в правом нижнем углу — всё, что осталось за HUD.
 ///
-/// Всё, что зависит от выделения или от состояния базы, вынесено в свои деревья:
-/// <see cref="ResourceBar"/> сверху, <see cref="SelectionPanel"/> слева,
-/// <see cref="CommandPanel"/> справа, <see cref="Buildbar"/> внизу. Здесь остаётся то,
-/// что не привязано ни к тому, ни к другому.
+/// Прежде здесь висела панель со счётом боя и подсказками управления. Она занимала левый
+/// верхний угол постоянно, хотя нужна редко, и потому переехала в <see cref="DebugPanel"/>.
+/// Следствие принято сознательно: постоянно видимого счёта боя больше нет. Понадобится
+/// он как игровая величина, а не как отладочная, — вернётся строкой в <see cref="ResourceBar"/>,
+/// а не восстановлением прежней панели.
+///
+/// Угол выбран свободный: <see cref="Buildbar"/> стоит внизу по центру,
+/// <see cref="CommandPanel"/> — справа по центру.
 /// </summary>
 public partial class Hud : CanvasLayer
 {
-    private Label _combat;
-
     public override void _Ready()
     {
-        var panel = new PanelContainer
+        var frame = new UiFrame();
+        AddChild(frame);
+
+        var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        margin.AddThemeConstantOverride("margin_right", 12);
+        margin.AddThemeConstantOverride("margin_bottom", 12);
+        frame.AddChild(margin);
+        margin.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+
+        var row = new HBoxContainer
         {
-            Position = new Vector2(12, 56),
-            CustomMinimumSize = new Vector2(240, 0),
+            Alignment = BoxContainer.AlignmentMode.End,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        AddChild(panel);
+        margin.AddChild(row);
 
-        var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", 6);
-        panel.AddChild(box);
-
-        _combat = new Label { Text = "врагов 0" };
-        _combat.AddThemeFontSizeOverride("font_size", 13);
-        _combat.AddThemeColorOverride("font_color", new Color(1f, 0.7f, 0.65f));
-        box.AddChild(_combat);
-
-        box.AddChild(new HSeparator());
-
-        var hints = new Label
+        var column = new VBoxContainer
         {
-            Text = "ЛКМ — выделить или рамка, ПКМ — приказ по цели\n" +
-                   "Shift — дописать в очередь, WASD и колесо — камера",
+            Alignment = BoxContainer.AlignmentMode.End,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        hints.AddThemeFontSizeOverride("font_size", 12);
-        box.AddChild(hints);
+        row.AddChild(column);
 
-        AddPauseButton(box);
+        column.AddChild(PauseButton());
     }
 
     /// <summary>
-    /// Кнопка паузы просит сессию переключить состояние, а не показывает меню сама:
+    /// Кнопка просит сессию переключить состояние, а не показывает меню сама:
     /// решение о паузе принимается в одном месте, поэтому клавиша и кнопка не разойдутся.
     /// </summary>
-    private void AddPauseButton(Node parent)
+    private Button PauseButton()
     {
         var button = new Button { Text = "Пауза (Esc)" };
         button.Pressed += () => this.Ancestor<Session>()?.TogglePause();
-        parent.AddChild(button);
-    }
-
-    public override void _Process(double delta)
-    {
-        var gm = GameManager.I;
-        if (gm == null)
-            return;
-
-        var combat = gm.Combat;
-        float commanderDamage = gm.Commander?.Health.TotalTaken ?? 0f;
-
-        _combat.Text = $"врагов на карте {combat.EnemiesAlive}   " +
-                       $"уничтожено {combat.EnemiesDestroyed}   потеряно {combat.LossesTaken}\n" +
-                       $"урон коммандеру {commanderDamage:0}";
+        return button;
     }
 }

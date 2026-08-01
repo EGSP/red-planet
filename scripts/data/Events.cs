@@ -41,7 +41,8 @@ public struct BlueprintPlaced : IEventRecord
     /// <summary>Ключ справочника, а не ссылка на ресурс — так запись переживёт сохранение.</summary>
     public string DefinitionId;
 
-    public Vector2I Cell;
+    /// <summary>Центр занятого места. Клеток больше нет: постановка свободная.</summary>
+    public Vector2 Pos;
 }
 
 /// <summary>
@@ -58,7 +59,7 @@ public struct BuildingSpawned : IEventRecord
     public int SequenceId { get; set; }
     public int EntityId;
     public string DefinitionId;
-    public Vector2I Cell;
+    public Vector2 Pos;
 }
 
 /// <summary>Каркас достроен и превратился в готовую сущность.</summary>
@@ -68,7 +69,7 @@ public struct ConstructionCompleted : IEventRecord
     public int SequenceId { get; set; }
     public int EntityId;
     public string DefinitionId;
-    public Vector2I Cell;
+    public Vector2 Pos;
 }
 
 /// <summary>

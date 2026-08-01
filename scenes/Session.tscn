@@ -7,6 +7,9 @@
 [ext_resource type="Script" path="res://scripts/units/CommandSystem.cs" id="5_command"]
 [ext_resource type="Script" path="res://scripts/units/BotAiSystem.cs" id="6_botai"]
 [ext_resource type="Script" path="res://scripts/units/OrderSystem.cs" id="7_order"]
+[ext_resource type="Script" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
+[ext_resource type="Script" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
+[ext_resource type="Script" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
 [ext_resource type="Script" path="res://scripts/economy/EconomySystem.cs" id="8_economy"]
 [ext_resource type="Script" path="res://scripts/world/MetalSpotSystem.cs" id="9_metalspots"]
 [ext_resource type="Script" path="res://scripts/buildings/AssemblerSystem.cs" id="10_assembler"]
@@ -62,6 +65,14 @@ StepOrder = 15
 [node name="OrderSystem" type="Node" parent="Systems"]
 script = ExtResource("7_order")
 StepOrder = 20
+
+[node name="PathfindingSystem" type="Node" parent="Systems"]
+script = ExtResource("34_pathfinding")
+StepOrder = 24
+
+[node name="MovementSystem" type="Node" parent="Systems"]
+script = ExtResource("35_movement")
+StepOrder = 26
 
 [node name="EconomySystem" type="Node" parent="Systems"]
 script = ExtResource("8_economy")
@@ -151,6 +162,9 @@ script = ExtResource("23_buildbar")
 
 [node name="ControlGroupBar" type="CanvasLayer" parent="View"]
 script = ExtResource("27_groups")
+
+[node name="DebugPanel" type="CanvasLayer" parent="View"]
+script = ExtResource("36_debugpanel")
 
 [node name="PauseMenu" type="CanvasLayer" parent="View"]
 script = ExtResource("22_pause")

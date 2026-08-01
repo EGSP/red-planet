@@ -12,17 +12,23 @@ using Godot;
 /// система — его не касается, а чего ему отдать нельзя, отсекает набор AllowedOrders.
 /// </summary>
 public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
-    IRepairable, IOrderable
+    IRepairable, IOrderable, IMobile
 {
     /// <summary>
     /// Определение. Ставит Spawner при создании: узел юнита собственной сцены не имеет,
     /// и связать его со справочником больше некому.
     /// </summary>
-    public UnitDefinition Definition;
+    public UnitDefinition Definition { get; set; }
 
     public int Id { get; set; }
 
     public OrderQueue Orders { get; }
+
+    /// <summary>
+    /// Намерение двигаться. Сам юнит себя не перемещает: он объявляет, куда хочет попасть,
+    /// а путь, обход соседей и выталкивание из зданий делает <see cref="MovementSystem"/>.
+    /// </summary>
+    public Movement Movement { get; } = new();
 
     private WorkNode _attached;
 
@@ -184,7 +190,13 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         }
     }
 
-    /// <summary>Движение и стройка: дойти, а дойдя — подключиться к узлу работы.</summary>
+    /// <summary>
+    /// Движение и стройка: дойти, а дойдя — подключиться к узлу работы.
+    ///
+    /// Приказ объявляет намерение и проверяет, дошли ли. Сам ход и доворот корпуса
+    /// на ходу делает система движения: обходя препятствие, юнит едет не туда, куда
+    /// его послали, и разворот к цели выглядел бы движением боком вперёд.
+    /// </summary>
     private void RunWork(Order order, double dt)
     {
         var target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
@@ -197,11 +209,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             ? Const.Unit * 0.2f
             : tool?.RangePx ?? Const.Unit;
 
-        if (GlobalPosition.DistanceTo(target) > reach)
+        // Приказ «идти» считается исполненным и тогда, когда ближе не пройти из-за своих:
+        // всему отряду в одну точку не поместиться, и ждать этого бессмысленно. К работе
+        // это не относится — там нужна не точка, а дальность инструмента до цели
+        bool settled = order.Kind == OrderKind.Move && Movement.Settled;
+
+        if (!settled && GlobalPosition.DistanceTo(target) > reach)
         {
             Detach();
-            AimAt(target, dt);
-            GlobalPosition = GlobalPosition.MoveToward(target, Definition.SpeedPx * (float)dt);
+            Movement.Seek(target, reach);
             return;
         }
 
@@ -235,8 +251,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Приказ атаковать: подойти на дальность своего ствола и держаться. Сам выстрел —
     /// дело WeaponSystem, сюда попадает только подход.
     ///
-    /// Доворачиваемся, только пока идём: в пределах дальности корпус крутит система стрельбы,
-    /// и второй доворот за тот же кадр удвоил бы скорость вращения.
+    /// В пределах дальности корпус крутит система стрельбы, на подходе — система движения.
+    /// Своего доворота здесь нет: два доворота за кадр удвоили бы скорость вращения.
     /// </summary>
     private void RunAttack(Order order, double dt)
     {
@@ -249,15 +265,13 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (Weapon != null && Targeting.InFiringRange(Weapon, GlobalPosition, target))
             return;
 
-        AimAt(to, dt);
-
         // Безоружный юнит подходит на длину инструмента: приказ хотя бы не зависает
         float stop = Weapon != null
             ? Weapon.RangePx * 0.85f + (target?.HitRadius ?? 0f)
             : Definition.WorkRangePx;
 
         if (GlobalPosition.DistanceTo(to) > stop)
-            GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
+            Movement.Seek(to, stop);
     }
 
     /// <summary>
@@ -269,11 +283,12 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Detach();
 
         var to = order.Entity.GlobalPosition;
-        AimAt(to, dt);
-
         float stop = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
+
         if (GlobalPosition.DistanceTo(to) > stop)
-            GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
+            Movement.Seek(to, stop);
+        else
+            AimAt(to, dt);
     }
 
     /// <summary>
@@ -286,11 +301,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         var to = order.Entity.GlobalPosition;
 
-        if (GlobalPosition.DistanceTo(to) <= Const.FollowDistancePx)
-            return;
-
-        AimAt(to, dt);
-        GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
+        if (GlobalPosition.DistanceTo(to) > Const.FollowDistancePx)
+            Movement.Seek(to, Const.FollowDistancePx);
     }
 
     /// <summary>Кого чиним прямо сейчас: приказ ремонта, цель в пределах инструмента.</summary>

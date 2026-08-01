@@ -33,6 +33,12 @@ public partial class CommandSystem : GameSystem
     private PlacementGhost _ghost;
     private OrderOverlay _overlay;
 
+    // Служебная графика отладки. Заводится здесь же, где призрак и очереди приказов:
+    // все они живут в слоях мира и создаются один раз при сборке площадки
+    private NavGridOverlay _navigation;
+    private PathOverlay _paths;
+    private BoidsOverlay _boids;
+
     /// <summary>Курсор в мировых координатах — берём из событий, а не опросом.</summary>
     private Vector2 _cursor;
 
@@ -171,9 +177,9 @@ public partial class CommandSystem : GameSystem
         if (!_ghost.Visible)
             return;
 
-        var origin = OriginUnderCursor(Pending);
-        _ghost.Origin = origin;
-        _ghost.Valid = GM.Grid.CanPlace(origin, Pending);
+        var center = Placement.Snap(GM, Pending, _cursor);
+        _ghost.Center = center;
+        _ghost.Valid = Placement.CanPlace(GM, Pending, center);
         _ghost.QueueRedraw();
     }
 
@@ -401,7 +407,7 @@ public partial class CommandSystem : GameSystem
 
         // Цель разбираем один раз на всех: она общая, а вид приказа у каждого свой
         var victim = EnemyUnderCursor();
-        var occupant = GM.Entities.Get(GM.Grid.OwnerOf(Const.WorldToCell(_cursor)));
+        var occupant = GM.Obstacles.At(_cursor) as Node;
         var damagedUnit = DamagedUnitUnderCursor();
 
         foreach (var actor in recipients)
@@ -496,27 +502,21 @@ public partial class CommandSystem : GameSystem
             ? node
             : null;
 
-    private Vector2I OriginUnderCursor(UnitDefinition def)
-    {
-        var cell = Const.WorldToCell(_cursor);
-        return cell - new Vector2I(def.Width / 2, def.Height / 2);
-    }
-
     private void PlaceBlueprint()
     {
         var def = Pending;
-        var origin = OriginUnderCursor(def);
+        var center = Placement.Snap(GM, def, _cursor);
 
-        if (!GM.Grid.CanPlace(origin, def) || BlueprintScene == null)
+        if (!Placement.CanPlace(GM, def, center) || BlueprintScene == null)
             return;
 
-        var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, origin);
+        var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, center);
 
         GM.Events.Append(new BlueprintPlaced
         {
             EntityId = blueprint.Id,
             DefinitionId = def.Id,
-            Cell = origin,
+            Pos = center,
         });
 
         // Строить пойдут выделенные — как и с любым другим приказом. Без выделения
@@ -533,12 +533,23 @@ public partial class CommandSystem : GameSystem
 
     private void EnsureNodes()
     {
-        // Порядок призрака и оверлея внутри слоя эффектов задан тем, кто заведён первым:
-        // призрак постройки должен лежать под отрисовкой приказов
+        // Порядок внутри слоя задан тем, кто заведён первым. Растр навигации идёт первым
+        // и потому лежит ниже всей служебной графики, но ВЫШЕ мира: под постройками
+        // он был бы не виден именно там, где важнее всего — на них самих. Полупрозрачность
+        // делает это допустимым, а отладка без вида на растеризованное здание бесполезна
+        if (_navigation == null || !IsInstanceValid(_navigation))
+            _navigation = GM.Playground.Add(WorldLayer.Effects, new NavGridOverlay());
+
         if (_ghost == null || !IsInstanceValid(_ghost))
             _ghost = GM.Playground.Add(WorldLayer.Effects, new PlacementGhost());
 
         if (_overlay == null || !IsInstanceValid(_overlay))
             _overlay = GM.Playground.Add(WorldLayer.Effects, new OrderOverlay());
+
+        if (_paths == null || !IsInstanceValid(_paths))
+            _paths = GM.Playground.Add(WorldLayer.Effects, new PathOverlay());
+
+        if (_boids == null || !IsInstanceValid(_boids))
+            _boids = GM.Playground.Add(WorldLayer.Effects, new BoidsOverlay());
     }
 }

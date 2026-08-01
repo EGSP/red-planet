@@ -8,11 +8,15 @@ using Godot;
 /// Каркас — тоже цель для врага, и прочности у него доля от готовой постройки
 /// (Const.BlueprintHealthFactor): стройка под обстрелом должна быть рискованной затеей.
 /// </summary>
-public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
+public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObstacle
 {
     public UnitDefinition Definition { get; private set; }
-    public Vector2I Cell { get; private set; }
     public float Progress { get; private set; }
+
+    /// <summary>Место занято уже каркасом: перекрыть начатую стройку нельзя.</summary>
+    public Rect2 Footprint => Definition == null
+        ? new Rect2(GlobalPosition, Vector2.Zero)
+        : Placement.Footprint(Definition, GlobalPosition);
 
     public Health Health { get; private set; }
 
@@ -36,12 +40,11 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
     /// <summary>Каркас уже смотрит по сторонам — правда, вполглаза.</summary>
     public float VisionRadius => Definition != null ? Definition.VisionRadiusPx * 0.5f : 0f;
 
-    public void Init(int id, UnitDefinition def, Vector2I cell)
+    public void Init(int id, UnitDefinition def, Vector2 center)
     {
         Id = id;
         Definition = def;
-        Cell = cell;
-        Position = Const.AreaCenter(cell, def.Size);
+        Position = center;
         Health = new Health(def.FrameHealth * Const.BlueprintHealthFactor);
     }
 
@@ -94,30 +97,31 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
     private void Complete()
     {
         var gm = GameManager.I;
+        var center = GlobalPosition;
 
-        // Клетки держал каркас — отпускаем немедленно: готовая постройка займёт их
-        // заново в этом же кадре, а юнит не занимает вовсе. Ждать конца кадра нельзя —
-        // иначе SpawnBuilding увидел бы ещё занятые клетки. Отложенное снятие по
-        // подписке Spawner идемпотентно: Free с id каркаса не тронет клетки новой постройки.
-        gm.Grid.Free(Cell, Definition);
+        // Место держал каркас — отпускаем немедленно: готовая постройка займёт его
+        // заново в этом же кадре, а юнит не занимает вовсе. Ждать конца кадра нельзя,
+        // иначе SpawnBuilding увидел бы место ещё занятым. Отложенное снятие по подписке
+        // Spawner идемпотентно: повторный вызов Remove ничего не делает.
+        gm.Obstacles.Remove(this);
 
-        // Постройка встаёт на освобождённые клетки заново, юнит уходит с них и ходит.
+        // Постройка встаёт на освобождённое место заново, юнит уходит с него и ходит.
         // Род берём у класса, а не у формы: форма есть и у каркаса юнита
         int spawnedId = Definition.IsStructure
-            ? gm.Spawn.SpawnBuilding(Definition, Cell).Id
-            : gm.Spawn.SpawnUnit(Definition, Const.AreaCenter(Cell, Definition.Size)).Id;
+            ? gm.Spawn.SpawnBuilding(Definition, center).Id
+            : gm.Spawn.SpawnUnit(Definition, center).Id;
 
         gm.Events.Append(new ConstructionCompleted
         {
             EntityId = spawnedId,
             DefinitionId = Definition.Id,
-            Cell = Cell,
+            Pos = center,
         });
 
         Retire();
     }
 
-    /// <summary>Каркас разбит: вывести из игры. Сетку и EntityStore снимает Spawner.</summary>
+    /// <summary>Каркас разбит: вывести из игры. Место и EntityStore освобождает Spawner.</summary>
     public void OnDestroyed() => Retire();
 
     /// <summary>Выводим узел из игры до удаления, чтобы по нему не прошёл ещё один кадр.</summary>

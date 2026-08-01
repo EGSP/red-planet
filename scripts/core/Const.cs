@@ -11,6 +11,42 @@ public static class Const
     /// <summary>Мир — квадрат 41x41 клетка с центром в (0,0).</summary>
     public const int WorldRadiusCells = 20;
 
+    // ── Навигация и постановка ────────────────────────────────────────────────────
+    //
+    // Клетка застройки правилом постановки быть перестала: здания ставятся в произвольной
+    // точке и лишь не пересекаются друг с другом. Сетка осталась двум потребителям —
+    // растру навигации, где она вчетверо мельче, и раскладке визуальных ориентиров.
+
+    /// <summary>Ячейка навигационного растра. Четыре на клетку застройки.</summary>
+    public const int NavCell = 16;
+
+    /// <summary>Клеток застройки по стороне мира.</summary>
+    public const int WorldCells = WorldRadiusCells * 2 + 1;
+
+    /// <summary>Сторона мира в пикселях.</summary>
+    public const int WorldSizePx = WorldCells * Unit;
+
+    /// <summary>Ячеек навигации по стороне мира.</summary>
+    public const int NavWidth = WorldSizePx / NavCell;
+
+    /// <summary>
+    /// Обязательный зазор между строениями, пикселей. Един для всех.
+    ///
+    /// Назначение — гигиена растра, а не гарантия прохода. При нулевом зазоре два
+    /// соприкасающихся здания дают щели в одну ячейку и диагональные протечки: путь по ним
+    /// находится, а пройти по ним нельзя. Зазор в ячейку этот класс ситуаций убирает.
+    ///
+    /// Проход зазор НЕ гарантирует: он меньше диаметра юнита, поэтому плотный ряд зданий
+    /// образует стену. Так и задумано — проходимость решает поле клиренса, а возможность
+    /// огородиться остаётся за игроком.
+    /// </summary>
+    public const float BuildMarginPx = NavCell;
+
+    /// <summary>Левый верхний угол мира в пикселях.</summary>
+    public static Vector2 WorldMin => new(-WorldRadiusCells * Unit, -WorldRadiusCells * Unit);
+
+    public static Rect2 WorldBounds => new(WorldMin, new Vector2(WorldSizePx, WorldSizePx));
+
     // ── Точки метала ──────────────────────────────────────────────────────────────
     //
     // Расставляются один раз при создании мира и больше не меняются: точка вечна,
@@ -77,15 +113,11 @@ public static class Const
     /// </summary>
     public static Vector2 LandingPoint => CellCenter(Vector2I.Zero);
 
-    public static Vector2 CellCorner(Vector2I cell) => new(cell.X * Unit, cell.Y * Unit);
-
+    /// <summary>
+    /// Центр клетки застройки. Правилом постановки клетка быть перестала, но осталась
+    /// удобной единицей раскладки: по ней выравниваются точки метала и стартовые позиции,
+    /// и мир от этого читается как упорядоченный, а не как рассыпанная горсть.
+    /// </summary>
     public static Vector2 CellCenter(Vector2I cell) =>
         new(cell.X * Unit + Unit * 0.5f, cell.Y * Unit + Unit * 0.5f);
-
-    public static Vector2I WorldToCell(Vector2 pos) =>
-        new(Mathf.FloorToInt(pos.X / Unit), Mathf.FloorToInt(pos.Y / Unit));
-
-    /// <summary>Центр области, занимаемой постройкой размера size с началом в origin.</summary>
-    public static Vector2 AreaCenter(Vector2I origin, Vector2I size) =>
-        CellCorner(origin) + new Vector2(size.X, size.Y) * Unit * 0.5f;
 }
