@@ -71,15 +71,6 @@ public struct ConstructionCompleted : IEventRecord
     public Vector2I Cell;
 }
 
-/// <summary>Месторождение выработано, слот руды освободился.</summary>
-[TransientEvent]
-public struct OreDepleted : IEventRecord
-{
-    public int SequenceId { get; set; }
-    public int EntityId;
-    public Vector2I Cell;
-}
-
 /// <summary>
 /// Снаряд задел цель. Прочность правит не снаряд, а DamageSystem по этому документу:
 /// так у каждого попадания есть след, и никто не удаляет ноду посреди чужого обхода.

@@ -155,12 +155,8 @@ public static class ContentCompiler
                     kinds |= WorkKinds.Build;
                     break;
 
-                case "mine":
-                    kinds |= WorkKinds.Mine;
-                    break;
-
                 default:
-                    document.Error($"неизвестный вид работы «{name}». Допустимые: build, mine");
+                    document.Error($"неизвестный вид работы «{name}». Допустимые: build");
                     break;
             }
 
@@ -299,6 +295,7 @@ public static class ContentCompiler
             Conversion = basis.Conversion,
             Rows = basis.Rows,
             FacingDegrees = basis.FacingDegrees,
+            RequiresMetalSpot = basis.RequiresMetalSpot,
             MaxHealth = basis.MaxHealth,
             Radius = basis.Radius,
             VisionRange = basis.VisionRange,
@@ -339,6 +336,8 @@ public static class ContentCompiler
         {
             definition.Rows = footprint.Strings("rows");
             definition.FacingDegrees = footprint.Float("facing_degrees", basis.FacingDegrees);
+            definition.RequiresMetalSpot =
+                footprint.Bool("requires_metal_spot", basis.RequiresMetalSpot);
 
             if (definition.Rows.Length == 0)
                 footprint.Error("форма пуста: задайте rows или уберите секцию");
@@ -551,9 +550,6 @@ public static class ContentCompiler
                 case WorkToolDefinition work:
                     if (work.CanBuild)
                         definition.BuildTool ??= work;
-
-                    if (work.CanMine)
-                        definition.MineTool ??= work;
 
                     break;
             }

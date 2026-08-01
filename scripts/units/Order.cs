@@ -3,7 +3,6 @@ using Godot;
 public enum OrderKind
 {
     Move,
-    Mine,
     Build,
     Attack,
     Repair,
@@ -110,7 +109,6 @@ public sealed class Order
     public static string Name(OrderKind kind) => kind switch
     {
         OrderKind.Move => "идти",
-        OrderKind.Mine => "копать",
         OrderKind.Build => "строить",
         OrderKind.Attack => "атаковать",
         OrderKind.Repair => "чинить",
@@ -122,7 +120,6 @@ public sealed class Order
     public static Color Tint(OrderKind kind) => kind switch
     {
         OrderKind.Move => new Color(0.85f, 0.9f, 1f),
-        OrderKind.Mine => new Color(1f, 0.7f, 0.35f),
         OrderKind.Build => new Color(0.55f, 0.85f, 1f),
         OrderKind.Attack => new Color(1f, 0.4f, 0.35f),
         OrderKind.Repair => new Color(0.6f, 1f, 0.7f),

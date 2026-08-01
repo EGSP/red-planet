@@ -8,8 +8,8 @@ color   = [0.85, 0.3, 0.25]
 tools   = ["brute_cannon"]
 
 [body]
-max_health = 180.0
-radius     = 0.55
+max_health = 120.0
+radius     = 0.45
 
 [movement]
 speed      = 1.3

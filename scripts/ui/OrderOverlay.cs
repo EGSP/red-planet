@@ -107,15 +107,6 @@ public partial class OrderOverlay : Node2D
                     false, 2f);
                 break;
 
-            case OrderKind.Mine:
-                DrawPolyline(new[]
-                {
-                    at + new Vector2(0f, -size), at + new Vector2(size, 0f),
-                    at + new Vector2(0f, size), at + new Vector2(-size, 0f),
-                    at + new Vector2(0f, -size),
-                }, tint, 2f);
-                break;
-
             default:
                 DrawArc(at, size, 0f, Mathf.Tau, 20, tint, 1.5f);
                 break;

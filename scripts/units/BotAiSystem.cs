@@ -2,7 +2,7 @@ using Godot;
 
 /// <summary>
 /// Мозг союзных ботов: сами себе ставят задачи приказами. Порядок предпочтений один и тот же:
-/// копать (кто умеет) → строить → чинить в пределах обзора → идти за коммандером.
+/// строить → чинить в пределах обзора → идти за коммандером.
 ///
 /// Сопровождение — не работа, а отсутствие работы: бот с таким приказом считается свободным
 /// и бросит его, как только появится что-то полезное. Поэтому боты не толкутся на месте
@@ -35,16 +35,6 @@ public partial class BotAiSystem : GameSystem
     {
         var from = bot.GlobalPosition;
         var def = bot.Definition;
-
-        if (def.CanMine)
-        {
-            var ore = GM.Index.All<OreDeposit>()
-                .Where(deposit => deposit.NeedsWork)
-                .Nearest(from, deposit => deposit.GlobalPosition);
-
-            if (ore != null)
-                return Order.Work(OrderKind.Mine, ore);
-        }
 
         if (def.CanBuild)
         {

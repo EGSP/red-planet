@@ -132,20 +132,24 @@ public sealed class Spawner
         return projectile;
     }
 
-    /// <summary>Месторождение занимает свою клетку, пока не выработано.</summary>
-    public OreDeposit SpawnOre(PackedScene scene, Vector2I cell)
+    /// <summary>
+    /// Точка метала. Клетку она не занимает, а помечает: занятость означает «здесь кто-то
+    /// стоит», а на точке ещё предстоит построить экстрактор. Кого на неё пускать,
+    /// решает WorldGrid.CanPlace.
+    /// </summary>
+    public MetalSpot SpawnMetalSpot(Vector2I cell)
     {
-        var deposit = scene.Instantiate<OreDeposit>();
+        var spot = new MetalSpot();
 
         int id = _gm.NewId();
-        deposit.Init(id, cell);
+        spot.Init(id, cell);
 
-        _gm.Playground.Add(WorldLayer.Deposits, deposit);
-        _gm.Grid.Occupy(cell, id);
-        _gm.Entities.Add(id, deposit);
-        _gm.Index.Add(deposit);
+        _gm.Playground.Add(WorldLayer.Deposits, spot);
+        _gm.Grid.MarkMetal(cell);
+        _gm.Entities.Add(id, spot);
+        _gm.Index.Add(spot);
 
-        return deposit;
+        return spot;
     }
 
     /// <summary>

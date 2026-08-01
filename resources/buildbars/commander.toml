@@ -19,6 +19,7 @@ cells = [
 	# y = 0 — нижний ряд: базовое
 	{ x = 0, y = 0, build = "generator" },
 	{ x = 1, y = 0, build = "factory" },
+	{ x = 2, y = 0, build = "extractor" },
 ]
 
 [[sections]]
@@ -35,5 +36,4 @@ title = "Юниты"
 order = 2
 cells = [
 	{ x = 0, y = 0, build = "fabricator" },
-	{ x = 1, y = 0, build = "digger" },
 ]

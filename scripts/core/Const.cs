@@ -11,14 +11,29 @@ public static class Const
     /// <summary>Мир — квадрат 41x41 клетка с центром в (0,0).</summary>
     public const int WorldRadiusCells = 20;
 
-    // Месторождения появляются в кольце вокруг базы
-    public const int OreRingMin = 6;
-    public const int OreRingMax = 14;
-    public const int OreSlots = 12;
-    public const float OreRespawnDelay = 8f;
+    // ── Точки метала ──────────────────────────────────────────────────────────────
+    //
+    // Расставляются один раз при создании мира и больше не меняются: точка вечна,
+    // и восстанавливать в ней нечего. Все точки одинаковы — богатство числом не задаётся.
+    // Разницу между ними создаёт только положение: до дальней дольше идти и труднее
+    // её прикрыть, и этого достаточно, чтобы выбор «куда расширяться» имел цену.
 
-    /// <summary>Сколько метала можно выкопать из одного месторождения.</summary>
-    public const float OreDepositAmount = 200f;
+    /// <summary>Сколько точек метала на карте.</summary>
+    public const int MetalSpotCount = 14;
+
+    /// <summary>Дальше этого радиуса точек нет: у самой границы мира их не разместить.</summary>
+    public const int MetalSpotFieldRadius = 15;
+
+    /// <summary>Ближе этого радиуса точек нет — иначе они встанут прямо в базу.</summary>
+    public const int MetalSpotBaseClearance = 4;
+
+    /// <summary>Минимальное расстояние между точками, клеток: иначе они собираются в кучу.</summary>
+    public const int MetalSpotSpacing = 3;
+
+    // Сколько точек гарантированно лежит рядом со стартом. Без гарантии случайная раскладка
+    // иногда оставляет начало вовсе без метала, и партия проиграна ещё до первого решения
+    public const int MetalSpotStartCount = 3;
+    public const int MetalSpotStartRadius = 8;
 
     /// <summary>На каком расстоянии бот держится от коммандера, когда идёт следом.</summary>
     public static float FollowDistancePx => Unit * 3f;
@@ -29,7 +44,8 @@ public static class Const
     public const float BaseMetalCapacity = 150f;
     public const float BaseEnergyCapacity = 150f;
 
-    // Враги приходят из-за кольца руды: дальние месторождения лежат на линии их подхода
+    // Враги приходят из-за поля точек: дальние точки лежат на линии их подхода,
+    // и экстрактор на краю карты обороняется тяжелее, чем экстрактор у базы
     public const float EnemyRingFactor = 1.3f;
 
     // Держим давление таким, чтобы коммандер в одиночку успевал отстреливаться:
@@ -48,7 +64,7 @@ public static class Const
     public const float BlueprintHealthFactor = 0.4f;
 
     /// <summary>Радиус окружности появления врагов в пикселях.</summary>
-    public static float EnemySpawnRadiusPx => OreRingMax * EnemyRingFactor * Unit;
+    public static float EnemySpawnRadiusPx => MetalSpotFieldRadius * EnemyRingFactor * Unit;
 
     public static Vector2 CellCorner(Vector2I cell) => new(cell.X * Unit, cell.Y * Unit);
 

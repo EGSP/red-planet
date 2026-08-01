@@ -8,7 +8,7 @@
 [ext_resource type="Script" path="res://scripts/units/BotAiSystem.cs" id="6_botai"]
 [ext_resource type="Script" path="res://scripts/units/OrderSystem.cs" id="7_order"]
 [ext_resource type="Script" path="res://scripts/economy/EconomySystem.cs" id="8_economy"]
-[ext_resource type="Script" path="res://scripts/world/OreSpawnSystem.cs" id="9_orespawn"]
+[ext_resource type="Script" path="res://scripts/world/MetalSpotSystem.cs" id="9_metalspots"]
 [ext_resource type="Script" path="res://scripts/buildings/AssemblerSystem.cs" id="10_assembler"]
 [ext_resource type="Script" path="res://scripts/enemies/EnemySpawnSystem.cs" id="11_enemyspawn"]
 [ext_resource type="Script" path="res://scripts/enemies/EnemyAiSystem.cs" id="12_enemyai"]
@@ -24,7 +24,6 @@
 [ext_resource type="Script" path="res://scripts/ui/CommandPanel.cs" id="26_commands"]
 [ext_resource type="Script" path="res://scripts/ui/ControlGroupBar.cs" id="27_groups"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
-[ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="20_ore"]
 
 [node name="Session" type="Node2D"]
 script = ExtResource("1_session")
@@ -62,9 +61,8 @@ StepOrder = 20
 script = ExtResource("8_economy")
 StepOrder = 30
 
-[node name="OreSpawnSystem" type="Node" parent="Systems"]
-script = ExtResource("9_orespawn")
-OreScene = ExtResource("20_ore")
+[node name="MetalSpotSystem" type="Node" parent="Systems"]
+script = ExtResource("9_metalspots")
 StepOrder = 50
 
 [node name="EnemySpawnSystem" type="Node" parent="Systems"]

@@ -18,6 +18,7 @@ cells = [
 	{ x = 1, y = 1, build = "assembler" },
 	{ x = 0, y = 0, build = "generator" },
 	{ x = 1, y = 0, build = "factory" },
+	{ x = 2, y = 0, build = "extractor" },
 ]
 
 [[sections]]

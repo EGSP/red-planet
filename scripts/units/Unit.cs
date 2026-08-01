@@ -46,7 +46,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     /// <summary>
     /// Что юниту можно приказать. Выводится из того, чем он снабжён, а не задаётся списком:
-    /// нет бура — нет приказа копать, нет ствола — нет атаки. Поэтому набор не может
+    /// нет руки — нет приказа строить, нет ствола — нет атаки. Поэтому набор не может
     /// разойтись с тем, что юнит на самом деле умеет.
     /// </summary>
     public virtual OrderSet AllowedOrders => Definition == null
@@ -55,7 +55,6 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             .With(OrderKind.Move, Definition.IsMobile)
             .With(OrderKind.Follow, Definition.IsMobile)
             .With(OrderKind.Attack, Definition.Weapon != null)
-            .With(OrderKind.Mine, Definition.CanMine)
             .With(OrderKind.Build, Definition.CanBuild)
             .With(OrderKind.Repair, Definition.CanRepair);
 
@@ -185,14 +184,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         }
     }
 
-    /// <summary>Движение, копка и стройка: дойти, а дойдя — подключиться к узлу работы.</summary>
+    /// <summary>Движение и стройка: дойти, а дойдя — подключиться к узлу работы.</summary>
     private void RunWork(Order order, double dt)
     {
         var target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
 
-        // Инструмент под занятие: копать — буром, строить — рукой. Дальность принадлежит
-        // ему, а не юниту: раньше одно число служило обоим, хотя тянутся они на разное
-        var tool = Definition.ToolFor(order.Kind);
+        // Дальность принадлежит инструменту, а не юниту: раньше одно число служило всем
+        // занятиям сразу, хотя тянутся они на разное
+        var tool = Definition.BuildTool;
 
         float reach = order.Kind == OrderKind.Move
             ? Const.Unit * 0.2f

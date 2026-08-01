@@ -167,7 +167,7 @@ public partial class CommandSystem : GameSystem
 
         var origin = OriginUnderCursor(Pending);
         _ghost.Origin = origin;
-        _ghost.Valid = GM.Grid.IsFree(origin, Pending);
+        _ghost.Valid = GM.Grid.CanPlace(origin, Pending);
         _ghost.QueueRedraw();
     }
 
@@ -395,7 +395,7 @@ public partial class CommandSystem : GameSystem
 
     /// <summary>
     /// Один приказ по цели под курсором. Порядок разбора — от самого определённого
-    /// к самому общему: враг, каркас, руда, повреждённое, и только потом голая земля.
+    /// к самому общему: враг, каркас, повреждённое, и только потом голая земля.
     /// </summary>
     private void Send(IOrderable actor, Node2D victim, Node occupant, Node2D damagedUnit,
         bool queue)
@@ -405,10 +405,6 @@ public partial class CommandSystem : GameSystem
 
         if (occupant is Blueprint { NeedsWork: true } blueprint
             && GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint))
-            return;
-
-        if (occupant is OreDeposit { NeedsWork: true } ore
-            && GiveWork(actor, queue, Order.Work(OrderKind.Mine, ore), ore))
             return;
 
         // Ремонт: сначала постройка на клетке, потом юнит под курсором
@@ -496,7 +492,7 @@ public partial class CommandSystem : GameSystem
         var def = Pending;
         var origin = OriginUnderCursor(def);
 
-        if (!GM.Grid.IsFree(origin, def) || BlueprintScene == null)
+        if (!GM.Grid.CanPlace(origin, def) || BlueprintScene == null)
             return;
 
         var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, origin);

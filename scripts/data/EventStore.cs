@@ -69,7 +69,7 @@ public sealed class EventStream<T> : IEventStream where T : IEventRecord
 /// КАК ПРИМЕНЯТЬ.
 /// - Опубликовать факт:            store.Append(new ResourceSpent { ... });
 /// - Подписаться (в проекции):     store.Stream&lt;ResourceSpent&gt;().Appended += OnSpent;
-/// - Разобрать пачкой за кадр:     store.Stream&lt;OreDepleted&gt;().Records
+/// - Разобрать пачкой за кадр:     store.Stream&lt;DamageDealt&gt;().Records
 ///
 /// Индексируется самим типом документа, поэтому регистрировать потоки заранее не нужно:
 /// первый, кто спросил или дописал, тот и создал поток.
