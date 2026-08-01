@@ -51,7 +51,7 @@ public partial class WeaponSystem : GameSystem
     }
 
     /// <summary>Своя цель в приоритете: враг бьёт того, к кому шёл, а не первого встречного.</summary>
-    private IDamageable AcquireTarget(IArmed armed, WeaponDef weapon)
+    private IDamageable AcquireTarget(IArmed armed, WeaponDefinition weapon)
     {
         var own = armed.FireTarget;
         if (own != null && Targeting.IsValid(own as GodotObject))
@@ -60,7 +60,7 @@ public partial class WeaponSystem : GameSystem
         return Targeting.Nearest(armed.GlobalPosition, armed.Faction.Opposite(), weapon.RangePx);
     }
 
-    private void Fire(IArmed armed, WeaponDef weapon, Vector2 from, Vector2 to)
+    private void Fire(IArmed armed, WeaponDefinition weapon, Vector2 from, Vector2 to)
     {
         // Целимся в цель, а разброс уводит ствол: конус решает, стрелять ли вообще,
         // а разброс — насколько кучно ложится очередь

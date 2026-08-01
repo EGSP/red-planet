@@ -1,7 +1,7 @@
 using Godot;
 
 /// <summary>
-/// Состояние ствола: всё, что меняется у оружия по ходу боя. Сам справочник (WeaponDef)
+/// Состояние ствола: всё, что меняется у оружия по ходу боя. Сам справочник (WeaponDefinition)
 /// неизменяем и общий на всех носителей, поэтому перезарядку держим здесь — рядом с носителем.
 /// </summary>
 public sealed class WeaponState
@@ -37,7 +37,7 @@ public interface IArmed
     Faction Faction { get; }
 
     /// <summary>Справочник оружия. Null — сущность безоружна, система её пропустит.</summary>
-    WeaponDef Weapon { get; }
+    WeaponDefinition Weapon { get; }
 
     WeaponState Gun { get; }
 

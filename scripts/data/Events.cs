@@ -39,7 +39,7 @@ public struct BlueprintPlaced : IEventRecord
     public int EntityId;
 
     /// <summary>Ключ справочника, а не ссылка на ресурс — так запись переживёт сохранение.</summary>
-    public string DefId;
+    public string DefinitionId;
 
     public Vector2I Cell;
 }
@@ -57,7 +57,7 @@ public struct BuildingSpawned : IEventRecord
 {
     public int SequenceId { get; set; }
     public int EntityId;
-    public string DefId;
+    public string DefinitionId;
     public Vector2I Cell;
 }
 
@@ -67,7 +67,7 @@ public struct ConstructionCompleted : IEventRecord
 {
     public int SequenceId { get; set; }
     public int EntityId;
-    public string DefId;
+    public string DefinitionId;
     public Vector2I Cell;
 }
 
@@ -102,7 +102,7 @@ public struct EntityDestroyed : IEventRecord
     public int EntityId;
 
     /// <summary>Ключ справочника: по нему хранилище узнаёт, сколько ёмкости ушло вместе с постройкой.</summary>
-    public string DefId;
+    public string DefinitionId;
 
     public Faction Side;
     public Vector2 Pos;
@@ -116,7 +116,7 @@ public struct EnemySpawned : IEventRecord
     public int EntityId;
 
     /// <summary>Ключ справочника, а не ссылка на ресурс — так запись переживёт сохранение.</summary>
-    public string DefId;
+    public string DefinitionId;
 
     public Vector2 Pos;
 }

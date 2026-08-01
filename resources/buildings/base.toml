@@ -1,0 +1,22 @@
+# База: стоит с первой секунды, но цена у неё есть — из цены выводится курс ремонта.
+
+id    = "base"
+name  = "База"
+class = "structure"
+color = [0.35, 0.4, 0.55]
+tags  = ["structure", "economy", "important"]
+
+[footprint]
+rows           = ["###", "###", "###"]
+facing_degrees = -90.0
+
+[body]
+max_health   = 4000.0
+vision_range = 6.0
+
+[storage]
+metal  = 500.0
+energy = 400.0
+
+[assembly]
+cost_metal = 800.0

@@ -64,7 +64,7 @@ public interface IDamageable
     /// Ключ справочника — уходит в документ о гибели. По нему хранилище понимает,
     /// сколько ёмкости пропало вместе с постройкой. Пусто там, где справочника нет.
     /// </summary>
-    string DefId { get; }
+    string DefinitionId { get; }
 
     Health Health { get; }
 

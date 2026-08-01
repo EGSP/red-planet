@@ -1,0 +1,23 @@
+# Реактор: вторая ступень. Впятеро дороже генератора и даёт впятеро больше.
+
+id    = "generator_t2"
+name  = "Реактор"
+class = "structure"
+color = [1.0, 0.62, 0.2]
+tags  = ["structure", "economy", "advanced", "important"]
+
+[footprint]
+rows = ["##", "##"]
+
+[body]
+max_health   = 350.0
+vision_range = 6.0
+
+[production]
+energy = 250.0
+
+[storage]
+energy = 200.0
+
+[assembly]
+cost_metal = 300.0

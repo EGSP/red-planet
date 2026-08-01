@@ -1,0 +1,14 @@
+# Тяжёлое орудие толстяка: редко, больно и недалеко.
+
+id   = "brute_cannon"
+name = "Тяжёлое орудие"
+kind = "weapon"
+
+range             = 4.0
+damage            = 25.0
+fire_interval     = 1.6
+projectile_speed  = 8.0
+spread_degrees    = 2.0
+aim_cone_degrees  = 6.0
+projectile_radius = 0.14
+projectile_color  = [1.0, 0.55, 0.25]

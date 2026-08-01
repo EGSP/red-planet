@@ -1,0 +1,14 @@
+# Скорострел: очередь с большим разбросом. Опасен вблизи и толпой.
+
+id   = "skirmisher_smg"
+name = "Скорострел"
+kind = "weapon"
+
+range             = 5.5
+damage            = 3.5
+fire_interval     = 0.15
+projectile_speed  = 20.0
+spread_degrees    = 7.0
+aim_cone_degrees  = 16.0
+projectile_radius = 0.05
+projectile_color  = [1.0, 0.95, 0.5]

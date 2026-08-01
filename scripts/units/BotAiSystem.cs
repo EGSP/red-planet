@@ -17,7 +17,7 @@ public partial class BotAiSystem : GameSystem
     {
         foreach (var bot in GM.Index.All<Bot>())
         {
-            if (bot.Def == null || !IsFree(bot))
+            if (bot.Definition == null || !IsFree(bot))
                 continue;
 
             var order = ChooseJob(bot);
@@ -34,7 +34,7 @@ public partial class BotAiSystem : GameSystem
     private Order ChooseJob(Bot bot)
     {
         var from = bot.GlobalPosition;
-        var def = bot.Def;
+        var def = bot.Definition;
 
         if (def.CanMine)
         {

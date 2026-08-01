@@ -1,0 +1,14 @@
+# Орудие турели: скорострельное и дальнобойное — турель за это и платят металом.
+
+id   = "turret_gun"
+name = "Орудие турели"
+kind = "weapon"
+
+range             = 7.0
+damage            = 10.0
+fire_interval     = 0.5
+projectile_speed  = 18.0
+spread_degrees    = 2.0
+aim_cone_degrees  = 8.0
+projectile_radius = 0.07
+projectile_color  = [0.6, 0.9, 1.0]

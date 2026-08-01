@@ -13,14 +13,19 @@ using Godot;
 /// </summary>
 public partial class Assembler : Building
 {
-    /// <summary>Мощность инструмента — она же строит, она же чинит, отдельной ремонтной нет.</summary>
-    [Export] public float BuildPower = 8f;
+    /// <summary>
+    /// Манипулятор башни. Такой же инструмент, как рука фабрикатора, и лежит в том же
+    /// списке определения: раньше его мощность и прожорливость были полями сцены,
+    /// то есть настраивались не там, где у всех остальных.
+    /// </summary>
+    private WorkToolDefinition Arm => Definition?.BuildTool;
 
-    /// <summary>Сколько энергии в секунду съедает единица мощности инструмента.</summary>
-    [Export] public float EnergyPerPower = 4f;
+    private float BuildPower => Arm?.Power ?? 0f;
+
+    private float EnergyPerPower => Arm?.EnergyPerPower ?? 0f;
 
     /// <summary>Берётся ли башня чинить юнитов, а не только постройки.</summary>
-    [Export] public bool RepairUnits = true;
+    private bool RepairUnits => Definition?.CanRepairUnits ?? false;
 
     private WorkNode _attached;
     private Node2D _repairTarget;
@@ -40,7 +45,9 @@ public partial class Assembler : Building
     /// </summary>
     public Order ChooseJob()
     {
-        float reach = VisionRadius;
+        // Докуда башня дотягивается работой — дело манипулятора, а не обзора.
+        // Раньше это был один и тот же радиус просто потому, что другого числа не было
+        float reach = Arm?.RangePx ?? VisionRadius;
 
         var blueprint = Jobs.NearestBlueprint(GlobalPosition, reach);
         if (blueprint != null)
@@ -121,7 +128,7 @@ public partial class Assembler : Building
     {
         base._Draw();
 
-        if (Def == null)
+        if (Definition == null)
             return;
 
         float half = Const.Unit * 0.5f;

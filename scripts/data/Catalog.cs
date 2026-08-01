@@ -1,117 +1,77 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 /// <summary>
-/// Справочники — библиотека определений, загруженных из .tres: чем является «завод»,
-/// сколько стоит, какой он формы, какой сценой представлен в мире.
+/// Справочники — библиотека определений, собранных из .toml: чем является «завод»,
+/// сколько стоит, какой он формы, чем снабжён.
 ///
 /// Только чтение и только шаблоны. Каталог ничего не создаёт и не знает о живых сущностях:
 /// создание вынесено в Spawner, живые экземпляры лежат в EntityStore.
 ///
-/// Зачем нужен вообще, если ресурс можно загрузить напрямую:
-/// 1. Документы носят строковый DefId, а не ссылку на ресурс (см. BlueprintPlaced) —
-///    так они переживают сохранение. Кто-то должен превращать этот id обратно в определение,
-///    иначе запись «поставлен factory в клетке (5,2)» нечем восстановить.
+/// Зачем нужен вообще, если файл можно прочитать напрямую:
+/// 1. Документы носят строковый DefinitionId, а не ссылку — так они переживают сохранение.
+///    Кто-то должен превращать этот идентификатор обратно в определение, иначе запись
+///    «поставлен factory в клетке (5,2)» нечем восстановить.
 /// 2. Нужно уметь ПЕРЕЧИСЛИТЬ доступное роли — из этого HUD строит панель построек.
-///    Добавил новый .tres — кнопка появилась сама, кода не трогая.
-/// 3. Загрузка один раз на старте, а не при каждом обращении, и пути к ресурсам
+///    Добавил новый .toml — кнопка появилась сама, кода не трогая.
+/// 3. Чтение один раз на старте, а не при каждом обращении, и пути к файлам
 ///    не размазаны по коду.
+///
+/// Разбор, наследование и проверка связности вынесены в ContentCompiler: каталог держит
+/// собранное, а не собирает.
 /// </summary>
 public sealed class Catalog
 {
-    private readonly Dictionary<string, BuildableDef> _buildables = new();
-    private readonly Dictionary<string, UnitDef> _units = new();
-    private readonly Dictionary<string, EnemyDef> _enemies = new();
+    private readonly Dictionary<string, UnitDefinition> _units = new();
+    private readonly Dictionary<string, ToolDefinition> _tools = new();
+    private readonly Dictionary<string, BuildbarDefinition> _buildbars = new();
+
+    /// <summary>Реестр тегов. Заполняется сборкой из resources/content/tags.toml.</summary>
+    public TagRegistry Tags { get; } = new();
+
+    /// <summary>Все определения сущностей: боты, постройки, противник.</summary>
+    public IReadOnlyCollection<UnitDefinition> Units => _units.Values;
+
+    public IReadOnlyCollection<BuildbarDefinition> Buildbars => _buildbars.Values;
+
+    /// <summary>Всё, что можно построить: у чего задана секция сборки.</summary>
+    public IEnumerable<UnitDefinition> Buildables =>
+        _units.Values.Where(definition => definition.Assembly != null);
+
+    /// <summary>Виды противника: из них система спавна и набирает поток по весам.</summary>
+    public IEnumerable<UnitDefinition> Enemies =>
+        _units.Values.Where(definition => definition.Class == UnitClass.Enemy);
+
+    public UnitDefinition Unit(string id) =>
+        id != null && _units.TryGetValue(id, out var definition) ? definition : null;
+
+    public ToolDefinition Tool(string id) =>
+        id != null && _tools.TryGetValue(id, out var tool) ? tool : null;
+
+    public BuildbarDefinition Buildbar(string id) =>
+        id != null && _buildbars.TryGetValue(id, out var bar) ? bar : null;
+
+    public bool AddUnit(UnitDefinition definition) => _units.TryAdd(definition.Id, definition);
+
+    public bool AddTool(ToolDefinition tool) => _tools.TryAdd(tool.Id, tool);
+
+    public bool AddBuildbar(BuildbarDefinition bar) => _buildbars.TryAdd(bar.Id, bar);
 
     /// <summary>
-    /// Строительные панели. Лежат не ресурсами, а файлами .toml, поэтому и грузятся
-    /// отдельно от прочего — см. BuildbarLoader о том, почему выбран текстовый формат.
+    /// Собрать содержимое с диска. Ошибки не глотаются: сборка с ошибками означает,
+    /// что часть определений отсутствует, и увидеть это надо в первую секунду запуска,
+    /// а не через полчаса игры на кнопке, которая ничего не ставит.
     /// </summary>
-    private readonly Dictionary<string, BuildbarDef> _buildbars = new();
-
-    public IReadOnlyCollection<BuildableDef> Buildables => _buildables.Values;
-
-    /// <summary>Виды врагов: из них система спавна и набирает поток по весам.</summary>
-    public IReadOnlyCollection<EnemyDef> Enemies => _enemies.Values;
-
-    public BuildableDef Buildable(string id) =>
-        _buildables.TryGetValue(id, out var def) ? def : null;
-
-    public UnitDef Unit(string id) => _units.TryGetValue(id, out var def) ? def : null;
-
-    public EnemyDef Enemy(string id) => _enemies.TryGetValue(id, out var def) ? def : null;
-
-    public BuildbarDef Buildbar(string id) =>
-        id != null && _buildbars.TryGetValue(id, out var def) ? def : null;
-
-
     public void LoadAll()
     {
-        foreach (var def in Load<BuildableDef>("res://resources/buildables/"))
-            _buildables[def.Id] = def;
+        int errors = ContentCompiler.Compile(this);
 
-        foreach (var def in Load<UnitDef>("res://resources/units/"))
-            _units[def.Id] = def;
+        GD.Print($"[Каталог] определений: {_units.Count}, инструментов: {_tools.Count}, " +
+                 $"панелей: {_buildbars.Count}, тегов: {Tags.Names.Count}");
 
-        foreach (var def in Load<EnemyDef>("res://resources/enemies/"))
-            _enemies[def.Id] = def;
-
-        foreach (var def in LoadBuildbars("res://resources/buildbars/"))
-            _buildbars[def.Id] = def;
-
-        GD.Print($"[Catalog] построек: {_buildables.Count}, юнитов: {_units.Count}, " +
-                 $"врагов: {_enemies.Count}, панелей: {_buildbars.Count}");
-    }
-
-    /// <summary>
-    /// Панели лежат текстом, а не ресурсом, поэтому идут мимо ResourceLoader.
-    /// Соседний buildbar.md в выборку не попадает — берём только .toml.
-    /// </summary>
-    private static List<BuildbarDef> LoadBuildbars(string dir)
-    {
-        var result = new List<BuildbarDef>();
-        using var access = DirAccess.Open(dir);
-
-        if (access == null)
-        {
-            GD.PushWarning($"[Catalog] каталог не найден: {dir}");
-            return result;
-        }
-
-        foreach (var file in access.GetFiles())
-        {
-            if (!file.EndsWith(".toml"))
-                continue;
-
-            if (BuildbarLoader.Load(dir + file) is { } bar)
-                result.Add(bar);
-        }
-
-        return result;
-    }
-
-    private static List<T> Load<T>(string dir) where T : Resource
-    {
-        var result = new List<T>();
-        using var access = DirAccess.Open(dir);
-
-        if (access == null)
-        {
-            GD.PushWarning($"[Catalog] каталог не найден: {dir}");
-            return result;
-        }
-
-        foreach (var file in access.GetFiles())
-        {
-            string name = file.EndsWith(".remap") ? file[..^6] : file;
-            if (!name.EndsWith(".tres"))
-                continue;
-
-            var res = ResourceLoader.Load<T>(dir + name);
-            if (res != null)
-                result.Add(res);
-        }
-
-        return result;
+        if (errors > 0)
+            GD.PushError($"[Каталог] содержимое собрано с ошибками: {errors}. " +
+                         "Перечисленные выше определения в игру не попали");
     }
 }

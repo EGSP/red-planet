@@ -17,7 +17,6 @@ public partial class Session : Node2D
 {
     [Export] public GameManager Systems;
     [Export] public Playground Playground;
-    [Export] public PackedScene CommanderScene;
 
     /// <summary>
     /// Отладочная выдача на старте: с ней можно смотреть поздние стадии, не выкапывая
@@ -86,10 +85,10 @@ public partial class Session : Node2D
 
     private void SpawnBase()
     {
-        var def = Systems.Catalog.Buildable("base");
+        var def = Systems.Catalog.Unit("base");
         if (def == null)
         {
-            GD.PushWarning("[Session] нет справочника постройки base");
+            GD.PushWarning("[Session] нет определения постройки base");
             return;
         }
 
@@ -101,13 +100,14 @@ public partial class Session : Node2D
 
     private void SpawnCommander()
     {
-        if (CommanderScene == null)
+        var def = Systems.Catalog.Unit("commander");
+        if (def == null)
         {
-            GD.PushWarning("[Session] не задана сцена коммандера");
+            GD.PushWarning("[Session] нет определения коммандера");
             return;
         }
 
-        var commander = Systems.Spawn.SpawnUnit(CommanderScene, Const.CellCenter(new Vector2I(3, 0)));
+        var commander = Systems.Spawn.SpawnUnit(def, Const.CellCenter(new Vector2I(3, 0)));
 
         // Коммандер сразу лежит в первой группе. Приказы уходят только выделенным,
         // поэтому без этого начало игры требовало бы сперва найти его глазами

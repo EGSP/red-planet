@@ -23,11 +23,11 @@ public partial class Commander : Unit
     {
         base._Draw();
 
-        if (Def == null)
+        if (Definition == null)
             return;
 
         // Радиус инструмента
-        DrawArc(Vector2.Zero, Def.ToolRange * Const.Unit, 0f, Mathf.Tau, 48,
+        DrawArc(Vector2.Zero, Definition.WorkRangePx, 0f, Mathf.Tau, 48,
             new Color(0.5f, 0.8f, 1f, 0.18f), 1.5f);
 
         DrawDamageTaken();
@@ -42,7 +42,7 @@ public partial class Commander : Unit
         if (Health.TotalTaken < 1f)
             return;
 
-        var offset = new Vector2(0f, Def.RadiusPx + 20f).Rotated(-Rotation);
+        var offset = new Vector2(0f, Definition.RadiusPx + 20f).Rotated(-Rotation);
         DrawSetTransform(offset, -Rotation, Vector2.One);
 
         DrawString(ThemeDB.FallbackFont, new Vector2(-28f, 0f),

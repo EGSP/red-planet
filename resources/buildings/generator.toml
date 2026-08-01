@@ -1,0 +1,23 @@
+# Генератор: первая ступень выработки.
+
+id    = "generator"
+name  = "Генератор"
+class = "structure"
+color = [0.95, 0.85, 0.35]
+tags  = ["structure", "economy", "basic"]
+
+[footprint]
+rows = ["#"]
+
+[body]
+max_health   = 200.0
+vision_range = 6.0
+
+[production]
+energy = 45.0
+
+[storage]
+energy = 50.0
+
+[assembly]
+cost_metal = 60.0

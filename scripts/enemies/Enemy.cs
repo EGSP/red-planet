@@ -11,7 +11,7 @@ using Godot;
 /// </summary>
 public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrderable
 {
-    public EnemyDef Def { get; private set; }
+    public UnitDefinition Definition { get; private set; }
 
     public int Id { get; set; }
 
@@ -27,7 +27,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
 
     public int EntityId => Id;
 
-    public string DisplayName => Def?.DisplayName ?? "враг";
+    public string DisplayName => Definition?.DisplayName ?? "враг";
 
     /// <summary>
     /// Враг ходит и стреляет — этим его набор и исчерпывается. Ни копать, ни строить он
@@ -36,21 +36,21 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
     public OrderSet AllowedOrders =>
         OrderSet.None.With(OrderKind.Move).With(OrderKind.Attack);
 
-    /// <summary>Враг ходит, значит бот. В рамку игрока он всё равно не попадает.</summary>
-    public SelectionGroup SelectionGroup => SelectionGroup.Bots;
+    /// <summary>Род при выделении берётся из определения, как у всех: он выведен из тегов.</summary>
+    public SelectionGroup SelectionGroup => Definition?.SelectionGroup ?? SelectionGroup.Bots;
 
-    public string DefId => Def?.Id ?? "";
+    public string DefinitionId => Definition?.Id ?? "";
 
     public Faction Faction => Faction.Hostile;
 
     /// <summary>Ось «вперёд» подвижной сущности — это поворот самой ноды.</summary>
     public float Facing => Rotation;
 
-    public float HitRadius => Def?.RadiusPx ?? Const.Unit * 0.4f;
+    public float HitRadius => Definition?.RadiusPx ?? Const.Unit * 0.4f;
 
-    public float VisionRadius => Def?.VisionRadiusPx ?? 0f;
+    public float VisionRadius => Definition?.VisionRadiusPx ?? 0f;
 
-    public WeaponDef Weapon => Def?.Weapon;
+    public WeaponDefinition Weapon => Definition?.Weapon;
 
     public bool CanFire => true;
 
@@ -72,10 +72,10 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
 
     public void NoteTargeted() => _retarget = Const.EnemyRetargetDelay;
 
-    public void Init(int id, EnemyDef def, Vector2 position)
+    public void Init(int id, UnitDefinition def, Vector2 position)
     {
         Id = id;
-        Def = def;
+        Definition = def;
         Position = position;
         Health = new Health(def.MaxHealth);
 
@@ -83,14 +83,14 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
         Rotation = Heading.AngleTo(position, Vector2.Zero);
     }
 
-    public override void _Ready() => Health ??= new Health(Def?.MaxHealth ?? 100f);
+    public override void _Ready() => Health ??= new Health(Definition?.MaxHealth ?? 100f);
 
     public override void _Process(double delta) => QueueRedraw();
 
     public void AimAt(Vector2 point, double dt)
     {
         float desired = Heading.AngleTo(GlobalPosition, point);
-        float step = (Def?.TurnSpeed ?? Mathf.Pi) * (float)dt;
+        float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
         Rotation = Heading.TurnToward(Rotation, desired, step);
     }
 
@@ -99,7 +99,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
 
     public void RunOrder(Order order, double dt)
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
         if (order.Kind == OrderKind.Move)
@@ -111,7 +111,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
             }
 
             AimAt(order.Pos, dt);
-            GlobalPosition = GlobalPosition.MoveToward(order.Pos, Def.SpeedPx * (float)dt);
+            GlobalPosition = GlobalPosition.MoveToward(order.Pos, Definition.SpeedPx * (float)dt);
             return;
         }
 
@@ -126,7 +126,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
             AimAt(to, dt);
 
         if (GlobalPosition.DistanceTo(to) > StopDistance(target))
-            GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
+            GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
     }
 
     /// <summary>
@@ -136,7 +136,7 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
     private float StopDistance(IDamageable target)
     {
         float reach = Weapon != null
-            ? Weapon.RangePx * Def.StandoffFraction
+            ? Weapon.RangePx * Definition.StandoffFraction
             : Const.Unit;
 
         return reach + target.HitRadius;
@@ -155,15 +155,15 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
 
     public override void _Draw()
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
-        float radius = Def.RadiusPx;
+        float radius = Definition.RadiusPx;
 
-        VisionGizmo.Draw(this, VisionRadius, Def.Color);
-        WeaponGizmo.Draw(this, Weapon, Def.Color);
+        VisionGizmo.Draw(this, VisionRadius, Definition.Color);
+        WeaponGizmo.Draw(this, Weapon, Definition.Color);
 
-        DrawCircle(Vector2.Zero, radius, Def.Color);
+        DrawCircle(Vector2.Zero, radius, Definition.Color);
         DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 24, new Color(0f, 0f, 0f, 0.45f), 2f);
 
         // Ось «вперёд»: нода уже повёрнута, поэтому в локальных координатах это просто вправо

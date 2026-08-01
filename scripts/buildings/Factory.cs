@@ -11,10 +11,10 @@ using Godot;
 public partial class Factory : Building
 {
     /// <summary>Сколько энергии потребляет в секунду при полной производительности.</summary>
-    [Export] public float EnergyDrain = 80f;
+    private float EnergyDrain => Definition?.Conversion?.EnergyDrain ?? 0f;
 
     /// <summary>Сколько метала выдаёт в секунду при полной производительности.</summary>
-    [Export] public float MetalOutput = 4f;
+    private float MetalOutput => Definition?.Conversion?.MetalOutput ?? 0f;
 
     public bool Working { get; private set; }
 
@@ -57,10 +57,10 @@ public partial class Factory : Building
     {
         base._Draw();
 
-        if (Def == null)
+        if (Definition == null)
             return;
 
-        var size = new Vector2(Def.Size.X, Def.Size.Y) * Const.Unit;
+        var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
 
         var color = Working ? new Color(0.4f, 1f, 0.5f) : new Color(0.5f, 0.5f, 0.5f);

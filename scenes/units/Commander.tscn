@@ -1,9 +1,0 @@
-[gd_scene load_steps=3 format=3]
-
-[ext_resource type="Script" path="res://scripts/units/Commander.cs" id="1_script"]
-[ext_resource type="Resource" path="res://resources/units/commander.tres" id="2_def"]
-
-[node name="Commander" type="Node2D"]
-z_index = 5
-script = ExtResource("1_script")
-Def = ExtResource("2_def")

@@ -46,7 +46,7 @@ public sealed class BuildbarLayout
     /// а при равном главенстве идентификатором, чтобы разметка не зависела от того,
     /// в каком порядке игрок щёлкал по юнитам.
     /// </summary>
-    public static BuildbarLayout Merge(IEnumerable<BuildbarDef> bars)
+    public static BuildbarLayout Merge(IEnumerable<BuildbarDefinition> bars)
     {
         var layout = new BuildbarLayout();
         var sections = new List<Section>();

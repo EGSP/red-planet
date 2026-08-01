@@ -67,10 +67,10 @@ public sealed class StockpileProjection : Projection
         };
 
         events.Stream<BuildingSpawned>().Appended += record =>
-            ChangeCapacity(record.DefId, +1f);
+            ChangeCapacity(record.DefinitionId, +1f);
 
         events.Stream<EntityDestroyed>().Appended += record =>
-            ChangeCapacity(record.DefId, -1f);
+            ChangeCapacity(record.DefinitionId, -1f);
     }
 
     /// <summary>Постройка появилась или пропала — потолок меняется дельтой, без пересчёта.</summary>
@@ -79,7 +79,7 @@ public sealed class StockpileProjection : Projection
         if (string.IsNullOrEmpty(defId))
             return;
 
-        var def = GameManager.I.Catalog.Buildable(defId);
+        var def = GameManager.I.Catalog.Unit(defId);
         if (def == null || (def.MetalStorage <= 0f && def.EnergyStorage <= 0f))
             return;
 

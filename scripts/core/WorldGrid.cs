@@ -16,7 +16,7 @@ public sealed class WorldGrid
     public int OwnerOf(Vector2I cell) => _occupied.TryGetValue(cell, out var id) ? id : 0;
 
     /// <summary>Свободно ли место под матрицу постройки с началом в origin.</summary>
-    public bool IsFree(Vector2I origin, BuildableDef def)
+    public bool IsFree(Vector2I origin, UnitDefinition def)
     {
         foreach (var cell in def.Cells(origin))
             if (!InBounds(cell) || IsOccupied(cell))
@@ -24,13 +24,13 @@ public sealed class WorldGrid
         return true;
     }
 
-    public void Occupy(Vector2I origin, BuildableDef def, int entityId)
+    public void Occupy(Vector2I origin, UnitDefinition def, int entityId)
     {
         foreach (var cell in def.Cells(origin))
             _occupied[cell] = entityId;
     }
 
-    public void Free(Vector2I origin, BuildableDef def)
+    public void Free(Vector2I origin, UnitDefinition def)
     {
         foreach (var cell in def.Cells(origin))
             _occupied.Remove(cell);

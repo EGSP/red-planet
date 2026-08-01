@@ -1,0 +1,22 @@
+# Турель: постройка со стволом. С места не сходит, но башню крутит — поэтому
+# turn_speed у неё есть, а speed нулевая.
+
+id    = "turret"
+name  = "Турель"
+class = "turret"
+color = [0.6, 0.85, 1.0]
+tags  = ["structure", "defense", "basic"]
+tools = ["turret_gun"]
+
+[footprint]
+rows = ["#"]
+
+[body]
+max_health   = 250.0
+vision_range = 6.0
+
+[movement]
+turn_speed = 90.0
+
+[assembly]
+cost_metal = 80.0

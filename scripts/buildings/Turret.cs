@@ -12,16 +12,19 @@ using Godot;
 /// </summary>
 public partial class Turret : Building, IArmed
 {
-    [Export] public WeaponDef Gun;
-
-    /// <summary>Скорость вращения башни в градусах в секунду.</summary>
-    [Export] public float TurnSpeedDegrees = 90f;
-
     public WeaponState GunState { get; } = new();
 
     WeaponState IArmed.Gun => GunState;
 
-    public WeaponDef Weapon => Gun;
+    /// <summary>
+    /// Ствол турели — такой же инструмент, как строительная рука фабрикатора, и лежит
+    /// в том же списке. Раньше он был отдельным полем сцены, из-за чего турель настраивалась
+    /// не там, где все остальные, а её числа не попадали в справочник вовсе.
+    /// </summary>
+    public WeaponDefinition Weapon => Definition?.Weapon;
+
+    /// <summary>Скорость вращения башни в градусах в секунду.</summary>
+    public float TurnSpeedDegrees => Definition?.TurnSpeedDegrees ?? 90f;
 
     /// <summary>Башня крутится — ось берём у самой ноды, а не из справочника.</summary>
     public override float Facing => Rotation;
@@ -40,7 +43,7 @@ public partial class Turret : Building, IArmed
 
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 
-    public override void Init(int id, BuildableDef def, Vector2I cell)
+    public override void Init(int id, UnitDefinition def, Vector2I cell)
     {
         base.Init(id, def, cell);
 
@@ -61,12 +64,12 @@ public partial class Turret : Building, IArmed
 
     public override void _Draw()
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
         float half = Const.Unit * 0.5f;
 
-        WeaponGizmo.Draw(this, Weapon, Def.Color);
+        WeaponGizmo.Draw(this, Weapon, Definition.Color);
 
         // Башня — треугольник носом вперёд по оси. Рисуется в координатах самой ноды,
         // до всякой правки трансформа: нос обязан совпадать с конусом прицеливания
@@ -79,13 +82,13 @@ public partial class Turret : Building, IArmed
             new Vector2(-back, back * 0.85f),
         };
 
-        DrawColoredPolygon(body, Def.Color);
+        DrawColoredPolygon(body, Definition.Color);
         DrawPolyline(new[] { body[0], body[1], body[2], body[0] },
             new Color(0f, 0f, 0f, 0.45f), 2f);
 
         // Основание стоит по клетке и не крутится — компенсируем поворот башни
         DrawSetTransform(Vector2.Zero, -Rotation, Vector2.One);
-        DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(Def.Color, 0.3f));
+        DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(Definition.Color, 0.3f));
         DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(0f, 0f, 0f, 0.35f),
             false, 2f);
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);

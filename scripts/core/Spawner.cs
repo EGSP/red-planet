@@ -34,11 +34,9 @@ public sealed class Spawner
     public Spawner(GameManager gm) => _gm = gm;
 
     /// <summary>Готовая постройка: занимает клетки по матрице справочника.</summary>
-    public Building SpawnBuilding(BuildableDef def, Vector2I cell)
+    public Building SpawnBuilding(UnitDefinition def, Vector2I cell)
     {
-        var building = def.Scene != null
-            ? def.Scene.Instantiate<Building>()
-            : new Building();
+        var building = NewBuilding(def.Class);
 
         int id = _gm.NewId();
         building.Init(id, def, cell);
@@ -53,7 +51,7 @@ public sealed class Spawner
         _gm.Events.Append(new BuildingSpawned
         {
             EntityId = id,
-            DefId = def.Id,
+            DefinitionId = def.Id,
             Cell = cell,
         });
 
@@ -61,12 +59,13 @@ public sealed class Spawner
     }
 
     /// <summary>Юнит ходит по миру и клеток не занимает.</summary>
-    public Unit SpawnUnit(PackedScene scene, Vector2 position)
+    public Unit SpawnUnit(UnitDefinition def, Vector2 position)
     {
-        var unit = scene.Instantiate<Unit>();
+        var unit = NewUnit(def.Class);
 
         int id = _gm.NewId();
         unit.Id = id;
+        unit.Definition = def;
         unit.Position = position;
 
         _gm.Playground.Add(WorldLayer.Actors, unit);
@@ -77,7 +76,7 @@ public sealed class Spawner
     }
 
     /// <summary>Каркас занимает клетки на время стройки — место нельзя перекрыть.</summary>
-    public Blueprint SpawnBlueprint(PackedScene scene, BuildableDef def, Vector2I cell)
+    public Blueprint SpawnBlueprint(PackedScene scene, UnitDefinition def, Vector2I cell)
     {
         var blueprint = scene.Instantiate<Blueprint>();
 
@@ -93,9 +92,9 @@ public sealed class Spawner
     }
 
     /// <summary>Враг ходит по миру и клеток не занимает — как и юнит игрока.</summary>
-    public Enemy SpawnEnemy(PackedScene scene, EnemyDef def, Vector2 position)
+    public Enemy SpawnEnemy(UnitDefinition def, Vector2 position)
     {
-        var enemy = scene.Instantiate<Enemy>();
+        var enemy = new Enemy();
 
         int id = _gm.NewId();
         enemy.Init(id, def, position);
@@ -111,7 +110,7 @@ public sealed class Spawner
     /// Снаряд. Единственная сущность мира без EntityId: их за бой тысячи, они живут доли
     /// секунды, и ссылаться на снаряд из документа некому — попадание носит id стрелка и цели.
     /// </summary>
-    public Projectile SpawnProjectile(WeaponDef weapon, IArmed shooter, Vector2 from, float angle)
+    public Projectile SpawnProjectile(WeaponDefinition weapon, IArmed shooter, Vector2 from, float angle)
     {
         var direction = Heading.Forward(angle);
 
@@ -148,4 +147,26 @@ public sealed class Spawner
 
         return deposit;
     }
+
+    /// <summary>
+    /// Какой класс поднять под определение. Раньше ответ лежал в отдельной сцене на каждый
+    /// вид: файл на восемь строк, где всё содержание — имя скрипта и ссылка на справочник.
+    /// Теперь вид называет свой класс сам, а перечень проверяется компилятором.
+    ///
+    /// Сцена вернётся тогда, когда сущности понадобится собственное дерево нод —
+    /// спрайты, кости, области. Пока такой сущности нет, и заводить её впрок незачем.
+    /// </summary>
+    private static Building NewBuilding(UnitClass kind) => kind switch
+    {
+        UnitClass.Factory => new Factory(),
+        UnitClass.Turret => new Turret(),
+        UnitClass.Assembler => new Assembler(),
+        _ => new Building(),
+    };
+
+    private static Unit NewUnit(UnitClass kind) => kind switch
+    {
+        UnitClass.Commander => new Commander(),
+        _ => new Bot(),
+    };
 }

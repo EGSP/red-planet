@@ -16,7 +16,7 @@ public static class WeaponGizmo
     /// <summary>Доля дальности, на которую тянутся рёбра конуса: на всю длину они превращают экран в паутину.</summary>
     private const float ConeLength = 0.35f;
 
-    public static void Draw(CanvasItem canvas, WeaponDef weapon, Color tint, float facingOffset = 0f)
+    public static void Draw(CanvasItem canvas, WeaponDefinition weapon, Color tint, float facingOffset = 0f)
     {
         if (weapon == null)
             return;

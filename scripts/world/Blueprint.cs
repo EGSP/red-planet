@@ -10,39 +10,39 @@ using Godot;
 /// </summary>
 public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
 {
-    public BuildableDef Def { get; private set; }
+    public UnitDefinition Definition { get; private set; }
     public Vector2I Cell { get; private set; }
     public float Progress { get; private set; }
 
     public Health Health { get; private set; }
 
-    public override bool NeedsWork => Def != null && Progress < Def.TotalWork;
+    public override bool NeedsWork => Definition != null && Progress < Definition.TotalWork;
 
-    public float Ratio => Def == null || Def.TotalWork <= 0f ? 0f : Progress / Def.TotalWork;
+    public float Ratio => Definition == null || Definition.TotalWork <= 0f ? 0f : Progress / Definition.TotalWork;
 
     public int EntityId => Id;
 
     /// <summary>Каркас ёмкости хранилища ещё не даёт, поэтому в документ о гибели ключ не идёт.</summary>
-    public string DefId => "";
+    public string DefinitionId => "";
 
     public Faction Faction => Faction.Player;
 
-    public float Facing => Def != null ? Mathf.DegToRad(Def.FacingDegrees) : 0f;
+    public float Facing => Definition != null ? Mathf.DegToRad(Definition.FacingDegrees) : 0f;
 
-    public float HitRadius => Def != null
-        ? Mathf.Max(Def.Width, Def.Height) * Const.Unit * 0.5f
+    public float HitRadius => Definition != null
+        ? Mathf.Max(Definition.Width, Definition.Height) * Const.Unit * 0.5f
         : Const.Unit * 0.5f;
 
     /// <summary>Каркас уже смотрит по сторонам — правда, вполглаза.</summary>
-    public float VisionRadius => Def != null ? Def.VisionRadiusPx * 0.5f : 0f;
+    public float VisionRadius => Definition != null ? Definition.VisionRadiusPx * 0.5f : 0f;
 
-    public void Init(int id, BuildableDef def, Vector2I cell)
+    public void Init(int id, UnitDefinition def, Vector2I cell)
     {
         Id = id;
-        Def = def;
+        Definition = def;
         Cell = cell;
         Position = Const.AreaCenter(cell, def.Size);
-        Health = new Health(def.MaxHealth * Const.BlueprintHealthFactor);
+        Health = new Health(def.FrameHealth * Const.BlueprintHealthFactor);
     }
 
     public override void _Ready() => Health ??= new Health(100f * Const.BlueprintHealthFactor);
@@ -56,7 +56,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
     /// </summary>
     public override void Declare(EconomyLedger ledger)
     {
-        if (Def == null || TotalPower <= 0f || !NeedsWork)
+        if (Definition == null || TotalPower <= 0f || !NeedsWork)
             return;
 
         ledger.Request(ResourceKind.Metal, TotalPower);
@@ -65,7 +65,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
 
     public override void Run(double dt, EconomyRates rates)
     {
-        if (Def == null || TotalPower <= 0f || !NeedsWork)
+        if (Definition == null || TotalPower <= 0f || !NeedsWork)
             return;
 
         var events = GameManager.I.Events;
@@ -79,7 +79,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
 
         // А сама работа и метал идут по худшей из долей: цена постройки не меняется,
         // меняется только скорость
-        float done = Mathf.Min((float)(TotalPower * dt) * rates.Work, Def.TotalWork - Progress);
+        float done = Mathf.Min((float)(TotalPower * dt) * rates.Work, Definition.TotalWork - Progress);
         if (done <= 0f)
             return;
 
@@ -87,7 +87,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
 
         Progress += done;
 
-        if (Progress >= Def.TotalWork - 0.001f)
+        if (Progress >= Definition.TotalWork - 0.001f)
             Complete();
     }
 
@@ -97,16 +97,18 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
 
         // Клетки держал каркас — отпускаем: готовая постройка займёт их заново,
         // а юнит не занимает вовсе, он ходит.
-        gm.Grid.Free(Cell, Def);
+        gm.Grid.Free(Cell, Definition);
 
-        int spawnedId = Def.IsUnit
-            ? gm.Spawn.SpawnUnit(Def.Scene, Const.AreaCenter(Cell, Def.Size)).Id
-            : gm.Spawn.SpawnBuilding(Def, Cell).Id;
+        // Постройка встаёт на освобождённые клетки заново, юнит уходит с них и ходит.
+        // Род берём у класса, а не у формы: форма есть и у каркаса юнита
+        int spawnedId = Definition.IsStructure
+            ? gm.Spawn.SpawnBuilding(Definition, Cell).Id
+            : gm.Spawn.SpawnUnit(Definition, Const.AreaCenter(Cell, Definition.Size)).Id;
 
         gm.Events.Append(new ConstructionCompleted
         {
             EntityId = spawnedId,
-            DefId = Def.Id,
+            DefinitionId = Definition.Id,
             Cell = Cell,
         });
 
@@ -119,8 +121,8 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
     {
         var gm = GameManager.I;
 
-        if (Def != null)
-            gm.Grid.Free(Cell, Def);
+        if (Definition != null)
+            gm.Grid.Free(Cell, Definition);
 
         gm.Entities.Remove(Id);
         Retire();
@@ -137,25 +139,25 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
 
     public override void _Draw()
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
-        var size = new Vector2(Def.Size.X, Def.Size.Y) * Const.Unit;
+        var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
 
-        VisionGizmo.Draw(this, VisionRadius, Def.Color);
+        VisionGizmo.Draw(this, VisionRadius, Definition.Color);
 
-        DrawRect(rect, new Color(Def.Color, 0.15f));
+        DrawRect(rect, new Color(Definition.Color, 0.15f));
 
         // Заполнение снизу вверх по прогрессу
         float filled = size.Y * Ratio;
         DrawRect(new Rect2(rect.Position.X, rect.End.Y - filled, size.X, filled),
-            new Color(Def.Color, 0.55f));
+            new Color(Definition.Color, 0.55f));
 
         DrawRect(rect, new Color(1f, 1f, 1f, 0.7f), false, 2f);
 
         var font = ThemeDB.FallbackFont;
-        string label = $"{Def.DisplayName} {Mathf.FloorToInt(Ratio * 100f)}%";
+        string label = $"{Definition.DisplayName} {Mathf.FloorToInt(Ratio * 100f)}%";
         DrawString(font, new Vector2(rect.Position.X, rect.Position.Y - 6f), label,
             HorizontalAlignment.Left, -1, 13, Colors.White);
 

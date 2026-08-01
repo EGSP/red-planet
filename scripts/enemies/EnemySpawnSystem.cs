@@ -12,8 +12,6 @@ using Godot;
 /// </summary>
 public partial class EnemySpawnSystem : GameSystem
 {
-    [Export] public PackedScene EnemyScene;
-
     /// <summary>Сколько врагов держим на карте одновременно.</summary>
     [Export] public int Population = Const.EnemyPopulation;
 
@@ -34,7 +32,7 @@ public partial class EnemySpawnSystem : GameSystem
 
     public override void Step(double dt)
     {
-        if (GM.Playground == null || EnemyScene == null)
+        if (GM.Playground == null)
             return;
 
         if (GM.Index.All<Enemy>().Count >= Population)
@@ -57,20 +55,20 @@ public partial class EnemySpawnSystem : GameSystem
         float angle = _rng.RandfRange(0f, Mathf.Tau);
         var position = Heading.Forward(angle) * Const.EnemySpawnRadiusPx;
 
-        var enemy = GM.Spawn.SpawnEnemy(EnemyScene, def, position);
+        var enemy = GM.Spawn.SpawnEnemy(def, position);
 
         GM.Events.Append(new EnemySpawned
         {
             EntityId = enemy.Id,
-            DefId = def.Id,
+            DefinitionId = def.Id,
             Pos = position,
         });
     }
 
     /// <summary>Вид выбирается по весам справочника: вес — доля вида в потоке.</summary>
-    private EnemyDef PickType()
+    private UnitDefinition PickType()
     {
-        var types = new List<EnemyDef>();
+        var types = new List<UnitDefinition>();
         float total = 0f;
 
         foreach (var def in GM.Catalog.Enemies)

@@ -76,16 +76,16 @@ public partial class Buildbar : CanvasLayer
     /// поэтому отдельной проверки «есть ли среди выделенных строитель» не нужно:
     /// пустой список и есть ответ.
     /// </summary>
-    private static List<BuildbarDef> BarsOf(CommandSystem command)
+    private static List<BuildbarDefinition> BarsOf(CommandSystem command)
     {
-        var bars = new List<BuildbarDef>();
+        var bars = new List<BuildbarDefinition>();
 
         if (command == null)
             return bars;
 
         foreach (var actor in command.Selected)
         {
-            if (actor is not Unit { Def: { CanBuild: true } def })
+            if (actor is not Unit { Definition: { CanBuild: true } def })
                 continue;
 
             var bar = Content.Catalog.Buildbar(def.Buildbar);
@@ -97,7 +97,7 @@ public partial class Buildbar : CanvasLayer
         return bars;
     }
 
-    private void Rebuild(List<BuildbarDef> bars)
+    private void Rebuild(List<BuildbarDefinition> bars)
     {
         foreach (var child in _sections.GetChildren())
             child.QueueFree();
@@ -159,7 +159,7 @@ public partial class Buildbar : CanvasLayer
                 continue;
             }
 
-            var def = Content.Catalog.Buildable(buildableId);
+            var def = Content.Catalog.Unit(buildableId);
 
             if (def == null)
             {
@@ -174,7 +174,7 @@ public partial class Buildbar : CanvasLayer
         return line;
     }
 
-    private static Button BuildButton(BuildableDef def)
+    private static Button BuildButton(UnitDefinition def)
     {
         // Энергоцены у постройки нет: энергию тратит инструмент строителя, а не здание
         var button = new Button
@@ -182,7 +182,7 @@ public partial class Buildbar : CanvasLayer
             Text = def.DisplayName,
             CustomMinimumSize = CellSize,
             ClipText = true,
-            TooltipText = $"{def.DisplayName}\n{def.CostMetal:0} метала",
+            TooltipText = $"{def.DisplayName}\n{def.TotalWork:0} метала",
         };
 
         button.AddThemeFontSizeOverride("font_size", 12);

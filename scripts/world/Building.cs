@@ -11,7 +11,7 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     IOrderable
 {
     public int Id { get; private set; }
-    public BuildableDef Def { get; private set; }
+    public UnitDefinition Definition { get; private set; }
     public Vector2I Cell { get; private set; }
 
     public Health Health { get; private set; }
@@ -22,9 +22,9 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
 
     public int EntityId => Id;
 
-    public string DefId => Def?.Id ?? "";
+    public string DefinitionId => Definition?.Id ?? "";
 
-    public string DisplayName => Def?.DisplayName ?? "постройка";
+    public string DisplayName => Definition?.DisplayName ?? "постройка";
 
     /// <summary>
     /// Обычной постройке приказать нечего: склад, стена и генератор стоят и работают сами.
@@ -45,22 +45,22 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     /// Ось «вперёд». У обычной постройки она из справочника и не меняется;
     /// турель переопределяет её на поворот собственной ноды — башня крутится.
     /// </summary>
-    public virtual float Facing => Def != null ? Mathf.DegToRad(Def.FacingDegrees) : 0f;
+    public virtual float Facing => Definition != null ? Mathf.DegToRad(Definition.FacingDegrees) : 0f;
 
     /// <summary>Радиус попадания — по описанной окружности: по краю стены снаряд тоже попадает.</summary>
-    public float HitRadius => Def != null
-        ? Mathf.Max(Def.Width, Def.Height) * Const.Unit * 0.5f
+    public float HitRadius => Definition != null
+        ? Mathf.Max(Definition.Width, Definition.Height) * Const.Unit * 0.5f
         : Const.Unit * 0.5f;
 
-    public float VisionRadius => Def?.VisionRadiusPx ?? 0f;
+    public float VisionRadius => Definition?.VisionRadiusPx ?? 0f;
 
     /// <summary>Курс ремонта берётся прямо из справочника: прочность, делённая на цену.</summary>
-    public float HealthPerMetal => Def?.HealthPerMetal ?? 0f;
+    public float HealthPerMetal => Definition?.HealthPerMetal ?? 0f;
 
-    public virtual void Init(int id, BuildableDef def, Vector2I cell)
+    public virtual void Init(int id, UnitDefinition def, Vector2I cell)
     {
         Id = id;
-        Def = def;
+        Definition = def;
         Cell = cell;
         Position = Const.AreaCenter(cell, def.Size);
         Health = new Health(def.MaxHealth);
@@ -74,19 +74,19 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     /// </summary>
     public virtual void Declare(EconomyLedger ledger)
     {
-        if (Def != null)
-            ledger.AddIncome(ResourceKind.Energy, Def.EnergyProduction);
+        if (Definition != null)
+            ledger.AddIncome(ResourceKind.Energy, Definition.EnergyProduction);
     }
 
     public virtual void Run(double dt, EconomyRates rates)
     {
-        if (Def == null || Def.EnergyProduction <= 0f)
+        if (Definition == null || Definition.EnergyProduction <= 0f)
             return;
 
         GameManager.I.Events.Append(new ResourceGained
         {
             Kind = ResourceKind.Energy,
-            Amount = Def.EnergyProduction * (float)dt,
+            Amount = Definition.EnergyProduction * (float)dt,
         });
     }
 
@@ -95,8 +95,8 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     {
         var gm = GameManager.I;
 
-        if (Def != null)
-            gm.Grid.Free(Cell, Def);
+        if (Definition != null)
+            gm.Grid.Free(Cell, Definition);
 
         gm.Entities.Remove(Id);
 
@@ -109,15 +109,15 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
 
     public override void _Draw()
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
-        var size = new Vector2(Def.Size.X, Def.Size.Y) * Const.Unit;
+        var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
 
-        VisionGizmo.Draw(this, VisionRadius, Def.Color);
+        VisionGizmo.Draw(this, VisionRadius, Definition.Color);
 
-        DrawRect(rect, Def.Color);
+        DrawRect(rect, Definition.Color);
         DrawRect(rect, new Color(0f, 0f, 0f, 0.35f), false, 2f);
 
         // Ось «вперёд» — короткая насечка от центра к краю
@@ -126,7 +126,7 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         DrawLine(forward * span * 0.2f, forward * span * 0.45f, new Color(1f, 1f, 1f, 0.5f), 3f);
 
         DrawString(ThemeDB.FallbackFont, new Vector2(rect.Position.X + 4f, rect.Position.Y + 16f),
-            Def.DisplayName, HorizontalAlignment.Left, -1, 12, Colors.Black);
+            Definition.DisplayName, HorizontalAlignment.Left, -1, 12, Colors.Black);
 
         HealthBar.Draw(this, Health, size.X * 0.9f, rect.Position.Y - 8f);
     }

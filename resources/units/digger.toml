@@ -1,0 +1,26 @@
+# Копатель: только бур. Строить не умеет, и приказ строить до него не дойдёт —
+# набор доступных приказов выводится из инструментов.
+
+id    = "digger"
+name  = "Копатель"
+class = "bot"
+color = [1.0, 0.7, 0.3]
+tags  = ["mobile", "miner"]
+tools = ["digger_drill"]
+
+# Клетка под каркас на время сборки — собранный копатель с неё уходит
+[footprint]
+rows = ["#"]
+
+[body]
+max_health   = 90.0
+radius       = 0.32
+vision_range = 8.0
+
+[movement]
+speed      = 4.0
+turn_speed = 240.0
+
+[assembly]
+cost_metal   = 50.0
+frame_health = 120.0

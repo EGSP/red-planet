@@ -14,7 +14,11 @@ using Godot;
 public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
     IRepairable, IOrderable
 {
-    [Export] public UnitDef Def;
+    /// <summary>
+    /// Определение. Ставит Spawner при создании: узел юнита собственной сцены не имеет,
+    /// и связать его со справочником больше некому.
+    /// </summary>
+    public UnitDefinition Definition;
 
     public int Id { get; set; }
 
@@ -34,61 +38,47 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public int EntityId => Id;
 
-    /// <summary>Юнита нет в справочнике построек, ёмкости хранилища он не даёт.</summary>
-    public string DefId => "";
+    public string DefinitionId => Definition?.Id ?? "";
 
-    public string DisplayName => Def?.DisplayName ?? "юнит";
+    public string DisplayName => Definition?.DisplayName ?? "юнит";
 
     public virtual Faction Faction => Faction.Player;
 
     /// <summary>
-    /// Что юниту можно приказать. Выводится из умений, а не задаётся списком: нет бура —
-    /// нет приказа копать, нет ствола — нет атаки. Поэтому набор не может разойтись с тем,
-    /// что юнит на самом деле умеет.
+    /// Что юниту можно приказать. Выводится из того, чем он снабжён, а не задаётся списком:
+    /// нет бура — нет приказа копать, нет ствола — нет атаки. Поэтому набор не может
+    /// разойтись с тем, что юнит на самом деле умеет.
     /// </summary>
-    public virtual OrderSet AllowedOrders => Def == null
+    public virtual OrderSet AllowedOrders => Definition == null
         ? OrderSet.None
         : OrderSet.None
-            .With(OrderKind.Move, Def.SpeedPx > 0f)
-            .With(OrderKind.Follow, Def.SpeedPx > 0f)
-            .With(OrderKind.Attack, Def.Weapon != null)
-            .With(OrderKind.Mine, Def.CanMine)
-            .With(OrderKind.Build, Def.CanBuild)
-            .With(OrderKind.Repair, Def.CanRepair);
+            .With(OrderKind.Move, Definition.IsMobile)
+            .With(OrderKind.Follow, Definition.IsMobile)
+            .With(OrderKind.Attack, Definition.Weapon != null)
+            .With(OrderKind.Mine, Definition.CanMine)
+            .With(OrderKind.Build, Definition.CanBuild)
+            .With(OrderKind.Repair, Definition.CanRepair);
 
-    public SelectionGroup SelectionGroup => SelectionGroup.Bots;
+    public SelectionGroup SelectionGroup => Definition?.SelectionGroup ?? SelectionGroup.Bots;
 
     /// <summary>Ось «вперёд» подвижной сущности — это поворот самой ноды.</summary>
     public float Facing => Rotation;
 
-    public float HitRadius => Def?.RadiusPx ?? Const.Unit * 0.35f;
+    public float HitRadius => Definition?.RadiusPx ?? Const.Unit * 0.35f;
 
-    public float VisionRadius => Def?.VisionRadiusPx ?? 0f;
+    public float VisionRadius => Definition?.VisionRadiusPx ?? 0f;
 
     /// <summary>
-    /// Курс ремонта юнита берётся из справочника постройки с тем же ключом — того самого,
-    /// по которому его и собирают. Дублировать цену в UnitDef незачем: она уже есть,
-    /// и два числа рано или поздно разъехались бы.
+    /// Курс ремонта. Раньше его приходилось складывать из двух определений — прочность
+    /// брать из одного, цену из другого, — потому что юнит описывался двумя файлами.
+    /// Теперь оба числа лежат рядом, и курс считает само определение.
     ///
-    /// У коммандера такого справочника нет — значит и курса нет, и чинить его нечем.
-    /// Он и не нуждается: урон он копит, но не гибнет.
+    /// У коммандера секции сборки нет — значит нет и цены, а без цены нет курса,
+    /// и чинить его нечем. Он и не нуждается: урон он копит, но не гибнет.
     /// </summary>
-    public float HealthPerMetal
-    {
-        get
-        {
-            if (Def == null)
-                return 0f;
+    public float HealthPerMetal => Definition?.HealthPerMetal ?? 0f;
 
-            var buildable = GameManager.I.Catalog.Buildable(Def.Id);
-
-            // Прочность берём свою, а цену — из справочника сборки: чинить юнита с нуля
-            // должно стоить ровно столько же, сколько собрать его заново
-            return buildable is { CostMetal: > 0f } ? Def.MaxHealth / buildable.CostMetal : 0f;
-        }
-    }
-
-    public WeaponDef Weapon => Def?.Weapon;
+    public WeaponDefinition Weapon => Definition?.Weapon;
 
     /// <summary>
     /// Огонь без приказов — по ближайшему, по приказу «атака» — по назначенному.
@@ -105,53 +95,50 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public override void _Ready()
     {
-        Health ??= new Health(Def?.MaxHealth ?? 80f);
+        Health ??= new Health(Definition?.MaxHealth ?? 80f);
 
         QueueRedraw();
     }
 
     public void Declare(EconomyLedger ledger)
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
-        ledger.AddIncome(ResourceKind.Energy, Def.EnergyProduction);
-        ledger.AddIncome(ResourceKind.Metal, Def.MetalProduction);
+        ledger.AddIncome(ResourceKind.Energy, Definition.EnergyProduction);
+        ledger.AddIncome(ResourceKind.Metal, Definition.MetalProduction);
 
         // Ремонт — это и есть стройка тем же инструментом, поэтому и заявка та же:
-        // метал по строительной мощности плюс энергия на инструмент
-        if (RepairTarget != null)
-        {
-            ledger.Request(ResourceKind.Metal, Def.BuildPower);
-            ledger.Request(ResourceKind.Energy, Def.BuildPower * Def.BuildEnergyPerPower);
-        }
+        // метал по мощности руки плюс энергия на неё же
+        if (RepairTarget != null && Definition.BuildTool is { } arm)
+            Repair.Declare(ledger, arm.Power, arm.EnergyPerPower);
     }
 
     /// <summary>Своё производство идёт всегда, просадка производительности его не касается.</summary>
     public void Run(double dt, EconomyRates rates)
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
         var events = GameManager.I.Events;
 
-        if (Def.EnergyProduction > 0f)
+        if (Definition.EnergyProduction > 0f)
             events.Append(new ResourceGained
             {
                 Kind = ResourceKind.Energy,
-                Amount = Def.EnergyProduction * (float)dt,
+                Amount = Definition.EnergyProduction * (float)dt,
             });
 
-        if (Def.MetalProduction > 0f)
+        if (Definition.MetalProduction > 0f)
             events.Append(new ResourceGained
             {
                 Kind = ResourceKind.Metal,
-                Amount = Def.MetalProduction * (float)dt,
+                Amount = Definition.MetalProduction * (float)dt,
             });
 
         var target = RepairTarget;
-        if (target != null)
-            Repair.Run(target, Def.BuildPower, Def.BuildEnergyPerPower, dt, rates);
+        if (target != null && Definition.BuildTool is { } arm)
+            Repair.Run(target, arm.Power, arm.EnergyPerPower, dt, rates);
     }
 
     public void AimAt(Vector2 point, double dt)
@@ -160,7 +147,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
 
         float desired = Heading.AngleTo(GlobalPosition, point);
-        float step = (Def?.TurnSpeed ?? Mathf.Pi) * (float)dt;
+        float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
         Rotation = Heading.TurnToward(Rotation, desired, step);
     }
 
@@ -175,7 +162,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     public void RunOrder(Order order, double dt)
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
         switch (order.Kind)
@@ -203,15 +190,19 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     {
         var target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
 
+        // Инструмент под занятие: копать — буром, строить — рукой. Дальность принадлежит
+        // ему, а не юниту: раньше одно число служило обоим, хотя тянутся они на разное
+        var tool = Definition.ToolFor(order.Kind);
+
         float reach = order.Kind == OrderKind.Move
             ? Const.Unit * 0.2f
-            : Def.ToolRange * Const.Unit;
+            : tool?.RangePx ?? Const.Unit;
 
         if (GlobalPosition.DistanceTo(target) > reach)
         {
             Detach();
             AimAt(target, dt);
-            GlobalPosition = GlobalPosition.MoveToward(target, Def.SpeedPx * (float)dt);
+            GlobalPosition = GlobalPosition.MoveToward(target, Definition.SpeedPx * (float)dt);
             return;
         }
 
@@ -224,8 +215,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        float power = order.Kind == OrderKind.Mine ? Def.MinePower : Def.BuildPower;
-        if (power <= 0f)
+        if (tool == null)
         {
             Orders.DropCurrent();
             return;
@@ -235,9 +225,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         {
             Detach();
 
-            // Узлу сообщаем и мощность, и собственную прожорливость инструмента:
-            // энергию тратит инструмент, а сколько именно — дело справочника юнита
-            order.Target.AttachWorker(Id, power, Def.EnergyDrainFor(order.Kind));
+            // Узлу сообщаем и мощность, и прожорливость: энергию тратит инструмент,
+            // а сколько именно — записано в нём же
+            order.Target.AttachWorker(Id, tool.Power, tool.EnergyDrain);
             _attached = order.Target;
         }
     }
@@ -265,10 +255,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // Безоружный юнит подходит на длину инструмента: приказ хотя бы не зависает
         float stop = Weapon != null
             ? Weapon.RangePx * 0.85f + (target?.HitRadius ?? 0f)
-            : Def.ToolRange * Const.Unit;
+            : Definition.WorkRangePx;
 
         if (GlobalPosition.DistanceTo(to) > stop)
-            GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
+            GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
     }
 
     /// <summary>
@@ -282,9 +272,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         var to = order.Entity.GlobalPosition;
         AimAt(to, dt);
 
-        float stop = Def.ToolRange * Const.Unit;
+        float stop = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
         if (GlobalPosition.DistanceTo(to) > stop)
-            GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
+            GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
     }
 
     /// <summary>
@@ -301,7 +291,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
 
         AimAt(to, dt);
-        GlobalPosition = GlobalPosition.MoveToward(to, Def.SpeedPx * (float)dt);
+        GlobalPosition = GlobalPosition.MoveToward(to, Definition.SpeedPx * (float)dt);
     }
 
     /// <summary>Кого чиним прямо сейчас: приказ ремонта, цель в пределах инструмента.</summary>
@@ -311,16 +301,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         {
             var order = Current;
 
-            if (order?.Kind != OrderKind.Repair || Def == null || !Def.CanRepair)
+            if (order?.Kind != OrderKind.Repair || Definition == null || !Definition.CanRepair)
                 return null;
 
             if (order.Entity is not IRepairable repairable || !Targeting.IsValid(order.Entity))
                 return null;
 
-            if (order.Entity is Unit && !Def.CanRepairUnits)
+            if (order.Entity is Unit && !Definition.CanRepairUnits)
                 return null;
 
-            float reach = Def.ToolRange * Const.Unit;
+            float reach = Definition.BuildTool.RangePx;
             return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
                 ? repairable
                 : null;
@@ -361,15 +351,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public override void _Draw()
     {
-        if (Def == null)
+        if (Definition == null)
             return;
 
-        float radius = Def.RadiusPx;
+        float radius = Definition.RadiusPx;
 
-        VisionGizmo.Draw(this, Def.VisionRadiusPx, Def.Color);
-        WeaponGizmo.Draw(this, Weapon, Def.Color);
+        VisionGizmo.Draw(this, Definition.VisionRadiusPx, Definition.Color);
+        WeaponGizmo.Draw(this, Weapon, Definition.Color);
 
-        DrawCircle(Vector2.Zero, radius, Def.Color);
+        DrawCircle(Vector2.Zero, radius, Definition.Color);
         DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 24, new Color(0f, 0f, 0f, 0.4f), 2f);
 
         // Ось «вперёд»: нода уже повёрнута, поэтому в локальных координатах это просто вправо

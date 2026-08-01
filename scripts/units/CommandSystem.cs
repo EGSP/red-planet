@@ -50,7 +50,7 @@ public partial class CommandSystem : GameSystem
     private Vector2 _bandStart;
     private bool _banding;
 
-    public BuildableDef Pending { get; private set; }
+    public UnitDefinition Pending { get; private set; }
 
     /// <summary>Кто сейчас выделен — читают оверлей и HUD.</summary>
     public IReadOnlyList<IOrderable> Selected => _selected;
@@ -73,11 +73,11 @@ public partial class CommandSystem : GameSystem
             EnsureNodes();
     }
 
-    public void BeginBuild(BuildableDef def)
+    public void BeginBuild(UnitDefinition def)
     {
         Pending = def;
         EnsureNodes();
-        _ghost.Def = def;
+        _ghost.Definition = def;
         _ghost.Visible = true;
     }
 
@@ -396,7 +396,7 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private static bool GiveWork(IOrderable actor, bool queue, Order order, Node2D target)
     {
-        if (actor is not Unit { Def: not null } unit)
+        if (actor is not Unit { Definition: not null } unit)
             return Give(actor, queue, order);
 
         // Считаем от конца очереди, если дописываем: подход должен вести оттуда,
@@ -405,7 +405,7 @@ public partial class CommandSystem : GameSystem
             ? unit.Orders.Items[^1].Point
             : unit.GlobalPosition;
 
-        float range = unit.Def.ToolRange * Const.Unit;
+        float range = unit.Definition.WorkRangePx;
         var to = target.GlobalPosition;
 
         if (from.DistanceTo(to) <= range)
@@ -454,7 +454,7 @@ public partial class CommandSystem : GameSystem
             ? node
             : null;
 
-    private Vector2I OriginUnderCursor(BuildableDef def)
+    private Vector2I OriginUnderCursor(UnitDefinition def)
     {
         var cell = Const.WorldToCell(_cursor);
         return cell - new Vector2I(def.Width / 2, def.Height / 2);
@@ -473,7 +473,7 @@ public partial class CommandSystem : GameSystem
         GM.Events.Append(new BlueprintPlaced
         {
             EntityId = blueprint.Id,
-            DefId = def.Id,
+            DefinitionId = def.Id,
             Cell = origin,
         });
 

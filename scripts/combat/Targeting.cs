@@ -25,7 +25,7 @@ public static class Targeting
     /// Одна формула на всех: по ней и система стрельбы решает, пора ли жать на спуск,
     /// и сущность — пора ли ещё подходить.
     /// </summary>
-    public static bool InFiringRange(WeaponDef weapon, Vector2 from, IDamageable target)
+    public static bool InFiringRange(WeaponDefinition weapon, Vector2 from, IDamageable target)
     {
         if (weapon == null || target == null)
             return false;
