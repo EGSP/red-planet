@@ -71,6 +71,12 @@ public partial class CommandSystem : GameSystem
     /// <summary>Кто сейчас выделен — читают оверлей и HUD.</summary>
     public IReadOnlyList<IOrderable> Selected => _selected;
 
+    /// <summary>
+    /// Показать очереди всех своих, а не только выделенных — как CapsLock в PA.
+    /// Переключается клавишей C.
+    /// </summary>
+    public bool ShowAllOrders { get; private set; }
+
     /// <summary>Рамка выделения, пока её тянут.</summary>
     public bool Banding => _banding;
 
@@ -179,16 +185,25 @@ public partial class CommandSystem : GameSystem
         if (@event is InputEventMouse mouseEvent)
             _cursor = GetViewport().GetCanvasTransform().AffineInverse() * mouseEvent.Position;
 
-        if (@event is InputEventKey { Pressed: true, Echo: false } key
-            && ControlGroups.SlotOf(key.Keycode) is var slot and >= 0)
+        if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
-            if (key.CtrlPressed)
-                AssignGroup(slot);
-            else
-                SelectGroup(slot);
+            if (key.Keycode == Key.C)
+            {
+                ShowAllOrders = !ShowAllOrders;
+                GetViewport().SetInputAsHandled();
+                return;
+            }
 
-            GetViewport().SetInputAsHandled();
-            return;
+            if (ControlGroups.SlotOf(key.Keycode) is var slot and >= 0)
+            {
+                if (key.CtrlPressed)
+                    AssignGroup(slot);
+                else
+                    SelectGroup(slot);
+
+                GetViewport().SetInputAsHandled();
+                return;
+            }
         }
 
         if (@event is not InputEventMouseButton mouse)

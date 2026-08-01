@@ -1,8 +1,9 @@
 using Godot;
 
 /// <summary>
-/// Очереди приказов выделенных юнитов поверх мира: кольцо вокруг выделенного, цепочка
-/// от него ко всем целям по порядку и рамка выделения, пока её тянут.
+/// Очереди приказов поверх мира: кольцо вокруг выделенного, цепочка от него ко всем
+/// целям по порядку и рамка выделения, пока её тянут. Две стратегии: только выделенные
+/// или все свои — переключается клавишей C, как CapsLock в PA.
 ///
 /// ЗАЧЕМ ОТДЕЛЬНОЙ НОДОЙ, а не рисованием у самих юнитов. Во-первых, цепочка должна лежать
 /// поверх всего, а не тонуть под постройками — у своей ноды слой её собственный. Во-вторых,
@@ -24,13 +25,33 @@ public partial class OrderOverlay : Node2D
         if (command == null)
             return;
 
+        // Кольца — только у выделенных: это метка выбора, а не приказа
         foreach (var actor in command.Selected)
         {
-            if (!Alive.Is(actor as Node))
-                continue;
+            if (Alive.Is(actor as Node))
+                DrawRing(actor);
+        }
 
-            DrawRing(actor);
-            DrawChain(actor);
+        if (command.ShowAllOrders)
+        {
+            foreach (var actor in GameManager.I.Index.All<IOrderable>())
+            {
+                if (!Alive.Is(actor as Node))
+                    continue;
+
+                if (actor.Faction != Faction.Player || !actor.AllowedOrders.Any)
+                    continue;
+
+                DrawChain(actor);
+            }
+        }
+        else
+        {
+            foreach (var actor in command.Selected)
+            {
+                if (Alive.Is(actor as Node))
+                    DrawChain(actor);
+            }
         }
 
         if (command.Banding)
