@@ -29,23 +29,11 @@ public partial class MovementSystem : GameSystem
 
     [Export] public float AlignWeight = 0.35f;
 
-    /// <summary>За сколько долей секунды скорость выходит на заданную.</summary>
-    [Export] public float Responsiveness = 6f;
-
     /// <summary>Сколько проходов расталкивания за кадр.</summary>
     [Export] public int ResolvePasses = 2;
 
     /// <summary>Сколько секунд без продвижения считается застреванием.</summary>
     [Export] public float StuckTimeout = 1.5f;
-
-    /// <summary>За сколько секунд до цели начинается замедление.</summary>
-    [Export] public float BrakingTime = 0.25f;
-
-    /// <summary>
-    /// Ниже какой доли полной скорости замедление не опускается. Без нижней границы
-    /// сущность подползает к цели бесконечно и никогда не считается дошедшей.
-    /// </summary>
-    [Export] public float MinApproachSpeed = 0.3f;
 
     private readonly List<IMobile> _actors = new();
     private readonly Dictionary<Vector2I, List<int>> _buckets = new();
@@ -113,15 +101,18 @@ public partial class MovementSystem : GameSystem
 
         var handle = _pathfinding?.Request(mobile, position, movement.Goal, radius);
 
-        // Настоящая цель — та, куда ведёт путь. От заданной она отличается, когда точка
-        // лежит внутри постройки: поиск переносит её на ближайшее свободное место.
-        // Считать прибытие по заданной точке значило бы упереться в стену навсегда
-        var target = handle?.Goal ?? movement.Goal;
+        // Остаток пути и признак прибытия считаются по ЗАДАННОЙ цели, а не по концу
+        // ломаной. Разница существенна для подхода к бою: цель боя — центр постройки,
+        // он лежит внутри неё, и путь ведёт к её краю. Мерить остановку по краю значило бы
+        // встать на добрую сотню пикселей дальше, чем требует дальность ствола, — ровно
+        // тот дефект, когда юнит доходит до линии огня и не стреляет.
+        float remaining = position.DistanceTo(movement.Goal) - movement.StopDistance;
 
         movement.Blocked = handle is { Status: PathStatus.Unreachable };
         movement.Settled = movement.Blocked
-                           || position.DistanceTo(target) <= movement.StopDistance
-                           || Crowded(index, mobile, position, radius, target);
+                           || remaining <= 0f
+                           || Exhausted(handle, position, radius)
+                           || Crowded(index, mobile, position, radius, movement.Goal);
 
         if (movement.Settled)
         {
@@ -151,11 +142,52 @@ public partial class MovementSystem : GameSystem
         var steer = seek * movement.SeekScale + avoid * AvoidWeight + align * AlignWeight;
 
         var desired = steer.LengthSquared() > 0.000001f
-            ? steer.Normalized() * Approach(position, movement, target, definition.SpeedPx)
+            ? steer.Normalized() * Approach(definition, remaining)
             : Vector2.Zero;
 
-        movement.Velocity = movement.Velocity.MoveToward(desired,
-            definition.SpeedPx * Responsiveness * (float)dt);
+        Accelerate(movement, definition, desired, dt);
+    }
+
+    /// <summary>
+    /// Скорость на подходе к цели.
+    ///
+    /// У шагающего торможения нет вовсе: он бежит с постоянной скоростью и встаёт разом.
+    /// Так устроены боты в PA — у всех до единого в разделе navigation стоит brake = −1,
+    /// тогда как у машин, кораблей и авиации там конечное число. Отсюда и правило:
+    /// отрицательное торможение означает «останавливается мгновенно», и оно же
+    /// умолчание для всего в этой игре.
+    ///
+    /// У колёсного торможение конечное, и скорость на подходе ограничена той, с которой
+    /// он ещё успеет встать: v = √(2·a·s). Это не подгонка коэффициента, а само определение
+    /// равнозамедленного движения, поэтому юнит останавливается ровно там, где нужно,
+    /// при любых числах в справочнике.
+    /// </summary>
+    private static float Approach(UnitDefinition definition, float remaining)
+    {
+        if (definition.BrakePx < 0f)
+            return definition.SpeedPx;
+
+        float braked = Mathf.Sqrt(2f * definition.BrakePx * Mathf.Max(remaining, 0f));
+        return Mathf.Min(definition.SpeedPx, braked);
+    }
+
+    /// <summary>
+    /// Изменить скорость в пределах разгона и торможения. Разгон и торможение — разные
+    /// числа: разогнаться шагающий может не мгновенно, а встать может.
+    /// </summary>
+    private static void Accelerate(Movement movement, UnitDefinition definition,
+        Vector2 desired, double dt)
+    {
+        bool slowing = desired.LengthSquared() < movement.Velocity.LengthSquared();
+
+        if (slowing && definition.BrakePx < 0f)
+        {
+            movement.Velocity = desired;
+            return;
+        }
+
+        float rate = slowing ? definition.BrakePx : definition.AccelerationPx;
+        movement.Velocity = movement.Velocity.MoveToward(desired, rate * (float)dt);
     }
 
     private static void Halt(Movement movement)
@@ -169,6 +201,16 @@ public partial class MovementSystem : GameSystem
         movement.StuckFor = 0f;
         movement.Neighbours = 0;
     }
+
+    /// <summary>
+    /// Путь пройден до конца, и сущность стоит в его последней точке. Ближе к заданной
+    /// цели физически не подойти: она либо внутри постройки, либо за её краем.
+    ///
+    /// Проверка нужна отдельно от расстояния до цели, потому что цель могла оказаться
+    /// недостижимой вплотную. Без неё юнит, посланный внутрь здания, давил бы в стену.
+    /// </summary>
+    private static bool Exhausted(PathHandle handle, Vector2 position, float radius) =>
+        handle is { Arrived: true } && position.DistanceTo(handle.Goal) <= radius;
 
     /// <summary>
     /// Направление по пути. Системы поиска может не быть в сцене — тогда идём напрямую
@@ -224,25 +266,6 @@ public partial class MovementSystem : GameSystem
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Скорость на подходе к цели. Замедление нужно, чтобы сущность не проскакивала точку
-    /// остановки и не возвращалась к ней, раскачивая за собой всю группу.
-    ///
-    /// СНИЗУ СКОРОСТЬ ОГРАНИЧЕНА, и это существенно. Пропорциональное замедление само
-    /// по себе даёт апорию: остаток пути стремится к нулю, скорость вместе с ним, и юнит
-    /// подползает к цели бесконечно, ни разу её не достигнув. Нижняя граница гарантирует,
-    /// что остаток закрывается за считанные кадры.
-    /// </summary>
-    private float Approach(Vector2 position, Movement movement, Vector2 target, float speedPx)
-    {
-        float remaining = position.DistanceTo(target) - movement.StopDistance;
-
-        if (remaining >= speedPx * BrakingTime)
-            return speedPx;
-
-        return Mathf.Clamp(remaining / BrakingTime, speedPx * MinApproachSpeed, speedPx);
     }
 
     // ── boids ─────────────────────────────────────────────────────────────────────

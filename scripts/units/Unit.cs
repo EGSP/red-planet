@@ -262,12 +262,12 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         var target = victim as IDamageable;
         var to = victim.GlobalPosition;
 
-        if (Weapon != null && Targeting.InFiringRange(Weapon, GlobalPosition, target))
-            return;
-
-        // Безоружный юнит подходит на длину инструмента: приказ хотя бы не зависает
+        // Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
+        // границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
+        // откуда любое смещение цели или толчок соседа выводили его из радиуса.
+        // Безоружный подходит на длину инструмента: приказ хотя бы не зависает
         float stop = Weapon != null
-            ? Weapon.RangePx * 0.85f + (target?.HitRadius ?? 0f)
+            ? Targeting.ApproachDistance(Weapon, target, Definition.StandoffFraction)
             : Definition.WorkRangePx;
 
         if (GlobalPosition.DistanceTo(to) > stop)

@@ -135,17 +135,15 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
     }
 
     /// <summary>
-    /// С какого расстояния враг перестаёт подходить: доля дальности ствола плюс радиус цели.
-    /// Долю берём меньше единицы — иначе цель выпадает из радиуса от любого шага в сторону.
+    /// С какого расстояния враг перестаёт подходить. Считает <see cref="Targeting"/>
+    /// вычитанием запаса из огневой границы, поэтому дистанция по построению лежит внутри
+    /// неё: остановиться там, где ствол ещё не достаёт, невозможно.
+    ///
+    /// Безоружный подходит на клетку — приказ хотя бы не зависает.
     /// </summary>
-    private float StopDistance(IDamageable target)
-    {
-        float reach = Weapon != null
-            ? Weapon.RangePx * Definition.StandoffFraction
-            : Const.Unit;
-
-        return reach + target.HitRadius;
-    }
+    private float StopDistance(IDamageable target) => Weapon != null
+        ? Targeting.ApproachDistance(Weapon, target, Definition.StandoffFraction)
+        : Const.Unit + target.HitRadius;
 
     /// <summary>Прочность кончилась: вывести из игры. EntityStore снимает Spawner.</summary>
     public void OnDestroyed()

@@ -301,6 +301,8 @@ public static class ContentCompiler
             VisionRange = basis.VisionRange,
             Speed = basis.Speed,
             TurnSpeedDegrees = basis.TurnSpeedDegrees,
+            Acceleration = basis.Acceleration,
+            Brake = basis.Brake,
             EnergyProduction = basis.EnergyProduction,
             MetalProduction = basis.MetalProduction,
             MetalStorage = basis.MetalStorage,
@@ -332,6 +334,8 @@ public static class ContentCompiler
         {
             definition.Speed = movement.Float("speed", basis.Speed);
             definition.TurnSpeedDegrees = movement.Float("turn_speed", basis.TurnSpeedDegrees);
+            definition.Acceleration = movement.Float("acceleration", basis.Acceleration);
+            definition.Brake = movement.Float("brake", basis.Brake);
         }
 
         if (document.Section("footprint") is { } footprint)
