@@ -24,10 +24,19 @@ public partial class EnemySpawnSystem : GameSystem
     private readonly RandomNumberGenerator _rng = new();
     private float _timer;
 
+    /// <summary>
+    /// Сколько врагов на карте. Число ведётся подпиской на разрез, а не обходом: вопрос
+    /// задаётся каждый кадр, а ответ меняется десяток раз за бой. Отписываться не нужно —
+    /// владельцем подписки объявлена сама система, и с её уходом подписка снимается.
+    /// </summary>
+    private int _alive;
+
     protected override void OnRegister()
     {
         _rng.Randomize();
         _timer = FirstDelay;
+
+        GM?.Index.Watch<Enemy>(_ => _alive++, _ => _alive--, this);
     }
 
     public override void Step(double dt)
@@ -35,7 +44,7 @@ public partial class EnemySpawnSystem : GameSystem
         if (GM.Playground == null)
             return;
 
-        if (GM.Index.All<Enemy>().Count >= Population)
+        if (_alive >= Population)
             return;
 
         _timer -= (float)dt;
