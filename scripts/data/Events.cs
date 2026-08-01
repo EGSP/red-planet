@@ -43,6 +43,9 @@ public struct BlueprintPlaced : IEventRecord
 
     /// <summary>Центр занятого места. Клеток больше нет: постановка свободная.</summary>
     public Vector2 Pos;
+
+    /// <summary>Угол, под которым каркас поставили, в радианах.</summary>
+    public float Facing;
 }
 
 /// <summary>
@@ -60,6 +63,9 @@ public struct BuildingSpawned : IEventRecord
     public int EntityId;
     public string DefinitionId;
     public Vector2 Pos;
+
+    /// <summary>Угол корпуса в радианах: постройка, восстановленная по документам, стоит так же.</summary>
+    public float Facing;
 }
 
 /// <summary>Каркас достроен и превратился в готовую сущность.</summary>

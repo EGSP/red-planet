@@ -13,10 +13,13 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     public UnitDefinition Definition { get; private set; }
     public float Progress { get; private set; }
 
+    /// <summary>Угол, под которым каркас поставили. Достроенная сущность его наследует.</summary>
+    public float BodyFacing { get; private set; }
+
     /// <summary>Место занято уже каркасом: перекрыть начатую стройку нельзя.</summary>
-    public Rect2 Footprint => Definition == null
-        ? new Rect2(GlobalPosition, Vector2.Zero)
-        : Placement.Footprint(Definition, GlobalPosition);
+    public Obb Footprint => Definition == null
+        ? new Obb(GlobalPosition, Vector2.Zero)
+        : Placement.Footprint(Definition, GlobalPosition, BodyFacing);
 
     public Health Health { get; private set; }
 
@@ -31,7 +34,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
     public Faction Faction => Faction.Player;
 
-    public float Facing => Definition != null ? Mathf.DegToRad(Definition.FacingDegrees) : 0f;
+    public float Facing => BodyFacing;
 
     public float HitRadius => Definition != null
         ? Mathf.Max(Definition.Width, Definition.Height) * Const.Unit * 0.5f
@@ -40,11 +43,12 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     /// <summary>Каркас уже смотрит по сторонам — правда, вполглаза.</summary>
     public float VisionRadius => Definition != null ? Definition.VisionRadiusPx * 0.5f : 0f;
 
-    public void Init(int id, UnitDefinition def, Vector2 center)
+    public void Init(int id, UnitDefinition def, Vector2 center, float facing)
     {
         Id = id;
         Definition = def;
         Position = center;
+        BodyFacing = facing;
         Health = new Health(def.FrameHealth * Const.BlueprintHealthFactor);
     }
 
@@ -107,8 +111,11 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
         // Постройка встаёт на освобождённое место заново, юнит уходит с него и ходит.
         // Род берём у класса, а не у формы: форма есть и у каркаса юнита
+        // Угол наследуется каркасом: игрок развернул стройку, и готовая постройка обязана
+        // встать так же. Юниту угол не передаётся — у подвижного он означает курс,
+        // и первый же шаг его перепишет
         int spawnedId = Definition.IsStructure
-            ? gm.Spawn.SpawnBuilding(Definition, center).Id
+            ? gm.Spawn.SpawnBuilding(Definition, center, BodyFacing).Id
             : gm.Spawn.SpawnUnit(Definition, center).Id;
 
         gm.Events.Append(new ConstructionCompleted
@@ -143,6 +150,10 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
         VisionGizmo.Draw(this, VisionRadius, Definition.Color);
 
+        // Каркас повёрнут так же, как встанет постройка: место он занимает уже сейчас,
+        // и показывать его иначе, чем оно занято, нельзя
+        DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
+
         DrawRect(rect, new Color(Definition.Color, 0.15f));
 
         // Заполнение снизу вверх по прогрессу
@@ -151,6 +162,8 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
             new Color(Definition.Color, 0.55f));
 
         DrawRect(rect, new Color(1f, 1f, 1f, 0.7f), false, 2f);
+
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
         var font = ThemeDB.FallbackFont;
         string label = $"{Definition.DisplayName} {Mathf.FloorToInt(Ratio * 100f)}%";

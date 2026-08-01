@@ -9,7 +9,11 @@ tags  = ["structure", "defense", "basic"]
 tools = ["turret_gun"]
 
 [footprint]
-rows = ["#"]
+rows         = ["#"]
+pattern      = "line"
+# Ромб: соседи прикрывают промежутки друг друга, а сплошной стеной турели не ставят
+pattern_alt  = "diamond"
+pattern_step = "margin"
 
 [body]
 max_health   = 250.0

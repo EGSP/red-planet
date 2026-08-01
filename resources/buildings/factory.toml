@@ -12,6 +12,10 @@ tags  = ["structure", "economy", "basic"]
 
 [footprint]
 rows           = ["##", "##"]
+pattern        = "line"
+pattern_alt    = "square"
+# Между заводами нужен проход: собранное с них выезжает
+pattern_step   = "margin"
 facing_degrees = -90.0
 
 [body]

@@ -139,10 +139,19 @@ public partial class NavGridOverlay : Node2D
 
         foreach (var obstacle in gm.Obstacles.All)
         {
-            var rect = gm.Obstacles.RectOf(obstacle);
+            var shape = gm.Obstacles.ShapeOf(obstacle);
 
-            DrawRect(rect, body, false, 1.5f);
-            DrawRect(rect.Grow(Const.BuildMarginPx), margin, false, 1f);
+            DrawOutline(shape, body, 1.5f);
+            DrawOutline(shape.Grow(Const.BuildMarginPx), margin, 1f);
         }
+    }
+
+    /// <summary>Контур повёрнутого прямоугольника: замкнутая ломаная по его углам.</summary>
+    private void DrawOutline(in Obb shape, Color color, float width)
+    {
+        var corners = shape.Corners();
+
+        DrawPolyline(new[] { corners[0], corners[1], corners[2], corners[3], corners[0] },
+            color, width);
     }
 }

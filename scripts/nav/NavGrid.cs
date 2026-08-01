@@ -243,7 +243,7 @@ public sealed class NavGrid
         System.Array.Clear(_blocked);
 
         foreach (var obstacle in _obstacles.All)
-            Rasterize(_obstacles.RectOf(obstacle));
+            Rasterize(_obstacles.ShapeOf(obstacle));
 
         Chamfer();
 
@@ -255,24 +255,46 @@ public sealed class NavGrid
     /// Растеризация консервативная: ячейка, задетая прямоугольником хотя бы краем,
     /// помечается целиком. Ошибка идёт в пользу безопасности — юнит не пройдёт там,
     /// где формально помещался бы на пару пикселей.
+    ///
+    /// Обход идёт по осепараллельным границам, а помечается ячейка по пересечению с самим
+    /// прямоугольником: у повёрнутого границы прихватывают углы, где его нет вовсе,
+    /// и без второй проверки диагональная стена перегораживала бы вдвое больше места.
     /// </summary>
-    private void Rasterize(Rect2 rect)
+    private void Rasterize(in Obb shape)
     {
-        if (rect.Size.X <= 0f || rect.Size.Y <= 0f)
+        if (shape.IsEmpty)
             return;
 
-        var min = ToCell(rect.Position);
-        var max = ToCell(rect.End - new Vector2(0.001f, 0.001f));
+        var bounds = shape.Bounds;
+
+        var min = ToCell(bounds.Position);
+        var max = ToCell(bounds.End - new Vector2(0.001f, 0.001f));
 
         int x0 = Mathf.Max(min.X, 0);
         int y0 = Mathf.Max(min.Y, 0);
         int x1 = Mathf.Min(max.X, Width - 1);
         int y1 = Mathf.Min(max.Y, Width - 1);
 
+        // Осепараллельному хватает и обхода: пересечение с ячейкой у него заведомо есть,
+        // а проверять его заново значило бы платить за поворот там, где поворота нет
+        bool square = Mathf.IsZeroApprox(Mathf.Sin(shape.Angle * 2f));
+
         for (int y = y0; y <= y1; y++)
+        {
             for (int x = x0; x <= x1; x++)
+            {
+                if (!square && !shape.Intersects(CellShape(x, y)))
+                    continue;
+
                 _blocked[y * Width + x] = true;
+            }
+        }
     }
+
+    /// <summary>Ячейка растра как прямоугольник мира — для точной проверки пересечения.</summary>
+    private static Obb CellShape(int x, int y) => Obb.FromRect(new Rect2(
+        Const.WorldMin + new Vector2(x, y) * Cell,
+        new Vector2(Cell, Cell)));
 
     /// <summary>
     /// Расстояние до ближайшего препятствия за два прохода. Соседи за краем мира считаются

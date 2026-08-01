@@ -345,6 +345,14 @@ public static class ContentCompiler
             definition.RequiresMetalSpot =
                 footprint.Bool("requires_metal_spot", basis.RequiresMetalSpot);
 
+            definition.Pattern = footprint.Enum("pattern", basis.Pattern);
+            definition.PatternAlt = footprint.Enum("pattern_alt", basis.PatternAlt);
+
+            // Ступени названы по тому, что получается на месте: narrow — сплошной ряд,
+            // margin — ряд с проходом. Между ними и дальше значения задаются числом
+            definition.PatternStep = footprint.Scale("pattern_step", basis.PatternStep,
+                ("narrow", 1f), ("margin", 2f));
+
             if (definition.Rows.Length == 0)
                 footprint.Error("форма пуста: задайте rows или уберите секцию");
         }

@@ -106,6 +106,49 @@ public sealed class TomlDocument
         };
     }
 
+    /// <summary>
+    /// Число либо именованная ступень: pattern_step = "narrow" и pattern_step = 2.5 значат
+    /// одно и то же поле. Имена ступеней передаёт вызывающий, потому что принадлежат они
+    /// смыслу поля, а не разбору файла.
+    ///
+    /// ЗАЧЕМ ДВА СПОСОБА ЗАПИСИ. Обиходных значений у такого поля два-три, и называть их
+    /// словом понятнее, чем числом; но всё промежуточное словом не выразить, а заводить
+    /// ради него второй ключ значит спрашивать, какой из двух главнее.
+    /// </summary>
+    public float Scale(string key, float fallback, params (string Name, float Value)[] steps)
+    {
+        if (!Take(key, out object value))
+            return fallback;
+
+        switch (value)
+        {
+            case double number:
+                return (float)number;
+
+            case long number:
+                return number;
+
+            case string text:
+                foreach (var (name, number) in steps)
+                    if (string.Equals(name, text, StringComparison.OrdinalIgnoreCase))
+                        return number;
+
+                Error($"ключ «{key}»: неизвестная ступень «{text}». " +
+                      $"Допустимые: {string.Join(", ", Names(steps))} либо число");
+
+                return fallback;
+
+            default:
+                return Fail(key, "число либо имя ступени строкой", fallback);
+        }
+    }
+
+    private static IEnumerable<string> Names((string Name, float Value)[] steps)
+    {
+        foreach (var (name, _) in steps)
+            yield return name;
+    }
+
     public int Int(string key, int fallback = 0)
     {
         if (!Take(key, out object value))
@@ -187,7 +230,10 @@ public sealed class TomlDocument
         if (value is not string text)
             return Fail(key, "имя из перечисления строкой", fallback);
 
-        if (System.Enum.TryParse<T>(text, ignoreCase: true, out var parsed))
+        // Подчёркивания снимаются: в файлах принята запись metal_area, а в перечислении
+        // то же значение называется MetalArea, и заставлять файл повторять регистр кода
+        // значило бы вносить в него чужое соглашение об именовании
+        if (System.Enum.TryParse<T>(text.Replace("_", ""), ignoreCase: true, out var parsed))
             return parsed;
 
         Error($"ключ «{key}»: неизвестное значение «{text}». " +

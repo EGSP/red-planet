@@ -63,6 +63,17 @@ public partial class CommandSystem : GameSystem
     private bool _placed;
 
     /// <summary>
+    /// Точка, где нажали кнопку, пока её держат. Она задаёт и место первой постройки,
+    /// и начало вектора, по которому считаются угол и раскладка.
+    /// </summary>
+    private Vector2 _buildAnchor;
+
+    private bool _dragging;
+
+    /// <summary>План застройки: то, что нарисовано призраком, и то, что встанет по отпусканию.</summary>
+    private readonly List<BuildSpot> _plan = new();
+
+    /// <summary>
     /// Ставит ли щелчок каркас прямо сейчас. Выбор в панели и готовность строить —
     /// разные вещи: первый каркас ставится сразу, а дальше режим ждёт Shift.
     ///
@@ -114,6 +125,8 @@ public partial class CommandSystem : GameSystem
     {
         Pending = null;
         _placed = false;
+        _dragging = false;
+        _plan.Clear();
 
         if (_ghost != null)
             _ghost.Visible = false;
@@ -172,14 +185,17 @@ public partial class CommandSystem : GameSystem
 
         // Призрак показывает не выбор, а готовность поставить: пока режим спит,
         // место под курсором не подсвечивается, и щелчок обещает обычное выделение
-        _ghost.Visible = Building;
+        _ghost.Visible = Building || _dragging;
 
         if (!_ghost.Visible)
             return;
 
-        var center = Placement.Snap(GM, Pending, _cursor);
-        _ghost.Center = center;
-        _ghost.Valid = Placement.CanPlace(GM, Pending, center);
+        // Пока кнопку не нажали, план состоит из одного места под курсором: вектора ещё нет,
+        // а значит нет ни угла, ни раскладки
+        var anchor = _dragging ? _buildAnchor : _cursor;
+
+        BuildPlan.Compute(GM, Pending, anchor, _cursor, Input.IsKeyPressed(Key.Alt), _plan);
+
         _ghost.QueueRedraw();
     }
 
@@ -217,8 +233,15 @@ public partial class CommandSystem : GameSystem
 
         switch (mouse.ButtonIndex)
         {
+            // Постройка ставится не по нажатию, а по отпусканию: между ними игрок задаёт
+            // угол и раскладку, и до отпускания решение не принято
             case MouseButton.Left when mouse.Pressed && Building:
-                PlaceBlueprint();
+                _buildAnchor = _cursor;
+                _dragging = true;
+                break;
+
+            case MouseButton.Left when _dragging:
+                PlaceBatch();
                 break;
 
             // Рамку начинаем сразу: одиночный клик — это её вырожденный случай,
@@ -234,6 +257,12 @@ public partial class CommandSystem : GameSystem
 
             case MouseButton.Left:
                 FinishBand();
+                break;
+
+            // Правая кнопка посреди протаскивания отменяет только его: выбор в панели
+            // остаётся, и следующее нажатие начинает раскладку заново
+            case MouseButton.Right when mouse.Pressed && _dragging:
+                _dragging = false;
                 break;
 
             case MouseButton.Right when mouse.Pressed && Building:
@@ -502,33 +531,61 @@ public partial class CommandSystem : GameSystem
             ? node
             : null;
 
-    private void PlaceBlueprint()
+    /// <summary>
+    /// Поставить всю размеченную партию. Негодные места пропускаются молча: игрок видел их
+    /// красными всё протаскивание, и отказывать за всю партию из-за одного занятого места
+    /// значило бы требовать безошибочного ведения мыши.
+    ///
+    /// План считается заново, а не берётся от последнего кадра: между кадром и отпусканием
+    /// кнопки курсор успевает сдвинуться, и поставить нужно то, что игрок видел последним.
+    /// </summary>
+    private void PlaceBatch()
     {
-        var def = Pending;
-        var center = Placement.Snap(GM, def, _cursor);
+        _dragging = false;
 
-        if (!Placement.CanPlace(GM, def, center) || BlueprintScene == null)
+        var def = Pending;
+
+        if (def == null || BlueprintScene == null)
             return;
 
-        var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, center);
+        BuildPlan.Compute(GM, def, _buildAnchor, _cursor, Input.IsKeyPressed(Key.Alt), _plan);
+
+        // Строить пойдут выделенные — как и с любым другим приказом. Без выделения
+        // каркасы просто встанут на места и будут ждать, пока за них возьмутся
+        // свободные боты: те ищут работу сами
+        bool queue = Input.IsKeyPressed(Key.Shift);
+
+        foreach (var spot in _plan)
+        {
+            if (!spot.Valid)
+                continue;
+
+            var blueprint = PlaceOne(def, spot);
+
+            foreach (var actor in Recipients())
+                GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint);
+
+            // Первый каркас партии приказывается по нынешнему состоянию Shift, остальные —
+            // всегда в очередь: иначе каждый следующий стирал бы приказ на предыдущий
+            queue = true;
+
+            _placed = true;
+        }
+    }
+
+    private Blueprint PlaceOne(UnitDefinition def, BuildSpot spot)
+    {
+        var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, spot.Center, spot.Facing);
 
         GM.Events.Append(new BlueprintPlaced
         {
             EntityId = blueprint.Id,
             DefinitionId = def.Id,
-            Pos = center,
+            Pos = spot.Center,
+            Facing = spot.Facing,
         });
 
-        // Строить пойдут выделенные — как и с любым другим приказом. Без выделения
-        // каркас просто встанет на место и будет ждать, пока за него возьмётся
-        // свободный бот: те ищут работу сами
-        bool queue = Input.IsKeyPressed(Key.Shift);
-
-        foreach (var actor in Recipients())
-            GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint);
-
-        // Выбор в панели остаётся: дальше он оживает под Shift и гаснет без него
-        _placed = true;
+        return blueprint;
     }
 
     private void EnsureNodes()
@@ -541,7 +598,13 @@ public partial class CommandSystem : GameSystem
             _navigation = GM.Playground.Add(WorldLayer.Effects, new NavGridOverlay());
 
         if (_ghost == null || !IsInstanceValid(_ghost))
+        {
             _ghost = GM.Playground.Add(WorldLayer.Effects, new PlacementGhost());
+
+            // План принадлежит системе, а призрак получает его ссылкой: показанное
+            // и поставленное обязаны быть одним и тем же списком
+            _ghost.Spots = _plan;
+        }
 
         if (_overlay == null || !IsInstanceValid(_overlay))
             _overlay = GM.Playground.Add(WorldLayer.Effects, new OrderOverlay());

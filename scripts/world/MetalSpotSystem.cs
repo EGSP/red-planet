@@ -107,7 +107,7 @@ public partial class MetalSpotSystem : GameSystem
         if (!Const.WorldBounds.Encloses(area))
             return false;
 
-        if (GM.Obstacles.Overlaps(area.Grow(Const.BuildMarginPx)))
+        if (GM.Obstacles.Overlaps(Obb.FromRect(area).Grow(Const.BuildMarginPx)))
             return false;
 
         float spacing = Const.MetalSpotSpacing * Const.Unit;

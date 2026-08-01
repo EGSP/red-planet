@@ -43,12 +43,19 @@ public partial class Turret : Building, IArmed
 
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 
-    public override void Init(int id, UnitDefinition def, Vector2 center)
+    public override void Init(int id, UnitDefinition def, Vector2 center, float facing)
     {
-        base.Init(id, def, center);
+        base.Init(id, def, center, facing);
 
-        // Смотрит наружу от базы: первый разворот не тратится на полкруга
-        Rotation = Position.IsZeroApprox() ? 0f : Position.Angle();
+        // Башня начинает с угла, под которым турель поставили: игрок, разворачивая её
+        // при постановке, показывает, откуда ждёт противника.
+        //
+        // Угол из справочника означает, что игрок его не задавал — постановка была щелчком
+        // без протаскивания. Тогда остаётся прежнее правило: смотреть наружу от базы,
+        // чтобы первый разворот не тратился на полкруга
+        bool own = Mathf.IsEqualApprox(facing, Mathf.DegToRad(def.FacingDegrees));
+
+        Rotation = own && !Position.IsZeroApprox() ? Position.Angle() : facing;
     }
 
     public override void _Process(double delta) => QueueRedraw();
@@ -86,8 +93,9 @@ public partial class Turret : Building, IArmed
         DrawPolyline(new[] { body[0], body[1], body[2], body[0] },
             new Color(0f, 0f, 0f, 0.45f), 2f);
 
-        // Основание стоит по клетке и не крутится — компенсируем поворот башни
-        DrawSetTransform(Vector2.Zero, -Rotation, Vector2.One);
+        // Основание стоит под углом постановки и вслед за башней не крутится — снимаем
+        // поворот ноды и ставим вместо него угол корпуса
+        DrawSetTransform(Vector2.Zero, BodyFacing - Rotation, Vector2.One);
         DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(Definition.Color, 0.3f));
         DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(0f, 0f, 0f, 0.35f),
             false, 2f);

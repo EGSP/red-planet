@@ -68,13 +68,17 @@ public sealed class Spawner
         gm.Index.Watch<Node>(null, OnRetired);
     }
 
-    /// <summary>Готовая постройка: занимает место по форме справочника.</summary>
-    public Building SpawnBuilding(UnitDefinition def, Vector2 center)
+    /// <summary>
+    /// Готовая постройка: занимает место по форме справочника, повёрнутое на заданный угол.
+    /// Угол не задан — берётся из справочника: так появляются постройки, которых никто
+    /// не ставил, вроде стартовой базы.
+    /// </summary>
+    public Building SpawnBuilding(UnitDefinition def, Vector2 center, float? facing = null)
     {
         var building = NewBuilding(def.Class);
 
         int id = _gm.NewId();
-        building.Init(id, def, center);
+        building.Init(id, def, center, facing ?? Mathf.DegToRad(def.FacingDegrees));
 
         _gm.Playground.Add(WorldLayer.Structures, building);
         Occupy(building, def);
@@ -89,6 +93,7 @@ public sealed class Spawner
             EntityId = id,
             DefinitionId = def.Id,
             Pos = center,
+            Facing = building.BodyFacing,
         });
 
         return building;
@@ -113,12 +118,13 @@ public sealed class Spawner
     }
 
     /// <summary>Каркас занимает место на время стройки — его нельзя перекрыть.</summary>
-    public Blueprint SpawnBlueprint(PackedScene scene, UnitDefinition def, Vector2 center)
+    public Blueprint SpawnBlueprint(PackedScene scene, UnitDefinition def, Vector2 center,
+        float facing)
     {
         var blueprint = scene.Instantiate<Blueprint>();
 
         int id = _gm.NewId();
-        blueprint.Init(id, def, center);
+        blueprint.Init(id, def, center, facing);
 
         _gm.Playground.Add(WorldLayer.Structures, blueprint);
         Occupy(blueprint, def);
