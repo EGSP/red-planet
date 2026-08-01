@@ -50,7 +50,23 @@ public partial class CommandSystem : GameSystem
     private Vector2 _bandStart;
     private bool _banding;
 
+    /// <summary>Что выбрано в строительной панели. Держится до отмены выбора.</summary>
     public UnitDefinition Pending { get; private set; }
+
+    /// <summary>Поставлен ли хоть один каркас с нынешнего выбора.</summary>
+    private bool _placed;
+
+    /// <summary>
+    /// Ставит ли щелчок каркас прямо сейчас. Выбор в панели и готовность строить —
+    /// разные вещи: первый каркас ставится сразу, а дальше режим ждёт Shift.
+    ///
+    /// ПОЧЕМУ ТАК. Одиночная постройка — обычный случай, и после неё игрок хочет
+    /// вернуться к управлению отрядом, а не отменять режим отдельным действием.
+    /// Серия же строится под зажатым Shift — тем же, которым в очередь ставятся
+    /// приказы. Shift здесь именно переключатель: нажимать и отпускать его можно
+    /// сколько угодно, пока выбор в панели не снят.
+    /// </summary>
+    public bool Building => Pending != null && (!_placed || Input.IsKeyPressed(Key.Shift));
 
     /// <summary>Кто сейчас выделен — читают оверлей и HUD.</summary>
     public IReadOnlyList<IOrderable> Selected => _selected;
@@ -76,6 +92,7 @@ public partial class CommandSystem : GameSystem
     public void BeginBuild(UnitDefinition def)
     {
         Pending = def;
+        _placed = false;
         EnsureNodes();
         _ghost.Definition = def;
         _ghost.Visible = true;
@@ -84,6 +101,8 @@ public partial class CommandSystem : GameSystem
     public void CancelBuild()
     {
         Pending = null;
+        _placed = false;
+
         if (_ghost != null)
             _ghost.Visible = false;
     }
@@ -139,6 +158,13 @@ public partial class CommandSystem : GameSystem
         if (Pending == null)
             return;
 
+        // Призрак показывает не выбор, а готовность поставить: пока режим спит,
+        // место под курсором не подсвечивается, и щелчок обещает обычное выделение
+        _ghost.Visible = Building;
+
+        if (!_ghost.Visible)
+            return;
+
         var origin = OriginUnderCursor(Pending);
         _ghost.Origin = origin;
         _ghost.Valid = GM.Grid.IsFree(origin, Pending);
@@ -170,13 +196,17 @@ public partial class CommandSystem : GameSystem
 
         switch (mouse.ButtonIndex)
         {
-            case MouseButton.Left when mouse.Pressed && Pending != null:
+            case MouseButton.Left when mouse.Pressed && Building:
                 PlaceBlueprint();
                 break;
 
             // Рамку начинаем сразу: одиночный клик — это её вырожденный случай,
-            // и различаются они только тем, сколько мышь успела проехать
+            // и различаются они только тем, сколько мышь успела проехать.
+            //
+            // Уснувший выбор панели снимается этим же щелчком: игрок вернулся
+            // к управлению отрядом, и держать за ним постройку больше незачем
             case MouseButton.Left when mouse.Pressed:
+                CancelBuild();
                 _bandStart = _cursor;
                 _banding = true;
                 break;
@@ -185,11 +215,12 @@ public partial class CommandSystem : GameSystem
                 FinishBand();
                 break;
 
-            case MouseButton.Right when mouse.Pressed && Pending != null:
+            case MouseButton.Right when mouse.Pressed && Building:
                 CancelBuild();
                 break;
 
             case MouseButton.Right when mouse.Pressed:
+                CancelBuild();
                 IssueOrder();
                 break;
         }
@@ -485,8 +516,8 @@ public partial class CommandSystem : GameSystem
         foreach (var actor in Recipients())
             GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint);
 
-        if (!Input.IsKeyPressed(Key.Shift))
-            CancelBuild();
+        // Выбор в панели остаётся: дальше он оживает под Shift и гаснет без него
+        _placed = true;
     }
 
     private void EnsureNodes()
