@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Множество объектов и разрезы над ним.
@@ -468,19 +467,6 @@ public sealed class Index
     internal interface IKeySlice
     {
         void Invalidate();
-    }
-
-    /// <summary>
-    /// Сравнение по ссылке в обход Equals и GetHashCode самого объекта: у освобождённой
-    /// обёртки движка они небезопасны, а нам от снятого объекта нужна только его личность.
-    /// </summary>
-    private sealed class ByReference : IEqualityComparer<object>
-    {
-        public static readonly ByReference Instance = new();
-
-        public new bool Equals(object a, object b) => ReferenceEquals(a, b);
-
-        public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }
 

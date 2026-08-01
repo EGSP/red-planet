@@ -95,8 +95,10 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
     {
         var gm = GameManager.I;
 
-        // Клетки держал каркас — отпускаем: готовая постройка займёт их заново,
-        // а юнит не занимает вовсе, он ходит.
+        // Клетки держал каркас — отпускаем немедленно: готовая постройка займёт их
+        // заново в этом же кадре, а юнит не занимает вовсе. Ждать конца кадра нельзя —
+        // иначе SpawnBuilding увидел бы ещё занятые клетки. Отложенное снятие по
+        // подписке Spawner идемпотентно: Free с id каркаса не тронет клетки новой постройки.
         gm.Grid.Free(Cell, Definition);
 
         // Постройка встаёт на освобождённые клетки заново, юнит уходит с них и ходит.
@@ -112,21 +114,11 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision
             Cell = Cell,
         });
 
-        gm.Entities.Remove(Id);
         Retire();
     }
 
-    /// <summary>Каркас разбит: клетки освобождаются, вложенные ресурсы пропадают.</summary>
-    public void OnDestroyed()
-    {
-        var gm = GameManager.I;
-
-        if (Definition != null)
-            gm.Grid.Free(Cell, Definition);
-
-        gm.Entities.Remove(Id);
-        Retire();
-    }
+    /// <summary>Каркас разбит: вывести из игры. Сетку и EntityStore снимает Spawner.</summary>
+    public void OnDestroyed() => Retire();
 
     /// <summary>Выводим узел из игры до удаления, чтобы по нему не прошёл ещё один кадр.</summary>
     private void Retire()

@@ -90,18 +90,12 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         });
     }
 
-    /// <summary>Постройку снесли: освободить клетки и выйти из реестра.</summary>
+    /// <summary>Постройку снесли: вывести из игры. Сетку и EntityStore снимает Spawner.</summary>
     public virtual void OnDestroyed()
     {
-        var gm = GameManager.I;
-
-        if (Definition != null)
-            gm.Grid.Free(Cell, Definition);
-
-        gm.Entities.Remove(Id);
-
         // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем.
-        // Из разрезов индекса нода выпадает сама, как только помечена на удаление
+        // Из разрезов индекса нода выпадает сама, как только помечена на удаление;
+        // сетку и реестр по id чистит подписка Spawner на выбытие из индекса.
         SetProcess(false);
         Visible = false;
         QueueFree();

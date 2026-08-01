@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 /// <summary>
@@ -9,11 +10,14 @@ using Godot;
 /// Правило «кто занимает сетку и кто попадает в реестр» должно жить в одном месте,
 /// иначе рассинхрон неизбежен: где-то забыли занять клетки, где-то не зарегистрировали id.
 ///
-/// Здесь же единственное место, где сущность входит в индекс. Раньше каждая прописывала
-/// себя сама, перечисляя строками свои группы, — и списки эти жили в семи разных файлах.
-/// Теперь состав разрезов выводится из того, что сущность собой представляет, а сама она
-/// про индекс не знает вовсе. Выход из индекса вызова не требует: удалённую ноду он
-/// отличает сам, и забыть снять сущность физически нельзя.
+/// Здесь же единственное место, где сущность входит в индекс — и выходит из реестров.
+/// Раньше каждая прописывала себя сама, перечисляя строками свои группы, — и списки
+/// эти жили в семи разных файлах. Теперь состав разрезов выводится из того, что сущность
+/// собой представляет, а сама она про индекс не знает вовсе. Выход из индекса вызова
+/// не требует: удалённую ноду он отличает сам. Снятие с сетки и из EntityStore тоже
+/// не зовут вручную: подписка на выбытие из индекса делает это по снимку, сделанному
+/// при регистрации. Поля ноды в момент уведомления читать нельзя — обёртка обычно уже
+/// освобождена движком, поэтому всё нужное для разборки запоминается здесь.
 ///
 /// Почему это НЕ метод каталога: каталог — справочник только для чтения, он отвечает
 /// на вопрос «чем является завод». Создание же трогает сетку, реестр и дерево сцены.
@@ -31,7 +35,37 @@ public sealed class Spawner
 {
     private readonly GameManager _gm;
 
-    public Spawner(GameManager gm) => _gm = gm;
+    /// <summary>
+    /// Снимок регистрации: при выбытии из индекса нода уже недоступна, поэтому снятие
+    /// с реестров опирается только на эти данные.
+    /// </summary>
+    private readonly struct Enrollment
+    {
+        public readonly int Id;
+        public readonly Vector2I Cell;
+        public readonly UnitDefinition Definition;
+        public readonly bool Occupies;
+
+        public Enrollment(int id, Vector2I cell, UnitDefinition definition, bool occupies)
+        {
+            Id = id;
+            Cell = cell;
+            Definition = definition;
+            Occupies = occupies;
+        }
+    }
+
+    private readonly Dictionary<object, Enrollment> _enrolled = new(ByReference.Instance);
+
+    public Spawner(GameManager gm)
+    {
+        _gm = gm;
+
+        // Spawner живёт ровно столько же, сколько индекс: отдельной отписки не нужно.
+        // Подписка на Node, а не на конкретный род: запись в словаре есть только у тех,
+        // кого Enroll занёс; снаряды сюда не попадают и дают быстрый выход.
+        gm.Index.Watch<Node>(null, OnRetired);
+    }
 
     /// <summary>Готовая постройка: занимает клетки по матрице справочника.</summary>
     public Building SpawnBuilding(UnitDefinition def, Vector2I cell)
@@ -45,6 +79,7 @@ public sealed class Spawner
         _gm.Grid.Occupy(cell, def, id);
         _gm.Entities.Add(id, building);
         _gm.Index.Add(building);
+        Enroll(building, id, cell, def, occupies: true);
 
         // Факт «постройка есть в мире» публикуем здесь, а не в каркасе: стартовая база
         // появляется без всякой стройки, а ёмкость хранилища она поднимать обязана
@@ -71,6 +106,7 @@ public sealed class Spawner
         _gm.Playground.Add(WorldLayer.Actors, unit);
         _gm.Entities.Add(id, unit);
         _gm.Index.Add(unit);
+        Enroll(unit, id, default, null, occupies: false);
 
         return unit;
     }
@@ -87,6 +123,7 @@ public sealed class Spawner
         _gm.Grid.Occupy(cell, def, id);
         _gm.Entities.Add(id, blueprint);
         _gm.Index.Add(blueprint);
+        Enroll(blueprint, id, cell, def, occupies: true);
 
         return blueprint;
     }
@@ -102,6 +139,7 @@ public sealed class Spawner
         _gm.Playground.Add(WorldLayer.Actors, enemy);
         _gm.Entities.Add(id, enemy);
         _gm.Index.Add(enemy);
+        Enroll(enemy, id, default, null, occupies: false);
 
         return enemy;
     }
@@ -109,6 +147,7 @@ public sealed class Spawner
     /// <summary>
     /// Снаряд. Единственная сущность мира без EntityId: их за бой тысячи, они живут доли
     /// секунды, и ссылаться на снаряд из документа некому — попадание носит id стрелка и цели.
+    /// В словарь регистрации не заносится: клеток и EntityStore у него нет.
     /// </summary>
     public Projectile SpawnProjectile(WeaponDefinition weapon, IArmed shooter, Vector2 from, float angle)
     {
@@ -136,6 +175,10 @@ public sealed class Spawner
     /// Точка метала. Клетку она не занимает, а помечает: занятость означает «здесь кто-то
     /// стоит», а на точке ещё предстоит построить экстрактор. Кого на неё пускать,
     /// решает WorldGrid.CanPlace.
+    ///
+    /// Метка MarkMetal сознательно не снимается при выбытии: точка метала — свойство
+    /// местности и переживает то, что на ней построено. Способа убрать точку с карты
+    /// пока нет; если появится — правило снятия метки нужно будет описать здесь же.
     /// </summary>
     public MetalSpot SpawnMetalSpot(Vector2I cell)
     {
@@ -148,8 +191,28 @@ public sealed class Spawner
         _gm.Grid.MarkMetal(cell);
         _gm.Entities.Add(id, spot);
         _gm.Index.Add(spot);
+        Enroll(spot, id, cell, null, occupies: false);
 
         return spot;
+    }
+
+    private void Enroll(Node node, int id, Vector2I cell, UnitDefinition definition, bool occupies) =>
+        _enrolled[node] = new Enrollment(id, cell, definition, occupies);
+
+    /// <summary>
+    /// Выбытие из индекса — единственное место снятия с сетки и EntityStore.
+    /// Зовутся в конце кадра: клетки после гибели остаются занятыми до Sweep, кроме
+    /// достройки каркаса, которая освобождает их немедленно своим Free без id.
+    /// </summary>
+    private void OnRetired(Node node)
+    {
+        if (!_enrolled.Remove(node, out var enrollment))
+            return;
+
+        if (enrollment.Occupies)
+            _gm.Grid.Free(enrollment.Cell, enrollment.Definition, enrollment.Id);
+
+        _gm.Entities.Remove(enrollment.Id);
     }
 
     /// <summary>

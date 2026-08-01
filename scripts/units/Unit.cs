@@ -335,14 +335,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public override void _ExitTree() => Detach();
 
-    /// <summary>Прочность кончилась: отпустить узел работы и выйти из реестра.</summary>
+    /// <summary>Прочность кончилась: отпустить узел работы. EntityStore снимает Spawner.</summary>
     public virtual void OnDestroyed()
     {
         Detach();
         Orders.Clear();
-        GameManager.I?.Entities.Remove(Id);
 
-        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
+        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем.
+        // Реестр по id чистит подписка Spawner на выбытие из индекса.
         SetProcess(false);
         Visible = false;
         QueueFree();

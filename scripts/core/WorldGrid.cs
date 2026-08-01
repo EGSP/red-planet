@@ -61,9 +61,30 @@ public sealed class WorldGrid
             _occupied[cell] = entityId;
     }
 
+    /// <summary>
+    /// Снять занятость безусловно. Нужно там, где клетки должны освободиться немедленно —
+    /// достройка каркаса ставит готовую постройку на те же клетки в том же кадре.
+    /// </summary>
     public void Free(Vector2I origin, UnitDefinition def)
     {
         foreach (var cell in def.Cells(origin))
             _occupied.Remove(cell);
+    }
+
+    /// <summary>
+    /// Снять занятость только у клеток, чьим владельцем всё ещё является entityId.
+    ///
+    /// Подписка на выбытие из индекса зовётся в конце кадра, а достройка каркаса
+    /// освобождает клетки и занимает их заново внутри одного тика. Без сверки владельца
+    /// отложенное снятие стёрло бы запись уже вставшей постройки. Со сверкой операция
+    /// идемпотентна: повторный вызов после смены владельца ничего не делает.
+    /// </summary>
+    public void Free(Vector2I origin, UnitDefinition def, int entityId)
+    {
+        foreach (var cell in def.Cells(origin))
+        {
+            if (OwnerOf(cell) == entityId)
+                _occupied.Remove(cell);
+        }
     }
 }

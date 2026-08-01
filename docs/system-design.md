@@ -500,7 +500,7 @@ var command = GM.System<CommandSystem>();   // null, если системы в 
 - **Данные сущности** — обычные C#-объекты, которыми владеет нода. Не плодим ноды на каждую характеристику.
 - У сущности стабильный `EntityId`.
 
-Создание сущностей — **только через `Spawner`**. Он владеет обрядом: выдать id, поднять сцену, инициализировать, занять клетки, положить в свой слой площадки, в `EntityStore` и в `Index`. Вынесено потому, что раньше эти шаги дословно повторялись в пяти местах, и правило «кто занимает сетку и кто попадает в реестр» расползалось по системам.
+Создание сущностей — **только через `Spawner`**. Он владеет обрядом: выдать id, поднять сцену, инициализировать, занять клетки, положить в свой слой площадки, в `EntityStore` и в `Index`. Вынесено потому, что раньше эти шаги дословно повторялись в пяти местах, и правило «кто занимает сетку и кто попадает в реестр» расползалось по системам. Снятие с сетки и из `EntityStore` тоже живёт здесь: подписка на выбытие из индекса чистит реестры по снимку, сделанному при регистрации. `OnDestroyed` сущности только выводит ноду из игры (`Detach`, `QueueFree` и т.п.) — реестры руками не трогает.
 
 ```csharp
 var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, origin);
@@ -823,7 +823,7 @@ public void Compact()
 ```
 scripts/
 ├─ core/       Root, Session, GameManager, Scheduler, Spawner, EntityStore, Index, Slice,
-│              WorldGrid, GameSystem, NodeExtensions, Const, Alive, Heading, Health, Vision
+│              ByReference, WorldGrid, GameSystem, NodeExtensions, Const, Alive, Heading, Health, Vision
 ├─ data/       Content, EventRecord, EventStore, Projection, Events, Catalog,
 │              TomlDocument, ContentCompiler
 │  ├─ Definitions/ UnitDefinition, ToolDefinition (+Weapon/WorkTool), TagSet, BuildbarDefinition

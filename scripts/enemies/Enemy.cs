@@ -142,12 +142,13 @@ public partial class Enemy : Node2D, IFacing, IDamageable, IArmed, IVision, IOrd
         return reach + target.HitRadius;
     }
 
+    /// <summary>Прочность кончилась: вывести из игры. EntityStore снимает Spawner.</summary>
     public void OnDestroyed()
     {
         Orders.Clear();
-        GameManager.I?.Entities.Remove(Id);
 
-        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем
+        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем.
+        // Реестр по id чистит подписка Spawner на выбытие из индекса.
         SetProcess(false);
         Visible = false;
         QueueFree();
