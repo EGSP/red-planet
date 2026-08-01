@@ -19,4 +19,4 @@ vision_range = 6.0
 turn_speed = 90.0
 
 [assembly]
-cost_metal = 80.0
+cost_metal = 225.0

@@ -1,12 +1,15 @@
 # Строительная рука коммандера: мощная и прожорливая. Ею же он и чинит —
 # отдельной ремонтной мощности в игре нет, инструмент один на стройку и ремонт.
+#
+# Мощность 30 и расход энергии 30 — как construction_demand у PA Titans
+# (metal 30 / energy 1750), энергия на сжатой шкале: 30 при генерации тела 20.
 
 id   = "commander_arm"
 name = "Строительная рука коммандера"
 kind = "work"
 
 range            = 3.0
-power            = 20.0
-energy_per_power = 5.0
+power            = 30.0
+energy_per_power = 1.0
 works            = ["build"]
 repairs_units    = true

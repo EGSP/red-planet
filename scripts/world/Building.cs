@@ -69,25 +69,43 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     }
 
     /// <summary>
-    /// Генератор заявляет свою мощность. Производство не зависит от производительности базы:
-    /// электростанция даёт энергию даже тогда, когда всё остальное еле шевелится.
+    /// Генератор и экстрактор заявляют свою мощность. Производство не зависит от
+    /// производительности базы: электростанция и месторождение дают ресурс даже тогда,
+    /// когда всё остальное еле шевелится.
     /// </summary>
     public virtual void Declare(EconomyLedger ledger)
     {
-        if (Definition != null)
-            ledger.AddIncome(ResourceKind.Energy, Definition.EnergyProduction);
+        if (Definition == null)
+            return;
+
+        ledger.AddIncome(ResourceKind.Energy, Definition.EnergyProduction);
+        ledger.AddIncome(ResourceKind.Metal, Definition.MetalProduction);
     }
 
     public virtual void Run(double dt, EconomyRates rates)
     {
-        if (Definition == null || Definition.EnergyProduction <= 0f)
+        if (Definition == null)
             return;
 
-        GameManager.I.Events.Append(new ResourceGained
+        var events = GameManager.I.Events;
+
+        if (Definition.EnergyProduction > 0f)
         {
-            Kind = ResourceKind.Energy,
-            Amount = Definition.EnergyProduction * (float)dt,
-        });
+            events.Append(new ResourceGained
+            {
+                Kind = ResourceKind.Energy,
+                Amount = Definition.EnergyProduction * (float)dt,
+            });
+        }
+
+        if (Definition.MetalProduction > 0f)
+        {
+            events.Append(new ResourceGained
+            {
+                Kind = ResourceKind.Metal,
+                Amount = Definition.MetalProduction * (float)dt,
+            });
+        }
     }
 
     /// <summary>Постройку снесли: вывести из игры. Сетку и EntityStore снимает Spawner.</summary>

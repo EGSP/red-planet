@@ -1,4 +1,5 @@
 # Генератор: первая ступень выработки.
+# Числа — energy_plant celestial: 600 энергии / стоимость 400, энергия ÷100.
 
 id    = "generator"
 name  = "Генератор"
@@ -14,10 +15,7 @@ max_health   = 200.0
 vision_range = 6.0
 
 [production]
-energy = 45.0
-
-[storage]
-energy = 50.0
+energy = 6.0
 
 [assembly]
-cost_metal = 60.0
+cost_metal = 400.0

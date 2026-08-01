@@ -1,0 +1,21 @@
+# Склад металла: поднимает потолок запаса. Ёмкость скромная — один склад ≈ минута
+# работы экстрактора, а не десятки минут как у PA metal_storage.
+
+id    = "metal_storage"
+name  = "Склад металла"
+class = "structure"
+color = [0.7, 0.45, 0.28]
+tags  = ["structure", "economy", "basic"]
+
+[footprint]
+rows = ["##", "##"]
+
+[body]
+max_health   = 300.0
+vision_range = 6.0
+
+[storage]
+metal = 1000.0
+
+[assembly]
+cost_metal = 450.0

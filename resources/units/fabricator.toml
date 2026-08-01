@@ -4,7 +4,7 @@ id       = "fabricator"
 name     = "Фабрикатор"
 class    = "bot"
 color    = [0.4, 0.9, 0.5]
-buildbar = "fabricator"
+buildbar = "fabricator_buildbar"
 tags     = ["mobile", "builder"]
 tools    = ["fabricator_arm"]
 
@@ -23,7 +23,7 @@ speed      = 4.0
 turn_speed = 240.0
 
 [assembly]
-cost_metal = 60.0
+cost_metal = 150.0
 
 # Каркас крепче собранного фабрикатора: недостроенный корпус ещё не несёт начинки.
 # Раньше эти два числа лежали в разных файлах под одним именем max_health

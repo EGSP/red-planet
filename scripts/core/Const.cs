@@ -38,11 +38,12 @@ public static class Const
     /// <summary>На каком расстоянии бот держится от коммандера, когда идёт следом.</summary>
     public static float FollowDistancePx => Unit * 3f;
 
-    // Запас без единой постройки. Дальше потолок поднимают сами постройки (MetalStorage
-    // и EnergyStorage в справочнике) — запас нужен как демпфер, иначе любой всплеск
-    // спроса мгновенно роняет производительность базы
-    public const float BaseMetalCapacity = 150f;
-    public const float BaseEnergyCapacity = 150f;
+    // Врождённый запас коммандера, как storage у base_commander в celestial / PA Titans.
+    // Энергия на сжатой шкале (÷100): 45000 → 450. Дальше потолок поднимают склады
+    // (metal_storage / energy_storage) — без демпфера любой всплеск спроса мгновенно
+    // роняет производительность базы
+    public const float BaseMetalCapacity = 1500f;
+    public const float BaseEnergyCapacity = 450f;
 
     // Враги приходят из-за поля точек: дальние точки лежат на линии их подхода,
     // и экстрактор на краю карты обороняется тяжелее, чем экстрактор у базы

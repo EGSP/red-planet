@@ -1,4 +1,5 @@
-# Реактор: вторая ступень. Впятеро дороже генератора и даёт впятеро больше.
+# Реактор: вторая ступень.
+# Числа — energy_plant_adv celestial: 3750 энергии / стоимость 2000, энергия ÷100.
 
 id    = "generator_t2"
 name  = "Реактор"
@@ -14,10 +15,7 @@ max_health   = 350.0
 vision_range = 6.0
 
 [production]
-energy = 250.0
-
-[storage]
-energy = 200.0
+energy = 37.5
 
 [assembly]
-cost_metal = 300.0
+cost_metal = 2000.0

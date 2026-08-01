@@ -1,12 +1,13 @@
 # Рука фабрикатора: слабее коммандерской, но экономнее — тот же каркас обойдётся дешевле.
 # Чинит и юнитов тоже: фабрикатор задуман как ремонтник поля боя.
+# Числа — fabrication_bot celestial (metal 8 / energy 600 → 6 на сжатой шкале).
 
 id   = "fabricator_arm"
 name = "Строительная рука"
 kind = "work"
 
 range            = 2.0
-power            = 4.0
-energy_per_power = 4.0
+power            = 8.0
+energy_per_power = 0.75
 works            = ["build"]
 repairs_units    = true

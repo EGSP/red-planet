@@ -5,7 +5,7 @@
 # Координаты в секции считаются от левого нижнего угла: X вправо, Y вверх.
 # Правила слияния и соглашение о согласованных координатах — в buildbar.md.
 
-id = "commander"
+id = "commander_buildbar"
 priority = 1
 
 [[sections]]
@@ -13,9 +13,11 @@ id = "economy"
 title = "Экономика"
 order = 0
 cells = [
-	# y = 1 — верхний ряд: продвинутое
+	# y = 1 — верхний ряд: продвинутое и склады
 	{ x = 0, y = 1, build = "generator_t2" },
 	{ x = 1, y = 1, build = "assembler" },
+	{ x = 2, y = 1, build = "metal_storage" },
+	{ x = 3, y = 1, build = "energy_storage" },
 	# y = 0 — нижний ряд: базовое
 	{ x = 0, y = 0, build = "generator" },
 	{ x = 1, y = 0, build = "factory" },

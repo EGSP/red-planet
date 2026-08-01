@@ -1,0 +1,20 @@
+# Батарея: склад энергии. Числа — energy_storage celestial, энергия ÷100 (300000 → 3000).
+
+id    = "energy_storage"
+name  = "Батарея"
+class = "structure"
+color = [0.45, 0.75, 0.95]
+tags  = ["structure", "economy", "basic"]
+
+[footprint]
+rows = ["##", "##"]
+
+[body]
+max_health   = 300.0
+vision_range = 6.0
+
+[storage]
+energy = 3000.0
+
+[assembly]
+cost_metal = 450.0

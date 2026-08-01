@@ -2,11 +2,11 @@
 # Главенство 2 — ниже коммандерского: при совместном выделении разметку задаёт коммандер,
 # а эта панель на неё накладывается.
 #
-# ВНИМАНИЕ: координаты общих построек намеренно совпадают с commander.toml. Секции
-# economy и defence здесь повторены один в один; юнитов фабрикатор не строит, и секции
-# units у него нет вовсе. Сверяйте оба файла при любой правке — см. buildbar.md.
+# ВНИМАНИЕ: координаты общих построек намеренно совпадают с commander_buildbar.toml.
+# Секции economy и defence здесь повторены один в один; юнитов фабрикатор не строит,
+# и секции units у него нет вовсе. Сверяйте оба файла при любой правке — см. buildbar.md.
 
-id = "fabricator"
+id = "fabricator_buildbar"
 priority = 2
 
 [[sections]]
@@ -16,6 +16,8 @@ order = 0
 cells = [
 	{ x = 0, y = 1, build = "generator_t2" },
 	{ x = 1, y = 1, build = "assembler" },
+	{ x = 2, y = 1, build = "metal_storage" },
+	{ x = 3, y = 1, build = "energy_storage" },
 	{ x = 0, y = 0, build = "generator" },
 	{ x = 1, y = 0, build = "factory" },
 	{ x = 2, y = 0, build = "extractor" },

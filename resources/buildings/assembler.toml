@@ -16,4 +16,4 @@ max_health   = 260.0
 vision_range = 9.0
 
 [assembly]
-cost_metal = 120.0
+cost_metal = 400.0
