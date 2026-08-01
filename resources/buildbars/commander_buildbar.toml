@@ -39,3 +39,11 @@ order = 2
 cells = [
 	{ x = 0, y = 0, build = "fabricator" },
 ]
+
+[[sections]]
+id = "special"
+title = "Особое"
+order = 3
+cells = [
+	{ x = 0, y = 0, build = "portal" },
+]

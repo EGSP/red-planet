@@ -41,7 +41,11 @@ public partial class PauseMenu : CanvasLayer
             _session.PauseChanged -= OnPauseChanged;
     }
 
-    private void OnPauseChanged(bool paused) => _frame.Visible = paused;
+    private void OnPauseChanged(bool paused)
+    {
+        // После исхода партии пауза тоже поднимается, но показывает OutcomeMenu, не это
+        _frame.Visible = paused && _session.Outcome == SessionOutcome.None;
+    }
 
     /// <summary>
     /// Escape означает «отменить текущее» и лишь затем «открыть меню». Порядок разбора
@@ -51,14 +55,14 @@ public partial class PauseMenu : CanvasLayer
     /// второй сбрасывает выделение, третий открывает меню.
     ///
     /// На самой паузе ветка Systems отключена, ввод до неё не доходит, и Escape просто
-    /// закрывает меню.
+    /// закрывает меню. После исхода партии Escape ничего не делает: снять паузу нельзя.
     /// </summary>
     public override void _UnhandledInput(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
             return;
 
-        if (_session == null)
+        if (_session == null || _session.Outcome != SessionOutcome.None)
             return;
 
         GetViewport().SetInputAsHandled();

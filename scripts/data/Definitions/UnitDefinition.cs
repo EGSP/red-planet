@@ -51,13 +51,16 @@ public sealed class AssemblyDefinition
     public float FrameHealth;
 }
 
-/// <summary>Переработка одного ресурса в другой: сейчас это только синтезатор метала.</summary>
+/// <summary>
+/// Переработка или чистый расход энергии. У синтезатора — жжёт энергию и даёт метал;
+/// у портала — только расход в активном состоянии, без выхода.
+/// </summary>
 public sealed class ConversionDefinition
 {
     /// <summary>Сколько энергии в секунду потребляет при полной производительности.</summary>
     public float EnergyDrain;
 
-    /// <summary>Сколько метала в секунду выдаёт при полной производительности.</summary>
+    /// <summary>Сколько метала в секунду выдаёт при полной производительности. Ноль — чистый расход.</summary>
     public float MetalOutput;
 }
 

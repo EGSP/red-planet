@@ -69,9 +69,10 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     }
 
     /// <summary>
-    /// Генератор и экстрактор заявляют свою мощность. Производство не зависит от
-    /// производительности базы: электростанция и месторождение дают ресурс даже тогда,
-    /// когда всё остальное еле шевелится.
+    /// Генератор заявляет выработку. Постройка с <see cref="ConversionDefinition"/> —
+    /// расход энергии (портал) или, у синтезатора, ещё и выход метала в наследнике.
+    /// Производство не зависит от производительности базы: электростанция даёт ресурс
+    /// даже тогда, когда всё остальное еле шевелится.
     /// </summary>
     public virtual void Declare(EconomyLedger ledger)
     {
@@ -80,6 +81,10 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
 
         ledger.AddIncome(ResourceKind.Energy, Definition.EnergyProduction);
         ledger.AddIncome(ResourceKind.Metal, Definition.MetalProduction);
+
+        float drain = Definition.Conversion?.EnergyDrain ?? 0f;
+        if (drain > 0f)
+            ledger.Request(ResourceKind.Energy, drain);
     }
 
     public virtual void Run(double dt, EconomyRates rates)
@@ -105,6 +110,14 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
                 Kind = ResourceKind.Metal,
                 Amount = Definition.MetalProduction * (float)dt,
             });
+        }
+
+        float drain = Definition.Conversion?.EnergyDrain ?? 0f;
+        if (drain > 0f)
+        {
+            float spent = drain * (float)dt * rates.Energy;
+            if (spent > 0f)
+                events.Append(new ResourceSpent { Kind = ResourceKind.Energy, Amount = spent });
         }
     }
 

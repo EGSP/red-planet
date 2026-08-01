@@ -7,12 +7,12 @@ using Godot;
 /// Смысл постройки в потоковой экономике — сброс излишков: когда генераторов больше,
 /// чем потребителей, лишняя энергия иначе просто сгорает на потолке хранилища.
 /// Курс намеренно невыгодный, синтезатор не должен заменять месторождения.
+///
+/// Расход энергии заявляет и списывает <see cref="Building"/> по Conversion;
+/// здесь только выход метала и индикатор работы.
 /// </summary>
 public partial class Factory : Building
 {
-    /// <summary>Сколько энергии потребляет в секунду при полной производительности.</summary>
-    private float EnergyDrain => Definition?.Conversion?.EnergyDrain ?? 0f;
-
     /// <summary>Сколько метала выдаёт в секунду при полной производительности.</summary>
     private float MetalOutput => Definition?.Conversion?.MetalOutput ?? 0f;
 
@@ -24,7 +24,6 @@ public partial class Factory : Building
     {
         base.Declare(ledger);
 
-        ledger.Request(ResourceKind.Energy, EnergyDrain);
         ledger.AddIncome(ResourceKind.Metal, MetalOutput);
     }
 
@@ -33,20 +32,12 @@ public partial class Factory : Building
         base.Run(dt, rates);
 
         // Синтезатору важна только энергия: метал он производит, и его нехватка
-        // работу не ограничивает
+        // работу не ограничивает. Расход уже списан в Building.
         Working = rates.Energy > 0.01f;
-        if (!Working)
+        if (!Working || MetalOutput <= 0f)
             return;
 
-        var events = GameManager.I.Events;
-
-        events.Append(new ResourceSpent
-        {
-            Kind = ResourceKind.Energy,
-            Amount = EnergyDrain * (float)dt * rates.Energy,
-        });
-
-        events.Append(new ResourceGained
+        GameManager.I.Events.Append(new ResourceGained
         {
             Kind = ResourceKind.Metal,
             Amount = MetalOutput * (float)dt * rates.Energy,

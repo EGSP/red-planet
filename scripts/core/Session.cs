@@ -1,5 +1,13 @@
 using Godot;
 
+/// <summary>Чем кончилась партия. None — ещё идёт.</summary>
+public enum SessionOutcome
+{
+    None,
+    Victory,
+    Defeat,
+}
+
 /// <summary>
 /// Сессия — корень одной игры. Держит три ветки с разной ответственностью и разным
 /// направлением зависимостей:
@@ -30,8 +38,14 @@ public partial class Session : Node2D
     /// <summary>Состояние паузы сменилось. На него подписан <see cref="PauseMenu"/>.</summary>
     [Signal] public delegate void PauseChangedEventHandler(bool paused);
 
+    /// <summary>Партия завершилась победой или поражением. На него подписан <see cref="OutcomeMenu"/>.</summary>
+    [Signal] public delegate void OutcomeChangedEventHandler(int outcome);
+
     /// <summary>Идёт ли пауза. Останавливается только симуляция, не весь кадр.</summary>
     public bool Paused { get; private set; }
+
+    /// <summary>Исход партии. После End симуляция стоит, и снять паузу уже нельзя.</summary>
+    public SessionOutcome Outcome { get; private set; }
 
     /// <summary>
     /// Пауза выключает обработку у ветки Systems, и этого достаточно: кадр симуляции
@@ -45,6 +59,10 @@ public partial class Session : Node2D
     /// </summary>
     public void SetPaused(bool paused)
     {
+        // Завершённую партию снова не запускаем: меню исхода не «продолжить»
+        if (Outcome != SessionOutcome.None)
+            return;
+
         if (Paused == paused || Systems == null)
             return;
 
@@ -55,6 +73,27 @@ public partial class Session : Node2D
     }
 
     public void TogglePause() => SetPaused(!Paused);
+
+    /// <summary>
+    /// Завершить партию. Симуляция останавливается навсегда для этой сессии; меню исхода
+    /// предлагает перезапуск или выход. Повторный вызов ничего не делает: исход один.
+    /// </summary>
+    public void End(SessionOutcome outcome)
+    {
+        if (Outcome != SessionOutcome.None || outcome == SessionOutcome.None)
+            return;
+
+        Outcome = outcome;
+
+        if (Systems != null)
+        {
+            Paused = true;
+            Systems.ProcessMode = ProcessModeEnum.Disabled;
+            EmitSignal(SignalName.PauseChanged, true);
+        }
+
+        EmitSignal(SignalName.OutcomeChanged, (int)outcome);
+    }
 
     public override void _Ready()
     {

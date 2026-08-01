@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="UTF-8">
+<link rel="profile" href="https://gmpg.org/xfn/11">
+<link rel="pingback" href="https://www.jdxdev.com/blog/xmlrpc.php">
+
+<title>RTS Pathfinding 3: Variable agent size, smoke tests &#038; Navmesh fixes &#8211; jdxdev</title>
+<meta name='robots' content='max-image-preview:large' />
+<link rel="alternate" type="application/rss+xml" title="jdxdev &raquo; Feed" href="https://www.jdxdev.com/blog/feed/" />
+<link rel="alternate" type="application/rss+xml" title="jdxdev &raquo; Comments Feed" href="https://www.jdxdev.com/blog/comments/feed/" />
+<link rel="alternate" type="application/rss+xml" title="jdxdev &raquo; RTS Pathfinding 3: Variable agent size, smoke tests &#038; Navmesh fixes Comments Feed" href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/feed/" />
+<script type="text/javascript">
+window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/14.0.0\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/14.0.0\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/www.jdxdev.com\/blog\/wp-includes\/js\/wp-emoji-release.min.js?ver=6.2.9"}};
+/*! This file is auto-generated */
+!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){p.clearRect(0,0,i.width,i.height),p.fillText(e,0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(t,0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(p&&p.fillText)switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s("\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!s("\ud83c\uddfa\ud83c\uddf3","\ud83c\uddfa\u200b\ud83c\uddf3")&&!s("\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!s("\ud83e\udef1\ud83c\udffb\u200d\ud83e\udef2\ud83c\udfff","\ud83e\udef1\ud83c\udffb\u200b\ud83e\udef2\ud83c\udfff")}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(e=t.source||{}).concatemoji?c(e.concatemoji):e.wpemoji&&e.twemoji&&(c(e.twemoji),c(e.wpemoji)))}(window,document,window._wpemojiSettings);
+</script>
+<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 0.07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='wp-block-library-css' href='https://www.jdxdev.com/blog/wp-includes/css/dist/block-library/style.min.css?ver=6.2.9' type='text/css' media='all' />
+<link rel='stylesheet' id='classic-theme-styles-css' href='https://www.jdxdev.com/blog/wp-includes/css/classic-themes.min.css?ver=6.2.9' type='text/css' media='all' />
+<style id='global-styles-inline-css' type='text/css'>
+body{--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--duotone--dark-grayscale: url('#wp-duotone-dark-grayscale');--wp--preset--duotone--grayscale: url('#wp-duotone-grayscale');--wp--preset--duotone--purple-yellow: url('#wp-duotone-purple-yellow');--wp--preset--duotone--blue-red: url('#wp-duotone-blue-red');--wp--preset--duotone--midnight: url('#wp-duotone-midnight');--wp--preset--duotone--magenta-yellow: url('#wp-duotone-magenta-yellow');--wp--preset--duotone--purple-green: url('#wp-duotone-purple-green');--wp--preset--duotone--blue-orange: url('#wp-duotone-blue-orange');--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgba(255, 255, 255, 1), 6px 6px rgba(0, 0, 0, 1);--wp--preset--shadow--crisp: 6px 6px 0px rgba(0, 0, 0, 1);}:where(.is-layout-flex){gap: 0.5em;}body .is-layout-flow > .alignleft{float: left;margin-inline-start: 0;margin-inline-end: 2em;}body .is-layout-flow > .alignright{float: right;margin-inline-start: 2em;margin-inline-end: 0;}body .is-layout-flow > .aligncenter{margin-left: auto !important;margin-right: auto !important;}body .is-layout-constrained > .alignleft{float: left;margin-inline-start: 0;margin-inline-end: 2em;}body .is-layout-constrained > .alignright{float: right;margin-inline-start: 2em;margin-inline-end: 0;}body .is-layout-constrained > .aligncenter{margin-left: auto !important;margin-right: auto !important;}body .is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)){max-width: var(--wp--style--global--content-size);margin-left: auto !important;margin-right: auto !important;}body .is-layout-constrained > .alignwide{max-width: var(--wp--style--global--wide-size);}body .is-layout-flex{display: flex;}body .is-layout-flex{flex-wrap: wrap;align-items: center;}body .is-layout-flex > *{margin: 0;}:where(.wp-block-columns.is-layout-flex){gap: 2em;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+.wp-block-navigation a:where(:not(.wp-element-button)){color: inherit;}
+:where(.wp-block-columns.is-layout-flex){gap: 2em;}
+.wp-block-pullquote{font-size: 1.5em;line-height: 1.6;}
+</style>
+<link rel='stylesheet' id='crp-style-rounded-thumbs-css' href='https://www.jdxdev.com/blog/wp-content/plugins/contextual-related-posts/css/rounded-thumbs.min.css?ver=3.3.1' type='text/css' media='all' />
+<style id='crp-style-rounded-thumbs-inline-css' type='text/css'>
+
+			.crp_related.crp-rounded-thumbs a {
+			  width: 150px;
+			  height: 150px;
+			  text-decoration: none;
+			}
+			.crp_related.crp-rounded-thumbs img {
+			  max-width: 150px;
+			  margin: auto;
+			}
+			.crp_related.crp-rounded-thumbs .crp_title {
+			  width: 100%;
+			}
+			
+</style>
+<link rel='stylesheet' id='puro-style-css' href='https://www.jdxdev.com/blog/wp-content/themes/puro/style.css?ver=1.3.0' type='text/css' media='all' />
+<link rel='stylesheet' id='font-awesome-css' href='https://www.jdxdev.com/blog/wp-content/themes/puro/font-awesome/css/font-awesome.min.css?ver=4.3.0' type='text/css' media='all' />
+<link rel='stylesheet' id='recent-posts-widget-with-thumbnails-public-style-css' href='https://www.jdxdev.com/blog/wp-content/plugins/recent-posts-widget-with-thumbnails/public.css?ver=7.1.1' type='text/css' media='all' />
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-includes/js/jquery/jquery.min.js?ver=3.6.4' id='jquery-core-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.0' id='jquery-migrate-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/jquery.theme-main.min.js?ver=1.3.0' id='puro-main-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/skip-link-focus-fix.js?ver=1.3.0' id='puro-skip-link-focus-fix-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/jquery.fitvids.min.js?ver=1.1' id='jquery-fitvids-js'></script>
+<!--[if lt IE 9]>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/flexie.js?ver=1.0.3' id='puro-flexie-js'></script>
+<![endif]-->
+<!--[if lt IE 9]>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/html5shiv-printshiv.js?ver=3.7.3' id='puro-html5-js'></script>
+<![endif]-->
+<!--[if (gte IE 6)&(lte IE 8)]>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/selectivizr.min.js?ver=1.0.3b' id='puro-selectivizr-js'></script>
+<![endif]-->
+<link rel="https://api.w.org/" href="https://www.jdxdev.com/blog/wp-json/" /><link rel="alternate" type="application/json" href="https://www.jdxdev.com/blog/wp-json/wp/v2/posts/422" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://www.jdxdev.com/blog/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://www.jdxdev.com/blog/wp-includes/wlwmanifest.xml" />
+<meta name="generator" content="WordPress 6.2.9" />
+<link rel="canonical" href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/" />
+<link rel='shortlink' href='https://www.jdxdev.com/blog/?p=422' />
+<link rel="alternate" type="application/json+oembed" href="https://www.jdxdev.com/blog/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.jdxdev.com%2Fblog%2F2021%2F12%2F07%2Frts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes%2F" />
+<link rel="alternate" type="text/xml+oembed" href="https://www.jdxdev.com/blog/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.jdxdev.com%2Fblog%2F2021%2F12%2F07%2Frts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes%2F&#038;format=xml" />
+<style type="text/css">0</style><meta name="google-site-verification" content="r9G7OHNJVgOqRs7hIbGPQ7dKSey3N2iOazSLL4IdDfs" /><link rel="pingback" href="https://www.jdxdev.com/blog/xmlrpc.php">	<style type="text/css" id="puro-menu-css"> 
+		@media (max-width: 768px) {
+			.site-branding { float: left }
+			.rtl .site-branding { float: right; padding-right: 0 }
+			.responsive-menu .main-navigation ul { display: none }
+			.responsive-menu .menu-toggle { display: block }
+			.main-navigation { float: right }
+		}
+	</style>
+	<meta name="viewport" content="width=device-width, initial-scale=1" />		<style type="text/css" id="wp-custom-css">
+			/*Adjust post image size*/
+.single-post .wp-post-image {
+	max-height: 80vh;
+	max-width: 80vh;
+}
+
+/*Minimise site logo size*/
+#masthead .site-logo {
+  max-height: 12px;
+}
+
+/*Reduce header height*/
+#masthead {
+	font-size: 0.5rem;
+  padding: 0px;
+  background-color: rgba(255,255,255,1.0);
+}
+
+.entry-content p {
+  font-size: 1.2rem;
+	color:#404040;
+	font-family: HelveticaNeue;
+}
+
+/*Reduce margin for front blog thumbnail page, not sure if working...*/
+.home .page-content {
+  padding-left: 0px;
+  padding-right: 0px;
+  width: 100%;
+}
+
+/*Gallery image text size & zero padding on background so it doesn't overlap image*/
+.wp-block-gallery .blocks-gallery-image figcaption, .wp-block-gallery .blocks-gallery-item figcaption {
+    font-size: 20px;
+  display: table-caption;
+  caption-side: bottom;
+	/*background: black;*/
+  /*background: pink;*/
+	/*background: none;*/
+  padding: 0px;
+}
+
+/*Gallery image text size*/
+.wp-block-gallery .blocks-gallery-image figcaption, .wp-block-gallery .blocks-gallery-item  {
+  display: table;
+  margin: 4;
+}
+
+		</style>
+		</head>
+
+<body data-rsssl=1 class="post-template-default single single-post postid-422 single-format-standard no-touch one-column resp">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-dark-grayscale"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0.49803921568627" /><feFuncG type="table" tableValues="0 0.49803921568627" /><feFuncB type="table" tableValues="0 0.49803921568627" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-grayscale"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0 1" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-yellow"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.54901960784314 0.98823529411765" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.71764705882353 0.25490196078431" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-red"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 0.27843137254902" /><feFuncB type="table" tableValues="0.5921568627451 0.27843137254902" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-midnight"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0" /><feFuncG type="table" tableValues="0 0.64705882352941" /><feFuncB type="table" tableValues="0 1" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-magenta-yellow"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.78039215686275 1" /><feFuncG type="table" tableValues="0 0.94901960784314" /><feFuncB type="table" tableValues="0.35294117647059 0.47058823529412" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-green"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.65098039215686 0.40392156862745" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.44705882352941 0.4" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-orange"><feColorMatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.098039215686275 1" /><feFuncG type="table" tableValues="0 0.66274509803922" /><feFuncB type="table" tableValues="0.84705882352941 0.41960784313725" /><feFuncA type="table" tableValues="1 1" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" /></filter></defs></svg>
+<div id="page" class="hfeed site">
+	<a class="skip-link screen-reader-text" href="#content">Skip to content</a>
+
+	<header id="masthead" class="site-header no-tagline responsive-menu" role="banner">
+		<div class="site-header-inner">
+			<div class="site-branding">
+				<p class="site-title"><a href="https://www.jdxdev.com/blog/" rel="home">jdxdev</a></p>							</div><!-- .site-branding-->
+										<nav id="site-navigation" class="main-navigation" role="navigation">
+					<button class="menu-toggle"></button>					<div class="menu"><ul>
+<li class="page_item page-item-2"><a href="https://www.jdxdev.com/blog/home/">About</a></li>
+<li class="page_item page-item-212"><a href="https://www.jdxdev.com/blog/">Posts</a></li>
+</ul></div>
+				</nav><!-- #site-navigation -->
+					</div><!-- .site-header-inner -->
+	</header><!-- #masthead -->
+	
+	<div id="content" class="site-content">
+
+	
+	
+	<div id="primary" class="content-area">
+		<main id="main" class="site-main" role="main">
+
+		
+			
+<article id="post-422" class="post-422 post type-post status-publish format-standard hentry category-uncategorized">
+		<header class="entry-header">
+		<h1 class="entry-title">RTS Pathfinding 3: Variable agent size, smoke tests &#038; Navmesh fixes</h1>
+				<div class="entry-meta">
+			<span class="entry-date"><time class="published" datetime="2021-12-07T21:02:39+00:00">December 7, 2021</time><time class="updated" datetime="2024-07-22T05:47:55+00:00">July 22, 2024</time></span><span class="byline"><span class="author vcard"><a class="url fn n" href="https://www.jdxdev.com/blog/author/jdtec/" rel="author">jdtec</a></span></span><span class="cat-links"><a href="https://www.jdxdev.com/blog/category/uncategorized/" rel="category tag">Uncategorized</a></span>		</div><!-- .entry-meta -->
+			</header><!-- .entry-header -->
+
+	<div class="entry-content">
+		
+<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio"><div class="wp-block-embed__wrapper">
+<iframe title="Variable agent size RTS pathfinding tutorial" width="771" height="434" src="https://www.youtube.com/embed/rWHrTrigIYo?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+</div></figure>
+
+
+
+<p>It seemed the two previous articles weren’t enough to get this topic covered, and they’ll probably be more to talk about in the future. I was planning to move onto more general RTS gameplay tasks next, such as attacking. But after running my old group pathing in maze test I saw that things weren’t working so well anymore. Bugs had crept in. Later on I realised that variable agent sized pathing wasn’t really fit for purpose using the edge lengths to determine max unit size that can move along a path (described in <a href="https://www.jdxdev.com/blog/2021/07/06/rts-pathfinding-2-dynamic-navmesh-with-constrained-delaunay-triangles/">RTS pathfinding 2</a>).</p>
+
+
+
+<p>First of all, smoke tests that are easy &amp; quick to run were needed so that it’s quick to check if things have broken. I was inspired by seeing <a href="https://youtu.be/LUHwzSQYYPE?t=1721">Frost Giants pathing tech demo</a> and wanted to try and achieve something similar. Secondly, I needed a robust solution for supporting variable sized units on the navmesh. Unity/Detour achieves this by creating multiple navmeshes for each unit size, but that doesn’t really scale well when there’s lots of different sizes &amp; the navmesh needs to change semi-regularly.</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" loading="lazy" width="1024" height="540" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/frostGiant-maze-1024x540.png" alt="" class="wp-image-428" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/frostGiant-maze-1024x540.png 1024w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/frostGiant-maze-300x158.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/frostGiant-maze-768x405.png 768w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/frostGiant-maze-1536x810.png 1536w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/frostGiant-maze.png 1660w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption class="wp-element-caption">Frost Giants tech demo showing ~1k agents pathing through a maze, with physics &amp; fog of war</figcaption></figure>
+
+
+
+<h2 class="wp-block-heading">Maze Test Map</h2>
+
+
+
+<p>I built a more challenging pathfinding environment with multiple routes for differently sized agents. I added narrow shortcut routes that smaller units could take advantage of &amp; the new editor to place prefab rock obstacles to create the maze. A clearing in the centre on a raised cliff area was added to serve as a pathing goal for units to cluster around. This was all quite straightforward until I came to build the navmesh and noticed a new error. An obstacle triangle had extended across open ground and an edge was missing in the navmesh. Getting a bug in the CDT (constrained delaunay triangulation) is not a new thing, but they are becoming less &amp; less frequent as I expose it to more tests &amp; new maps. It&#8217;s generally fairly robust these days.</p>
+
+
+
+<figure class="wp-block-image size-full"><img decoding="async" loading="lazy" width="909" height="513" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_move-maze.png" alt="" class="wp-image-430" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_move-maze.png 909w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_move-maze-300x169.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_move-maze-768x433.png 768w" sizes="(max-width: 909px) 100vw, 909px" /><figcaption class="wp-element-caption">The new maze map for path &amp; movement testing</figcaption></figure>
+
+
+
+<h2 class="wp-block-heading">Navmesh precision bug</h2>
+
+
+
+<p>Debugging the navmesh at the specific area revealed that a vertex was merged in error due to a loss of precision. There were two rocks, each with a vertex very very close to each other. This was causing issues for the limited fixedpoint precision. I’d had an idea earlier about helping to alleviate or maybe even solve some of these precision issues by snapping input navmesh vertices to a grid. This would ensure a minimum distance between the vertices, which I hoped would cut-down precision issues. It seemed to work. I experimented with the grid scale and 0.1 of a in-game unit/metre seemed to work very well and didn’t give any noticeable precision loss to the human eye.</p>
+
+
+
+<figure class="wp-block-gallery has-nested-images columns-default is-cropped wp-block-gallery-1 is-layout-flex">
+<figure class="wp-block-image size-full"><img decoding="async" loading="lazy" width="861" height="808" data-id="433"  src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.17.47-1.png" alt="" class="wp-image-433" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.17.47-1.png 861w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.17.47-1-300x282.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.17.47-1-768x721.png 768w" sizes="(max-width: 861px) 100vw, 861px" /></figure>
+
+
+
+<figure class="wp-block-image size-full"><img decoding="async" loading="lazy" width="837" height="687" data-id="432"  src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.19.37.png" alt="" class="wp-image-432" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.19.37.png 837w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.19.37-300x246.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/Screenshot-2021-11-19-at-09.19.37-768x630.png 768w" sizes="(max-width: 837px) 100vw, 837px" /></figure>
+<figcaption class="blocks-gallery-caption wp-element-caption">Left: the error from an unwanted vertex merge due to precision loss, Right: input vertices aligned to a 1 unit grid. In the end I used a 0.1 unit grid to preserve details better. </figcaption></figure>
+
+
+
+<h2 class="wp-block-heading">Low hanging fruit optimisation</h2>
+
+
+
+<p>Before proceeding with higher volume tests I needed to remove some simple performance problems first. I disabled mesh animation for now, the current prototype animation is using CPU skinning &amp; is not especially performant. In the future I would aim to implement a bespoke GPU skinning solution that is suitable for animating thousands of characters. Drawing all the units as simple cylinders for clarity of monitoring pathing and movement would be better for now.<br>I checked my draw calls and moved some things around to enable better batching. I created a second copy of the navmesh data which was better prepared for use by other systems (only contained the relevant external data and had some post-processing on it that the other systems required). I used staggered updates with some systems such as unit raycasts &amp; enemy scanning.</p>
+
+
+
+<h2 class="wp-block-heading">Navmesh paths for variable sized agents</h2>
+
+
+
+<p>In <a href="https://www.jdxdev.com/blog/2021/07/06/rts-pathfinding-2-dynamic-navmesh-with-constrained-delaunay-triangles/">RTS Pathfinding 2</a>, I mentioned about using triangle edge lengths along a path to determine the max radius. I knew at the time it wasn’t completely reliable but it kind of worked at the time. I must have had a very limited test suite back then because it&#8217;s now obvious to me that it won&#8217;t work in quite a few situations. I went back to researching how others had achieved variable agent sizes on a single navmesh. In the GDC presentation: <a href="https://www.gdcvault.com/play/1014514/AI-Navigation-It-s-Not">Pathing it’s not a solved problem</a>, James Anhalt demonstrated how Starcraft2 created paths along a tunnel inside the expanded vertices. I could see that this was what I needed, but the video was light on implementation details.</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" loading="lazy" width="1024" height="590" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/sc2_expanded_vertices-1024x590.png" alt="" class="wp-image-425" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/sc2_expanded_vertices-1024x590.png 1024w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/sc2_expanded_vertices-300x173.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/sc2_expanded_vertices-768x442.png 768w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/sc2_expanded_vertices-1536x885.png 1536w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/sc2_expanded_vertices.png 1653w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption class="wp-element-caption">From &#8216;Pathing it&#8217;s not a solved Problem&#8217; Starcraft 2 showing vertices expanded by unit radius to create inner waypoints.</figcaption></figure>
+
+
+
+<p>There were two parts to solve:</p>
+
+
+
+<p>   1) The A* search needed to know the width of tunnels in the navmesh in order to know if an agent is small enough to fit through the gaps</p>
+
+
+
+<p>   2) The actual path points needed to be offset inside the tunnel appropriately so that the agent can centre itself over waypoints.</p>
+
+
+
+<h2 class="wp-block-heading">Triangle Widths</h2>
+
+
+
+<p>Eventually I found <a href="https://skatgame.net/mburo/ps/thesis_demyen_2006.pdf">‘Efficient Triangulation-Based Pathfinding’ [1]</a>, which contains a method for calculating what they refer to as the ‘triangle width’. The triangle width is the maximum width of the corridor passing between two edges on a triangle face in the navmesh. Each triangle face three possible triangle widths, one for each pair of edges.<br>I will not go into the details of calculating the triangle width as the authors did a great job in their paper. The relevants parts are <a href="https://skatgame.net/mburo/ps/thesis_demyen_2006.pdf#page=43">3.1 Width calculation</a> &amp; <a href="https://skatgame.net/mburo/ps/thesis_demyen_2006.pdf#page=49">Algorithm 3</a>, which shows a psuedo code implementation.</p>
+
+
+
+<figure class="wp-block-image size-full"><img decoding="async" loading="lazy" width="694" height="305" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/width-calculation.png" alt="" class="wp-image-426" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/width-calculation.png 694w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/width-calculation-300x132.png 300w" sizes="(max-width: 694px) 100vw, 694px" /><figcaption class="wp-element-caption">From <em>Efficient Triangulation-Based Pathfinding</em> by Douglas Jon Demyen, 2006</figcaption></figure>
+
+
+
+<p>Once you have the triangle width you can use it in an A* search to know the maximum corridor size between adjacent nodes and thus; if an agent of a given size can pass through. That was part 1 solved.</p>
+
+
+
+<figure class="wp-block-image size-large is-resized"><img decoding="async" loading="lazy" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/expanded-vertices-path-graphic-1-1024x706.png" alt="" class="wp-image-427" width="771" height="531" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/expanded-vertices-path-graphic-1-1024x706.png 1024w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/expanded-vertices-path-graphic-1-300x207.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/expanded-vertices-path-graphic-1-768x529.png 768w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/expanded-vertices-path-graphic-1.png 1413w" sizes="(max-width: 771px) 100vw, 771px" /><figcaption class="wp-element-caption">Graphic 1 illustrating how the expanded vertex offsets are calculated. Watch the video to see the steps in order.</figcaption></figure>
+
+
+
+<h2 class="wp-block-heading">Expanded vertices</h2>
+
+
+
+<p>1) Create two lists of vertices, one containing the left vertices &amp; the other with the right vertices through the tunnel. Do not allow duplicates in the vertex lists. Create another list at the same time containing vertex indices for each edge. A vertex index may be used by multiple (greater than 2) edges. The start position for both left &amp; right lists should be added at the start and have a zero length edge added comprised of these vertex indices.</p>
+
+
+
+<p>2) Now that we have two lists of consecutive vertices we can calculate the ‘vertex neighbour edges’ for each vertex. These are shown for the highlighted vertex in the graphic 1.</p>
+
+
+
+<p>3) Normalise both neighbour edges and then average them to get what I’ve labelled as the ‘Average neighbour edge’ in graphic 1.</p>
+
+
+
+<p>4) The perpendicular of the average neighbour edge set to the length of the radius for the unit gives the expanded vertex position for the path.</p>
+
+
+
+<p>5) Build a new portal edge list from the expanded vertex list</p>
+
+
+
+<p>6) Run funnel algorithm on the new edge list to get the final path!</p>
+
+
+
+<p>If the above instructions aren’t clear, I’d suggest looking at the <a href="https://skatgame.net/mburo/ps/thesis_demyen_2006.pdf#page=49">paper</a> itself, which talks about this more, or simply looking at graphic 1 above, and working out for yourself rather than rigidly follow the above text steps (there&#8217;s probably more than one way to do it).</p>
+
+
+
+<h2 class="wp-block-heading">Testing</h2>
+
+
+
+<p>To facilitate faster &amp; easier testing I implemented support for my own basic script system. In this case, a script is basically just a text file with specific commands in that the app can read in and run. A start-up script may be defined the the app config file or loaded using the console.</p>
+
+
+
+<p>A snippet from the test_move script that automatically deploys, selects and moves units:</p>
+
+
+
+<pre class="wp-block-preformatted">map: test_move
+sim_time_acceleration: 1
+random_unit_deployment_count: 500
+
+#
+# maze pathing marines lower/mid-left to upper/mid-right
+#
+deploy_request: step 4, prefab sm_marine, position 66.5 0.5 144.5, player_id 1, count 28
+select: player_id 1, step 16, origin 66.0 144.0, radius 25
+move_selected: step 20, position 430 0 340</pre>
+
+
+
+<p>As I make changes and add new features going forward, I can quickly run these test scripts to check that everything appears correct. Ideally I’d add some success criteria too, but for now it’s a lot better than nothing for continuous integration testing. The game simulation can now be run with time acceleration applied which means tests can be blasted through quickly. The time acceleration steps the sim multiple times rather than changing the time delta, so the simulation checksum result at the end should be identical.</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" loading="lazy" width="1024" height="539" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/3_agents-1024x539.png" alt="" class="wp-image-434" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/3_agents-1024x539.png 1024w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/3_agents-300x158.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/3_agents-768x404.png 768w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/3_agents.png 1267w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption class="wp-element-caption">Three different sized agents taking different routes to the same goal</figcaption></figure>
+
+
+
+<p>For now I’ve added a stress/smoke test with about 600 units of varying individual and group size around the maze map. The test_move script handles creating these units, selecting them all and requesting they all path to the map centre.</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" loading="lazy" width="1024" height="537" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_500_agents-1024x537.png" alt="" class="wp-image-435" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_500_agents-1024x537.png 1024w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_500_agents-300x157.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_500_agents-768x402.png 768w, https://www.jdxdev.com/blog/wp-content/uploads/2021/11/test_500_agents.png 1206w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption class="wp-element-caption">600 agents of different sizes pathing through the maze</figcaption></figure>
+
+
+
+<p>After all that there were a few more performance and physics issues to fix. I also adjusted some boid behaviours slightly so that larger units would be less likely to avoid smaller units. I’m sure they’ll be small pathing/movement adjustments and features that come up in the future. There are lots of ways the performance could be increased further too. But for now, the pathing and movement is working quite nicely as a proof of concept.</p>
+
+
+
+<p>Drop any comments or questions to me on:</p>
+
+
+
+<ul>
+<li>Twitter: <a href="https://twitter.com/jdtec01">https://twitter.com/jdtec01</a></li>
+
+
+
+<li>E-mail: <a href="mailto:jon.dickison@gmail.com">jon.dickison@gmail.com</a></li>
+</ul>
+
+
+
+<h2 class="wp-block-heading">References</h2>
+
+
+
+<p>[1] <a href="https://skatgame.net/mburo/ps/thesis_demyen_2006.pdf" data-type="URL" data-id="https://skatgame.net/mburo/ps/thesis_demyen_2006.pdf">Efficient Triangulation-Based Pathfinding, Douglas Jon Demyen, 2006</a></p>
+<div id="crp_related"> </div>			</div><!-- .entry-content -->
+
+	<footer class="entry-footer">
+					</footer><!-- .entry-footer -->
+</article><!-- #post-## -->
+
+			
+	<nav class="navigation post-navigation" aria-label="Posts">
+		<h2 class="screen-reader-text">Post navigation</h2>
+		<div class="nav-links"><div class="nav-previous"><a href="https://www.jdxdev.com/blog/2021/10/29/rts-devlog-1-back-to-native-editor-work/" rel="prev">RTS Devlog #1 &#8211; Back to native &#038; Editor work</a></div><div class="nav-next"><a href="https://www.jdxdev.com/blog/2022/06/08/rts-fog-of-war/" rel="next">RTS Fog of War</a></div></div>
+	</nav>
+			
+			
+<div id="comments" class="comments-area">
+
+			<h2 class="comments-title">
+			12 Comments		</h2>
+
+		
+		<ol class="comment-list">
+					<li id="comment-24" class="comment even thread-even depth-1 parent">
+			<article id="div-comment-24" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/3d2f9dfed2f93d7c9fb8bf4eabf3c165?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/3d2f9dfed2f93d7c9fb8bf4eabf3c165?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Lukas</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-24"><time datetime="2022-04-07T11:39:00+00:00">April 7, 2022 at 11:39 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>This is an excellent blog post, thanks so much for sharing your knowledge!<br />
+I&#8217;m curious, how much time did you spend on research and implementing your &#8220;RTS Pathfinding&#8221; series so far? I&#8217;d guess like 200 hours.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-25" class="comment byuser comment-author-jdtec bypostauthor odd alt depth-2">
+			<article id="div-comment-25" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-25"><time datetime="2022-04-12T07:02:03+00:00">April 12, 2022 at 7:02 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Thanks! I&#8217;ve spent far more time on this than I originally intended. Some RTS games have solved most of these problems (maybe SC2), others might get around pathfinding by simplifying the game/map. I&#8217;m definitely guilty of going down a tech rabbit hole with this stuff, but it&#8217;s fun.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+		<li id="comment-28" class="comment even thread-odd thread-alt depth-1">
+			<article id="div-comment-28" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/a29871abd90af6da9da57a5b892ba629?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/a29871abd90af6da9da57a5b892ba629?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">ryu</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-28"><time datetime="2022-06-02T15:09:22+00:00">June 2, 2022 at 3:09 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>nice article and research.<br />
+great to share it.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+		<li id="comment-46" class="comment odd alt thread-even depth-1 parent">
+			<article id="div-comment-46" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/d30aba6c423c63648e00e769ccb34b5d?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/d30aba6c423c63648e00e769ccb34b5d?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Artem</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-46"><time datetime="2023-06-28T13:50:38+00:00">June 28, 2023 at 1:50 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hello,<br />
+Nice article! I&#8217;m curious, how do you detect/resolve collisions between units and terrain?</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-47" class="comment byuser comment-author-jdtec bypostauthor even depth-2">
+			<article id="div-comment-47" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-47"><time datetime="2023-06-29T09:40:36+00:00">June 29, 2023 at 9:40 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi Artem, I&#8217;m just using a physics engine. Units and terrain have 2d rigidbodies so that units can&#8217;t walk through things.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+		<li id="comment-49" class="comment odd alt thread-odd thread-alt depth-1 parent">
+			<article id="div-comment-49" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/c3c08624614e24596514f04a998be354?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/c3c08624614e24596514f04a998be354?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">wang</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-49"><time datetime="2023-07-04T19:00:17+00:00">July 4, 2023 at 7:00 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>notice at step 3<br />
+&#8220;Normalise both neighbour edges and then average them to get what I’ve labelled as the ‘Average neighbour edge’ in graphic 1&#8243;<br />
+and then get &#8221; perpendicular of the average neighbour edge &#8221; (it&#8217;s be bisector of neighbour edge I think)and scale it by unit width to get true apex .<br />
+the bisector vector here aren&#8217;t always the unit vector .I think you mean normalized vector rather than average, is it?<br />
+After read the original paper you refernced with I think the funnel algorithm you used should be simplified version from what that paper descripted. I suppose this version should be good enough for game Ai.<br />
+by the way excellent work here. Great work</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-50" class="comment byuser comment-author-jdtec bypostauthor even depth-2">
+			<article id="div-comment-50" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-50"><time datetime="2023-07-04T19:51:29+00:00">July 4, 2023 at 7:51 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi Wang, thanks for the comment. Yes you&#8217;re right I should have said normalized rather than average. I&#8217;ll update the article.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+		<li id="comment-427" class="comment odd alt thread-even depth-1 parent">
+			<article id="div-comment-427" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/6904f325cc479afed8cf636183e95f7a?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/6904f325cc479afed8cf636183e95f7a?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Martin Liu</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-427"><time datetime="2023-10-25T08:38:25+00:00">October 25, 2023 at 8:38 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Excellent post, quick question, lets say you have a long triangle and it has left, mid and right vertex. u want to go from near the left end to the right end. But the agent radius is blocked by the middle vertex, but if you do an Astar from a neighboring node, u can infact arrive at the right end. How do u deal with this case?</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-439" class="comment byuser comment-author-jdtec bypostauthor even depth-2 parent">
+			<article id="div-comment-439" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-439"><time datetime="2023-10-26T19:17:49+00:00">October 26, 2023 at 7:17 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>That&#8217;s a good question. I can&#8217;t remember trying that or encountering it as a problem whilst making the prototype RTS game in practice. However, I assume the agent would think it can reach the location due to the node being reachable like you say, and get stuck!</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-441" class="comment odd alt depth-3 parent">
+			<article id="div-comment-441" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/6904f325cc479afed8cf636183e95f7a?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/6904f325cc479afed8cf636183e95f7a?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Martin L</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-441"><time datetime="2023-10-27T08:44:25+00:00">October 27, 2023 at 8:44 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Thnx for the reply. Got another question.</p>
+<p>The tunnels with expanded vertices sometimes end up intersecting with each other because the ANE sort of change their directions. That sometimes ends up with weird paths after running in the Modifed funnel algorithm (Since tunnels intersecting messes up with left and right Funnel border crossing over each other step). How did u solve that edge case?</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-449" class="comment byuser comment-author-jdtec bypostauthor even depth-4">
+			<article id="div-comment-449" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/12/07/rts-pathfinding-3-variable-agent-size-smoke-tests-navmesh-fixes/#comment-449"><time datetime="2023-10-28T17:13:26+00:00">October 28, 2023 at 5:13 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>I don&#8217;t recall coming across that edge case so I&#8217;m not sure if I&#8217;ve solved it. If you have a video/image showing this you can message me @jdtec01 on Twitter and I might be able to comment further.<br />
+It might be that the discrete range of agent radius &#038; tunnel widths I tested with just didn&#8217;t show up this problem.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+		<li id="comment-794" class="pingback odd alt thread-odd thread-alt depth-1">
+			<div class="comment-body">
+				Pingback: <a href="https://timallanwheeler.com/blog/2023/09/30/global-path-planning-and-local-refinement/" class="url" rel="ugc external nofollow">Global Path Planning and Local Refinement &#8211; Tim Wheeler</a> 			</div>
+		</li><!-- #comment-## -->
+		</ol><!-- .comment-list -->
+
+		
+	
+			<p class="no-comments">Comments are closed.</p>
+	
+	
+</div><!-- #comments -->
+
+		
+		</main><!-- #main -->
+	</div><!-- #primary -->
+
+
+
+	</div><!-- #content -->
+
+	<footer id="colophon" class="site-footer" role="contentinfo">
+		
+		<div class="clear"></div>
+
+		<div class="social-links-menu"><ul id="menu-social" class="menu"><li id="menu-item-419" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-419"><a href="https://twitter.com/jdtec01"><span class="screen-reader-text">@jdtec01</span></a></li>
+<li id="menu-item-420" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-420"><a href="https://www.youtube.com/channel/UConw23idwKnv-gNNWLzuQKg"><span class="screen-reader-text">youtube</span></a></li>
+</ul></div>
+				<div class="site-info">
+			<span>Copyright 2026</span><span>Theme by <a href="https://purothemes.com/">Puro</a></span>		</div><!-- .site-info -->
+		
+	</footer><!-- #colophon -->
+</div><!-- #page -->
+
+			<script>
+				// Used by Gallery Custom Links to handle tenacious Lightboxes
+				//jQuery(document).ready(function () {
+
+					function mgclInit() {
+						
+						// In jQuery:
+						// if (jQuery.fn.off) {
+						// 	jQuery('.no-lightbox, .no-lightbox img').off('click'); // jQuery 1.7+
+						// }
+						// else {
+						// 	jQuery('.no-lightbox, .no-lightbox img').unbind('click'); // < jQuery 1.7
+						// }
+
+						// 2022/10/24: In Vanilla JS
+						var elements = document.querySelectorAll('.no-lightbox, .no-lightbox img');
+						for (var i = 0; i < elements.length; i++) {
+						 	elements[i].onclick = null;
+						}
+
+
+						// In jQuery:
+						//jQuery('a.no-lightbox').click(mgclOnClick);
+
+						// 2022/10/24: In Vanilla JS:
+						var elements = document.querySelectorAll('a.no-lightbox');
+						for (var i = 0; i < elements.length; i++) {
+						 	elements[i].onclick = mgclOnClick;
+						}
+
+						// in jQuery:
+						// if (jQuery.fn.off) {
+						// 	jQuery('a.set-target').off('click'); // jQuery 1.7+
+						// }
+						// else {
+						// 	jQuery('a.set-target').unbind('click'); // < jQuery 1.7
+						// }
+						// jQuery('a.set-target').click(mgclOnClick);
+
+						// 2022/10/24: In Vanilla JS:
+						var elements = document.querySelectorAll('a.set-target');
+						for (var i = 0; i < elements.length; i++) {
+						 	elements[i].onclick = mgclOnClick;
+						}
+					}
+
+					function mgclOnClick() {
+						if (!this.target || this.target == '' || this.target == '_self')
+							window.location = this.href;
+						else
+							window.open(this.href,this.target);
+						return false;
+					}
+
+					// From WP Gallery Custom Links
+					// Reduce the number of  conflicting lightboxes
+					function mgclAddLoadEvent(func) {
+						var oldOnload = window.onload;
+						if (typeof window.onload != 'function') {
+							window.onload = func;
+						} else {
+							window.onload = function() {
+								oldOnload();
+								func();
+							}
+						}
+					}
+
+					mgclAddLoadEvent(mgclInit);
+					mgclInit();
+
+				//});
+			</script>
+		<style id='core-block-supports-inline-css' type='text/css'>
+.wp-block-gallery.wp-block-gallery-1{--wp--style--unstable-gallery-gap:var( --wp--style--gallery-gap-default, var( --gallery-block--gutter-size, var( --wp--style--block-gap, 0.5em ) ) );gap:var( --wp--style--gallery-gap-default, var( --gallery-block--gutter-size, var( --wp--style--block-gap, 0.5em ) ) );}
+</style>
+<script type='text/javascript' id='puro-responsive-menu-js-extra'>
+/* <![CDATA[ */
+var puro_resp_menu_params = {"collapse":"768"};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/responsive-menu.min.js?ver=1.3.0' id='puro-responsive-menu-js'></script>
+
+</body>
+</html>
+
+
+<!-- Page cached by LiteSpeed Cache 6.5.2 on 2026-07-27 09:09:31 -->

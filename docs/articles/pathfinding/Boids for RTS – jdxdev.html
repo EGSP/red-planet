@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="UTF-8">
+<link rel="profile" href="https://gmpg.org/xfn/11">
+<link rel="pingback" href="https://www.jdxdev.com/blog/xmlrpc.php">
+
+<title>Boids for RTS &#8211; jdxdev</title>
+<meta name='robots' content='max-image-preview:large' />
+<link rel="alternate" type="application/rss+xml" title="jdxdev &raquo; Feed" href="https://www.jdxdev.com/blog/feed/" />
+<link rel="alternate" type="application/rss+xml" title="jdxdev &raquo; Comments Feed" href="https://www.jdxdev.com/blog/comments/feed/" />
+<link rel="alternate" type="application/rss+xml" title="jdxdev &raquo; Boids for RTS Comments Feed" href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/feed/" />
+<script type="text/javascript">
+window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/14.0.0\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/14.0.0\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/www.jdxdev.com\/blog\/wp-includes\/js\/wp-emoji-release.min.js?ver=6.2.9"}};
+/*! This file is auto-generated */
+!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){p.clearRect(0,0,i.width,i.height),p.fillText(e,0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(t,0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(p&&p.fillText)switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s("\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!s("\ud83c\uddfa\ud83c\uddf3","\ud83c\uddfa\u200b\ud83c\uddf3")&&!s("\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!s("\ud83e\udef1\ud83c\udffb\u200d\ud83e\udef2\ud83c\udfff","\ud83e\udef1\ud83c\udffb\u200b\ud83e\udef2\ud83c\udfff")}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(e=t.source||{}).concatemoji?c(e.concatemoji):e.wpemoji&&e.twemoji&&(c(e.twemoji),c(e.wpemoji)))}(window,document,window._wpemojiSettings);
+</script>
+<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 0.07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='wp-block-library-css' href='https://www.jdxdev.com/blog/wp-includes/css/dist/block-library/style.min.css?ver=6.2.9' type='text/css' media='all' />
+<link rel='stylesheet' id='classic-theme-styles-css' href='https://www.jdxdev.com/blog/wp-includes/css/classic-themes.min.css?ver=6.2.9' type='text/css' media='all' />
+<style id='global-styles-inline-css' type='text/css'>
+body{--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--duotone--dark-grayscale: url('#wp-duotone-dark-grayscale');--wp--preset--duotone--grayscale: url('#wp-duotone-grayscale');--wp--preset--duotone--purple-yellow: url('#wp-duotone-purple-yellow');--wp--preset--duotone--blue-red: url('#wp-duotone-blue-red');--wp--preset--duotone--midnight: url('#wp-duotone-midnight');--wp--preset--duotone--magenta-yellow: url('#wp-duotone-magenta-yellow');--wp--preset--duotone--purple-green: url('#wp-duotone-purple-green');--wp--preset--duotone--blue-orange: url('#wp-duotone-blue-orange');--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgba(255, 255, 255, 1), 6px 6px rgba(0, 0, 0, 1);--wp--preset--shadow--crisp: 6px 6px 0px rgba(0, 0, 0, 1);}:where(.is-layout-flex){gap: 0.5em;}body .is-layout-flow > .alignleft{float: left;margin-inline-start: 0;margin-inline-end: 2em;}body .is-layout-flow > .alignright{float: right;margin-inline-start: 2em;margin-inline-end: 0;}body .is-layout-flow > .aligncenter{margin-left: auto !important;margin-right: auto !important;}body .is-layout-constrained > .alignleft{float: left;margin-inline-start: 0;margin-inline-end: 2em;}body .is-layout-constrained > .alignright{float: right;margin-inline-start: 2em;margin-inline-end: 0;}body .is-layout-constrained > .aligncenter{margin-left: auto !important;margin-right: auto !important;}body .is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)){max-width: var(--wp--style--global--content-size);margin-left: auto !important;margin-right: auto !important;}body .is-layout-constrained > .alignwide{max-width: var(--wp--style--global--wide-size);}body .is-layout-flex{display: flex;}body .is-layout-flex{flex-wrap: wrap;align-items: center;}body .is-layout-flex > *{margin: 0;}:where(.wp-block-columns.is-layout-flex){gap: 2em;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+.wp-block-navigation a:where(:not(.wp-element-button)){color: inherit;}
+:where(.wp-block-columns.is-layout-flex){gap: 2em;}
+.wp-block-pullquote{font-size: 1.5em;line-height: 1.6;}
+</style>
+<link rel='stylesheet' id='crp-style-rounded-thumbs-css' href='https://www.jdxdev.com/blog/wp-content/plugins/contextual-related-posts/css/rounded-thumbs.min.css?ver=3.3.1' type='text/css' media='all' />
+<style id='crp-style-rounded-thumbs-inline-css' type='text/css'>
+
+			.crp_related.crp-rounded-thumbs a {
+			  width: 150px;
+			  height: 150px;
+			  text-decoration: none;
+			}
+			.crp_related.crp-rounded-thumbs img {
+			  max-width: 150px;
+			  margin: auto;
+			}
+			.crp_related.crp-rounded-thumbs .crp_title {
+			  width: 100%;
+			}
+			
+</style>
+<link rel='stylesheet' id='puro-style-css' href='https://www.jdxdev.com/blog/wp-content/themes/puro/style.css?ver=1.3.0' type='text/css' media='all' />
+<link rel='stylesheet' id='font-awesome-css' href='https://www.jdxdev.com/blog/wp-content/themes/puro/font-awesome/css/font-awesome.min.css?ver=4.3.0' type='text/css' media='all' />
+<link rel='stylesheet' id='recent-posts-widget-with-thumbnails-public-style-css' href='https://www.jdxdev.com/blog/wp-content/plugins/recent-posts-widget-with-thumbnails/public.css?ver=7.1.1' type='text/css' media='all' />
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-includes/js/jquery/jquery.min.js?ver=3.6.4' id='jquery-core-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.0' id='jquery-migrate-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/jquery.theme-main.min.js?ver=1.3.0' id='puro-main-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/skip-link-focus-fix.js?ver=1.3.0' id='puro-skip-link-focus-fix-js'></script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/jquery.fitvids.min.js?ver=1.1' id='jquery-fitvids-js'></script>
+<!--[if lt IE 9]>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/flexie.js?ver=1.0.3' id='puro-flexie-js'></script>
+<![endif]-->
+<!--[if lt IE 9]>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/html5shiv-printshiv.js?ver=3.7.3' id='puro-html5-js'></script>
+<![endif]-->
+<!--[if (gte IE 6)&(lte IE 8)]>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/selectivizr.min.js?ver=1.0.3b' id='puro-selectivizr-js'></script>
+<![endif]-->
+<link rel="https://api.w.org/" href="https://www.jdxdev.com/blog/wp-json/" /><link rel="alternate" type="application/json" href="https://www.jdxdev.com/blog/wp-json/wp/v2/posts/231" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://www.jdxdev.com/blog/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://www.jdxdev.com/blog/wp-includes/wlwmanifest.xml" />
+<meta name="generator" content="WordPress 6.2.9" />
+<link rel="canonical" href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/" />
+<link rel='shortlink' href='https://www.jdxdev.com/blog/?p=231' />
+<link rel="alternate" type="application/json+oembed" href="https://www.jdxdev.com/blog/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.jdxdev.com%2Fblog%2F2021%2F03%2F19%2Fboids-for-rts%2F" />
+<link rel="alternate" type="text/xml+oembed" href="https://www.jdxdev.com/blog/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.jdxdev.com%2Fblog%2F2021%2F03%2F19%2Fboids-for-rts%2F&#038;format=xml" />
+<style type="text/css">0</style><meta name="google-site-verification" content="r9G7OHNJVgOqRs7hIbGPQ7dKSey3N2iOazSLL4IdDfs" /><link rel="pingback" href="https://www.jdxdev.com/blog/xmlrpc.php">	<style type="text/css" id="puro-menu-css"> 
+		@media (max-width: 768px) {
+			.site-branding { float: left }
+			.rtl .site-branding { float: right; padding-right: 0 }
+			.responsive-menu .main-navigation ul { display: none }
+			.responsive-menu .menu-toggle { display: block }
+			.main-navigation { float: right }
+		}
+	</style>
+	<meta name="viewport" content="width=device-width, initial-scale=1" />		<style type="text/css" id="wp-custom-css">
+			/*Adjust post image size*/
+.single-post .wp-post-image {
+	max-height: 80vh;
+	max-width: 80vh;
+}
+
+/*Minimise site logo size*/
+#masthead .site-logo {
+  max-height: 12px;
+}
+
+/*Reduce header height*/
+#masthead {
+	font-size: 0.5rem;
+  padding: 0px;
+  background-color: rgba(255,255,255,1.0);
+}
+
+.entry-content p {
+  font-size: 1.2rem;
+	color:#404040;
+	font-family: HelveticaNeue;
+}
+
+/*Reduce margin for front blog thumbnail page, not sure if working...*/
+.home .page-content {
+  padding-left: 0px;
+  padding-right: 0px;
+  width: 100%;
+}
+
+/*Gallery image text size & zero padding on background so it doesn't overlap image*/
+.wp-block-gallery .blocks-gallery-image figcaption, .wp-block-gallery .blocks-gallery-item figcaption {
+    font-size: 20px;
+  display: table-caption;
+  caption-side: bottom;
+	/*background: black;*/
+  /*background: pink;*/
+	/*background: none;*/
+  padding: 0px;
+}
+
+/*Gallery image text size*/
+.wp-block-gallery .blocks-gallery-image figcaption, .wp-block-gallery .blocks-gallery-item  {
+  display: table;
+  margin: 4;
+}
+
+		</style>
+		</head>
+
+<body data-rsssl=1 class="post-template-default single single-post postid-231 single-format-standard no-touch one-column resp">
+<svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-dark-grayscale"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0 0.49803921568627" /><fefuncg type="table" tablevalues="0 0.49803921568627" /><fefuncb type="table" tablevalues="0 0.49803921568627" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-grayscale"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0 1" /><fefuncg type="table" tablevalues="0 1" /><fefuncb type="table" tablevalues="0 1" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-yellow"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0.54901960784314 0.98823529411765" /><fefuncg type="table" tablevalues="0 1" /><fefuncb type="table" tablevalues="0.71764705882353 0.25490196078431" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-red"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0 1" /><fefuncg type="table" tablevalues="0 0.27843137254902" /><fefuncb type="table" tablevalues="0.5921568627451 0.27843137254902" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-midnight"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0 0" /><fefuncg type="table" tablevalues="0 0.64705882352941" /><fefuncb type="table" tablevalues="0 1" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-magenta-yellow"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0.78039215686275 1" /><fefuncg type="table" tablevalues="0 0.94901960784314" /><fefuncb type="table" tablevalues="0.35294117647059 0.47058823529412" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-green"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0.65098039215686 0.40392156862745" /><fefuncg type="table" tablevalues="0 1" /><fefuncb type="table" tablevalues="0.44705882352941 0.4" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-orange"><fecolormatrix color-interpolation-filters="sRGB" type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 " /><fecomponenttransfer color-interpolation-filters="sRGB" ><fefuncr type="table" tablevalues="0.098039215686275 1" /><fefuncg type="table" tablevalues="0 0.66274509803922" /><fefuncb type="table" tablevalues="0.84705882352941 0.41960784313725" /><fefunca type="table" tablevalues="1 1" /></fecomponenttransfer><fecomposite in2="SourceGraphic" operator="in" /></filter></defs></svg>
+<div id="page" class="hfeed site">
+	<a class="skip-link screen-reader-text" href="#content">Skip to content</a>
+
+	<header id="masthead" class="site-header no-tagline responsive-menu" role="banner">
+		<div class="site-header-inner">
+			<div class="site-branding">
+				<p class="site-title"><a href="https://www.jdxdev.com/blog/" rel="home">jdxdev</a></p>							</div><!-- .site-branding-->
+										<nav id="site-navigation" class="main-navigation" role="navigation">
+					<button class="menu-toggle"></button>					<div class="menu"><ul>
+<li class="page_item page-item-2"><a href="https://www.jdxdev.com/blog/home/">About</a></li>
+<li class="page_item page-item-212"><a href="https://www.jdxdev.com/blog/">Posts</a></li>
+</ul></div>
+				</nav><!-- #site-navigation -->
+					</div><!-- .site-header-inner -->
+	</header><!-- #masthead -->
+	
+	<div id="content" class="site-content">
+
+	
+	
+	<div id="primary" class="content-area">
+		<main id="main" class="site-main" role="main">
+
+		
+			
+<article id="post-231" class="post-231 post type-post status-publish format-standard has-post-thumbnail hentry category-uncategorized">
+			<div class="entry-thumbnail">
+			<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/" class="custom-link no-lightbox" title="boids_title" aria-label="" onclick="event.stopPropagation()" target="_self" rel=""><img width="1071" height="613" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/boids_title.png" class="attachment-post-thumbnail size-post-thumbnail wp-post-image" alt="" decoding="async" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/boids_title.png 1071w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/boids_title-300x172.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/boids_title-1024x586.png 1024w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/boids_title-768x440.png 768w" sizes="(max-width: 1071px) 100vw, 1071px" /></a>		</div>
+		<header class="entry-header">
+		<h1 class="entry-title">Boids for RTS</h1>
+				<div class="entry-meta">
+			<span class="entry-date"><time class="published" datetime="2021-03-19T20:08:25+00:00">March 19, 2021</time><time class="updated" datetime="2024-07-22T05:48:20+00:00">July 22, 2024</time></span><span class="byline"><span class="author vcard"><a class="url fn n" href="https://www.jdxdev.com/blog/author/jdtec/" rel="author">jdtec</a></span></span><span class="cat-links"><a href="https://www.jdxdev.com/blog/category/uncategorized/" rel="category tag">Uncategorized</a></span>		</div><!-- .entry-meta -->
+			</header><!-- .entry-header -->
+
+	<div class="entry-content">
+		
+<p>Agents in an RTS often need to pathfind across a map containing various obstacles. Finding the most efficient route at this high-level can be solved with methods such as navigation meshes/grids or flowfields. However, in a fast moving environment with lots of dynamic obstacles moving around &amp; quickly going in &amp; out of existence, it is not always practical to keep making new pathing requests. This is where local navigation techniques, such as boids, can start to be useful.</p>
+
+
+
+<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio"><div class="wp-block-embed__wrapper">
+<iframe loading="lazy" title="Boids RTS local avoidance" width="771" height="434" src="https://www.youtube.com/embed/ngh9GSZj0HY?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+</div><figcaption class="wp-element-caption">Iteration with boids demonstrating the behaviours discussed in more detail below</figcaption></figure>
+
+
+
+<p>It&#8217;s easy to search for a basic introduction to boids, and so, I won&#8217;t be discussing that here. Having implemented some basic boids to allow for reasonable group movement there were a few areas I wanted to adjust. This post is a list of notes on the way to improving local avoidance (including agents navigating concave depressions) &amp; implementing a surround mechanic, where a small swarm of melee attackers surround a group of targets.</p>
+
+
+
+<h2 class="wp-block-heading">Spatial Partitioning</h2>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" loading="lazy" width="1004" height="567" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/spatial-partition.png" alt="" class="wp-image-233" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/spatial-partition.png 1004w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/spatial-partition-300x169.png 300w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/spatial-partition-768x434.png 768w" sizes="(max-width: 1004px) 100vw, 1004px" /><figcaption class="wp-element-caption">Tiles coloured according to agent count</figcaption></figure>
+
+
+
+<p>Boids involves lots of comparisons to neighbour agents so having a grid-based spatial partitioning system for dynamic agents helped keep things performant. Systems such as target scanning &amp; boids would access this map to know which agents are nearby, avoiding the otherwise costly <em>O</em>(<em>n<sup>2</sup></em>) agent comparisons.</p>
+
+
+
+<h2 class="wp-block-heading">Avoidance</h2>
+
+
+
+<p>I had originally implemented a separation behaviour but soon realised that a more traditional avoidance force would work better for my goals. There is a behaviour state where the agent is expected to hold it&#8217;s position, which is used if the agent is explicitly commanded to do so or if it&#8217;s performing some task where it shouldn&#8217;t move for other agents, such as attacking. Currently agents could be pushed around by other agents at anytime so a robust avoidance force seemed the best way to fix this.</p>
+
+
+
+<p>Initially I used a typical boid separation force which caused the agent to move away from neighbours. This raised the first problem: units getting trapped when surrounded by multiple neighbours. Sometimes they would slow down and eventually push through, other times they would just get stuck as the separation force more or less cancelled out the seek force.</p>
+
+
+<div class="wp-block-image">
+<figure class="aligncenter size-large"><img decoding="async" loading="lazy" width="323" height="297" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/avoid_1-1.png" alt="" class="wp-image-244" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/avoid_1-1.png 323w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/avoid_1-1-300x276.png 300w" sizes="(max-width: 323px) 100vw, 323px" /><figcaption class="wp-element-caption">Problem 1: Avoidance force is approximately opposite to seek</figcaption></figure></div>
+
+
+<p>I replaced the separation force with a typical boids avoidance force which adjusted the steering to aim either side of a neighbour. The next problem was that the agent avoidance direction was not consistent. It would flicker between two neighbours either side of the agents forward vector.</p>
+
+
+<div class="wp-block-image">
+<figure class="aligncenter size-large"><img decoding="async" loading="lazy" width="448" height="324" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/avoid_2_3.png" alt="" class="wp-image-245" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/avoid_2_3.png 448w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/avoid_2_3-300x217.png 300w" sizes="(max-width: 448px) 100vw, 448px" /><figcaption class="wp-element-caption">Problem 2: Non-consistent avoidance direction</figcaption></figure></div>
+
+
+<p>To fix the rapid switching of avoidance direction for different neighbours I  locked the avoidance force to the same side of the agents forward vector if there was an existing avoidance force (diagrams 1 &amp; 2). This stopped the flickering.</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" loading="lazy" width="566" height="324" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/Screenshot-2021-03-19-at-08.52.23.png" alt="" class="wp-image-252" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/Screenshot-2021-03-19-at-08.52.23.png 566w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/Screenshot-2021-03-19-at-08.52.23-300x172.png 300w" sizes="(max-width: 566px) 100vw, 566px" /></figure>
+
+
+
+<p>The agent would now navigate around a concave depression of neighbours, however, it had a tendency to continue along the perimeter on the other side of the neighbours rather than head straight for the goal once the path was clear. The solution was to alter the avoidance force to be perpendicular to the goal vector in certain situations (diagrams 3 &amp; 4).</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" loading="lazy" width="660" height="356" src="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/Screenshot-2021-03-19-at-08.52.14.png" alt="" class="wp-image-251" srcset="https://www.jdxdev.com/blog/wp-content/uploads/2021/03/Screenshot-2021-03-19-at-08.52.14.png 660w, https://www.jdxdev.com/blog/wp-content/uploads/2021/03/Screenshot-2021-03-19-at-08.52.14-300x162.png 300w" sizes="(max-width: 660px) 100vw, 660px" /></figure>
+
+
+
+<p>This iteration of the avoidance forces is demonstrated in the video link at the top of this post. It&#8217;s worth bearing in mind that in addition to these new ways of calculating the avoidance force, there was a decent amount of iteration tweaking the strength and radius of various boid forces to help get the right effect.</p>
+
+
+
+<h2 class="wp-block-heading">Surrounding</h2>
+
+
+
+<p>In many RTS games a group of agents can surround an enemy and trap them. This was a very satisfying move to pull off in Warcraft3 in particular where you could trap a high priority hero unit. I wanted something similar to be possible in this prototype. And, in addition to targeting a single agent, I wanted a swarm of melee attackers to spread and surround a defensive block of units. The avoidance work I&#8217;d done so far, mentioned above, went a long way to helping achieve the surrounding part, but there were problems. The first problem was targets simply pushing enemy units out of the way to escape. To fix this I had to come up with new rules on who could push who. The seek force of an agent is reduced depending on how much it points towards a close neighbour &amp; what the properties of that neighbour are. ie an enemy would have a strong seek reduction on the moving unit, a friendly holding ground less so. The progression with this behaviour is demonstrated in the linked video too.</p>
+
+
+
+<h2 class="wp-block-heading">Visualisation &amp; Debugging</h2>
+
+
+
+<p>As can be seen in the video and screenshots, verbose debug visualisation &amp; rapid &amp; easy live tweaking of boid variables is almost essential to getting these behaviours working. Boid activation radii, force arrows sized to magnitude and clear colour coding all went a long way to getting it working as desired. In addition, a replay system or simply recording interactions using a screen recorder program can help considerably. There were lots of times I would rewatch a recording, single stepping through the frames until I understood exactly what was happening and how I might adjust settings or add new behaviours to improve things.</p>
+
+
+
+<h2 class="wp-block-heading">Syncronised Arrival</h2>
+
+
+
+<p>Sometimes when a group of boids move in a closely packed group I observed that units arriving later would push other arrived units forwards out of position. This wasn&#8217;t really desired, so when a unit arrives at a destination it checks if it&#8217;s neighbours are in contact with it and zeros their velocity and sets them as arrived too. This appears to make all units in a packed group come to a complete stop over a far smaller number of frames. Previously there was a visible wave-like pattern visible of the units stopping that spread over multiple frames.</p>
+
+
+
+<p>Syncronised stop is disabled if a unit isn&#8217;t within a threshold distance to the movement goal, this means that units too far away will push others forwards until they enter within this larger stopping distance. I added this so that units stop in a smaller circular radius around the movement goal, rather than a long thin line of units forming (like a line of ants coming to a stop).</p>
+
+
+
+<p>Drop any comments or questions to me on:</p>
+
+
+
+<ul>
+<li>Twitter: <a href="https://twitter.com/jdtec01">https://twitter.com/jdtec01</a></li>
+
+
+
+<li>E-mail: <a href="mailto:jon.dickison@gmail.com">jon.dickison@gmail.com</a></li>
+</ul>
+<div id="crp_related"> </div>			</div><!-- .entry-content -->
+
+	<footer class="entry-footer">
+					</footer><!-- .entry-footer -->
+</article><!-- #post-## -->
+
+			
+	<nav class="navigation post-navigation" aria-label="Posts">
+		<h2 class="screen-reader-text">Post navigation</h2>
+		<div class="nav-links"><div class="nav-previous"><a href="https://www.jdxdev.com/blog/2020/05/03/flowfields/" rel="prev">RTS Pathfinding 1 &#8211; Flowfields</a></div><div class="nav-next"><a href="https://www.jdxdev.com/blog/2021/07/06/rts-pathfinding-2-dynamic-navmesh-with-constrained-delaunay-triangles/" rel="next">RTS Pathfinding 2: Dynamic Navmesh with Constrained Delaunay Triangles</a></div></div>
+	</nav>
+			
+			
+<div id="comments" class="comments-area">
+
+			<h2 class="comments-title">
+			11 Comments		</h2>
+
+		
+		<ol class="comment-list">
+					<li id="comment-3" class="comment even thread-even depth-1 parent">
+			<article id="div-comment-3" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/a9955d6a67ba4679cc3f97baeddaaf1e?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/a9955d6a67ba4679cc3f97baeddaaf1e?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Nikola Milović</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-3"><time datetime="2021-05-19T16:19:18+00:00">May 19, 2021 at 4:19 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Would love more of these! I am the guy from SO, the targeting system would be an interesting read as well, tuning it to get the right behaviour is so tricky. You have the best/ closest feel for the combat/ movement system of any project I&#8217;ve seen that tries to go for SC2 behaviour.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-5" class="comment byuser comment-author-jdtec bypostauthor odd alt depth-2">
+			<article id="div-comment-5" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-5"><time datetime="2021-05-25T18:07:27+00:00">May 25, 2021 at 6:07 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi Nikola,<br />
+The targetting is actually quite straight forward. Attackers scan for the nearest target at staggered intervals every 10 or so updates. Once an attacker is engaged (no longer moving to target but actively performing the attack) it will stay with that target until the target is destroyed.<br />
+While an attacker is moving towards a target it may scan and update to pick a new target that is closer (unless it&#8217;s been given an explicit order to attack a specific target).<br />
+This is all reasonably efficient thanks to the spatial partitioning so that attackers only scan for the targets assigned to tiles within their attack radius. I think I also put a hard limit on the max target count to scan, eg. if there&#8217;s a thousand potential targets within range, only scan the first 50, starting in the nearest tiles to the attacker.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+		<li id="comment-8" class="comment even thread-odd thread-alt depth-1 parent">
+			<article id="div-comment-8" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Artem</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-8"><time datetime="2021-09-11T20:39:43+00:00">September 11, 2021 at 8:39 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Really a nice post!<br />
+In your video there&#8217;s a situation where two groups of units move onto each other and resolve this situation very well. What techniques do you use to make it work? It seem like your didn&#8217;t mention that in your post. I think it should be similar to what you&#8217;ve used for avoiding static units.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-9" class="comment byuser comment-author-jdtec bypostauthor odd alt depth-2 parent">
+			<article id="div-comment-9" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-9"><time datetime="2021-09-12T13:31:47+00:00">September 12, 2021 at 1:31 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi, thanks!<br />
+I&#8217;m assuming you mean when the two groups of friendly units move through each other here <a href="https://youtu.be/ngh9GSZj0HY?t=36" rel="nofollow ugc">https://youtu.be/ngh9GSZj0HY?t=36</a></p>
+<p>I zero avoidance &#038; cohesion leaving only seek and alignment forces. The units smaller &#8216;hard&#8217; physics radius and the physics solver do the rest and it just kind of works. This was an area where I didn&#8217;t really iterate much because it just fell into place quite easily.</p>
+<p>I could guess this worked out because the groups formation spreads units out so they are generally not tightly packed. There is usually about 1.5-2.5* a units hard physical radius (the actual collider) between units when they group up in formation. Because of this there is space to be pushed around a bit without blocking others constantly.</p>
+<p>The avoidance force is quite powerful and not used here. A unit &#8216;A&#8217; only avoids another unit &#8216;B&#8217; if (going on my memory):<br />
+1) A avoids if it is moving, and B is in a &#8216;hold-ground&#8217; state<br />
+2) B is a different faction/team to A &#8211; an enemy<br />
+3) A is not targetting B for a melee attack</p>
+<p>I experimented with a lighter-weight &#8216;separation&#8217; force before but it didn&#8217;t solve any problems for this use-case and interfered with cohesion, alignment and the others etc.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-10" class="comment even depth-3 parent">
+			<article id="div-comment-10" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Artem</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-10"><time datetime="2021-09-15T03:49:05+00:00">September 15, 2021 at 3:49 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi, thanks for the response!</p>
+<p>Yeah, that&#8217;s what I was talking about.</p>
+<p>I&#8217;m also not using cohesion at all, but using separation. I&#8217;ve tried to disable separation for the units that move towards each other, so they would only separate from units that move in the same general direction.</p>
+<p>Unfortunately, leaving just physical collisions did not produce a good result, since separation radius is not that large, so units were pushing through each other and it did not look very well. Decreasing physical radius solved that problem partially but made a feeling that units aren&#8217;t solid physical objects.</p>
+<p>So eventually i decided to use avoidance behaviour. I made units avoid units that are moving towards them and the result was surprisingly good.</p>
+<p>Here&#8217;re some gifs: <a href="https://imgur.com/a/cQgTd03" title="Gif 1" rel="nofollow ugc">, </a><a href="https://imgur.com/a/AOEmx4L" title="Gif 2 (narrow passage)" rel="nofollow ugc"></p>
+<p>Actually there&#8217;s still a problem that sometimes two groups are trying to avoid each other in the same general direction which makes them stuck (halway &#8220;dance&#8221;) for some time (gif #2). Starcraft 2 GDC talk mentioned some tecnique that units are &#8220;reading minds&#8221; of other unit&#8217;s to prevent such halfway &#8220;dances&#8221;, but I did not manage to figure out how it actually works.</a></p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-11" class="comment odd alt depth-4">
+			<article id="div-comment-11" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Artem</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-11"><time datetime="2021-09-15T03:50:59+00:00">September 15, 2021 at 3:50 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Damn, I screwed up HTML tags. Here&#8217;re links:<br />
+1. <a href="https://imgur.com/a/cQgTd03" rel="nofollow ugc">https://imgur.com/a/cQgTd03</a><br />
+2. <a href="https://imgur.com/a/AOEmx4L" rel="nofollow ugc">https://imgur.com/a/AOEmx4L</a></p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+		<li id="comment-12" class="comment byuser comment-author-jdtec bypostauthor even depth-4 parent">
+			<article id="div-comment-12" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-12"><time datetime="2021-09-15T21:11:41+00:00">September 15, 2021 at 9:11 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>That looks pretty good!</p>
+<p>I think the &#8216;reading minds&#8217; comment is probably referring to finding 2 (or more) units that are on a collision course, and applying a slight avoidance style force to each that is opposite (so they avoid in different directions).</p>
+<p>Howtorts has implemented something similar I think: <a href="https://howtorts.github.io/2014/01/14/avoidance-behaviours.html" rel="nofollow ugc">https://howtorts.github.io/2014/01/14/avoidance-behaviours.html</a></p>
+<p><a href="https://howtorts.github.io/examples/8-2-crossing-groups-avoidance-behaviour/index.html#smallgroups" rel="nofollow ugc">https://howtorts.github.io/examples/8-2-crossing-groups-avoidance-behaviour/index.html#smallgroups</a></p>
+<p>In this case you could say that the 2 agents are reading each others mind because they effectively both know which way the other agent wants to move and how best to avoid.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-13" class="comment odd alt depth-5">
+			<article id="div-comment-13" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/b34266f859e24ffd950f588623ac8221?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">Artem</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-13"><time datetime="2021-09-20T14:33:54+00:00">September 20, 2021 at 2:33 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi, sorry for the late response<br />
+Things described on howtorts might be exactly what I need, might try it later. Currently gonna focus on navmesh and pathfinding</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+		<li id="comment-26" class="comment even thread-even depth-1 parent">
+			<article id="div-comment-26" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/d07f19bcbef9f6f9d259c36ae48f7fc1?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/d07f19bcbef9f6f9d259c36ae48f7fc1?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">William</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-26"><time datetime="2022-05-13T01:47:20+00:00">May 13, 2022 at 1:47 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi, really a nice post!</p>
+<p>When you detect concaves and escape them with your implementation, do you also account potential walls on either side? e.g. avoidance locks to the left side but there is no available path because there is static terrain besides the outmost enemy.</p>
+<p>Also do you mind sharing some code snippets of the implementation?</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-27" class="comment byuser comment-author-jdtec bypostauthor odd alt depth-2 parent">
+			<article id="div-comment-27" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/5bb0e6792ad9c5fe2d48aa6364736894?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">jdtec</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-27"><time datetime="2022-05-14T04:56:39+00:00">May 14, 2022 at 4:56 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>Hi, thanks for the comment.<br />
+I haven&#8217;t tested that particular situation much. I think the unit might get blocked at the wall and the player would have to manually adjust the blocking units in this case. In general in an RTS, it might be better for friendly units to default to pushing each other rather than avoiding most of the time. But sometimes you really do want them to block, like if they&#8217;re explicitely told to hold ground or are busy doing something that requires a certain position. So I guess my point is that maybe the blocking behaviour should be used sparingly. I&#8217;m not even sure what the desired outcome would be if they get blocked at a wall now that I think about it. I suppose a real person would simply stay stuck &#038; maybe wait, or try to pathfind another way around.<br />
+I&#8217;m not really ready to share code right now but it&#8217;s something I&#8217;d consider in the future. The code and my engine are still changing quite rapidly. I&#8217;m not sure it would be that helpful to share right now.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		<ol class="children">
+		<li id="comment-30" class="comment even depth-3">
+			<article id="div-comment-30" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://secure.gravatar.com/avatar/da4c0fa91e9b8b3e790370aa37a6fac5?s=48&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/da4c0fa91e9b8b3e790370aa37a6fac5?s=96&#038;d=mm&#038;r=g 2x' class='avatar avatar-48 photo' height='48' width='48' loading='lazy' decoding='async'/>						<b class="fn">David</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://www.jdxdev.com/blog/2021/03/19/boids-for-rts/#comment-30"><time datetime="2022-08-15T06:52:26+00:00">August 15, 2022 at 6:52 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>I would also like some code snippets, especially relating to your boids implementation. No matter what i do, my avoidance is stuttering, so it would be really helpful to see how you did it.<br />
+Thanks for the post, it&#8217;s really helpful</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+</ol><!-- .children -->
+</li><!-- #comment-## -->
+		</ol><!-- .comment-list -->
+
+		
+	
+			<p class="no-comments">Comments are closed.</p>
+	
+	
+</div><!-- #comments -->
+
+		
+		</main><!-- #main -->
+	</div><!-- #primary -->
+
+
+
+	</div><!-- #content -->
+
+	<footer id="colophon" class="site-footer" role="contentinfo">
+		
+		<div class="clear"></div>
+
+		<div class="social-links-menu"><ul id="menu-social" class="menu"><li id="menu-item-419" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-419"><a href="https://twitter.com/jdtec01"><span class="screen-reader-text">@jdtec01</span></a></li>
+<li id="menu-item-420" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-420"><a href="https://www.youtube.com/channel/UConw23idwKnv-gNNWLzuQKg"><span class="screen-reader-text">youtube</span></a></li>
+</ul></div>
+				<div class="site-info">
+			<span>Copyright 2026</span><span>Theme by <a href="https://purothemes.com/">Puro</a></span>		</div><!-- .site-info -->
+		
+	</footer><!-- #colophon -->
+</div><!-- #page -->
+
+			<script>
+				// Used by Gallery Custom Links to handle tenacious Lightboxes
+				//jQuery(document).ready(function () {
+
+					function mgclInit() {
+						
+						// In jQuery:
+						// if (jQuery.fn.off) {
+						// 	jQuery('.no-lightbox, .no-lightbox img').off('click'); // jQuery 1.7+
+						// }
+						// else {
+						// 	jQuery('.no-lightbox, .no-lightbox img').unbind('click'); // < jQuery 1.7
+						// }
+
+						// 2022/10/24: In Vanilla JS
+						var elements = document.querySelectorAll('.no-lightbox, .no-lightbox img');
+						for (var i = 0; i < elements.length; i++) {
+						 	elements[i].onclick = null;
+						}
+
+
+						// In jQuery:
+						//jQuery('a.no-lightbox').click(mgclOnClick);
+
+						// 2022/10/24: In Vanilla JS:
+						var elements = document.querySelectorAll('a.no-lightbox');
+						for (var i = 0; i < elements.length; i++) {
+						 	elements[i].onclick = mgclOnClick;
+						}
+
+						// in jQuery:
+						// if (jQuery.fn.off) {
+						// 	jQuery('a.set-target').off('click'); // jQuery 1.7+
+						// }
+						// else {
+						// 	jQuery('a.set-target').unbind('click'); // < jQuery 1.7
+						// }
+						// jQuery('a.set-target').click(mgclOnClick);
+
+						// 2022/10/24: In Vanilla JS:
+						var elements = document.querySelectorAll('a.set-target');
+						for (var i = 0; i < elements.length; i++) {
+						 	elements[i].onclick = mgclOnClick;
+						}
+					}
+
+					function mgclOnClick() {
+						if (!this.target || this.target == '' || this.target == '_self')
+							window.location = this.href;
+						else
+							window.open(this.href,this.target);
+						return false;
+					}
+
+					// From WP Gallery Custom Links
+					// Reduce the number of  conflicting lightboxes
+					function mgclAddLoadEvent(func) {
+						var oldOnload = window.onload;
+						if (typeof window.onload != 'function') {
+							window.onload = func;
+						} else {
+							window.onload = function() {
+								oldOnload();
+								func();
+							}
+						}
+					}
+
+					mgclAddLoadEvent(mgclInit);
+					mgclInit();
+
+				//});
+			</script>
+		<script type='text/javascript' id='puro-responsive-menu-js-extra'>
+/* <![CDATA[ */
+var puro_resp_menu_params = {"collapse":"768"};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://www.jdxdev.com/blog/wp-content/themes/puro/js/responsive-menu.min.js?ver=1.3.0' id='puro-responsive-menu-js'></script>
+
+</body>
+</html>
+
+<!-- Page cached by LiteSpeed Cache 6.5.2 on 2026-07-27 06:10:45 -->

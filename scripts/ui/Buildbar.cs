@@ -19,9 +19,19 @@ public partial class Buildbar : CanvasLayer
     private static readonly Vector2 CellSize = new(118, 30);
 
     private static readonly Color TitleColor = new(0.45f, 0.85f, 0.95f);
+    private static readonly Color TipColor = new(0.9f, 0.92f, 0.95f);
 
     private Control _frame;
     private HBoxContainer _sections;
+
+    /// <summary>
+    /// Подсказка панели: появляется сразу при наведении и сидит над кнопкой, а не
+    /// у курсора. Встроенный TooltipText Godot для этого не подходит — у него задержка
+    /// и привязка к мыши.
+    /// </summary>
+    private PanelContainer _tip;
+    private Label _tipLabel;
+    private Button _tipOwner;
 
     /// <summary>
     /// Отпечаток выделения: идентификаторы панелей выделенных строителей. Сетку
@@ -57,6 +67,28 @@ public partial class Buildbar : CanvasLayer
         };
         _sections.AddThemeConstantOverride("separation", 10);
         margin.AddChild(_sections);
+
+        BuildTip();
+    }
+
+    private void BuildTip()
+    {
+        _tip = new PanelContainer
+        {
+            Visible = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        // Поверх кнопок панели: иначе подсказка уйдёт под соседнюю секцию
+        _frame.AddChild(_tip);
+
+        _tipLabel = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        _tipLabel.AddThemeFontSizeOverride("font_size", 13);
+        _tipLabel.AddThemeColorOverride("font_color", TipColor);
+        _tip.AddChild(_tipLabel);
     }
 
     public override void _Process(double delta)
@@ -64,11 +96,15 @@ public partial class Buildbar : CanvasLayer
         var bars = BarsOf(GameManager.I?.Command);
         string key = string.Join('|', bars.Select(bar => bar.Id).OrderBy(id => id));
 
-        if (key == _key)
-            return;
+        if (key != _key)
+        {
+            _key = key;
+            HideTip();
+            Rebuild(bars);
+        }
 
-        _key = key;
-        Rebuild(bars);
+        if (_tip.Visible && _tipOwner != null && Alive.Is(_tipOwner))
+            PlaceTip(_tipOwner);
     }
 
     /// <summary>
@@ -144,7 +180,7 @@ public partial class Buildbar : CanvasLayer
         return frame;
     }
 
-    private static Control BuildRow(BuildbarLayout.Row row)
+    private Control BuildRow(BuildbarLayout.Row row)
     {
         var line = new HBoxContainer();
         line.AddThemeConstantOverride("separation", 4);
@@ -174,20 +210,83 @@ public partial class Buildbar : CanvasLayer
         return line;
     }
 
-    private static Button BuildButton(UnitDefinition def)
+    private Button BuildButton(UnitDefinition def)
     {
-        // Энергоцены у постройки нет: энергию тратит инструмент строителя, а не здание
         var button = new Button
         {
             Text = def.DisplayName,
             CustomMinimumSize = CellSize,
             ClipText = true,
-            TooltipText = $"{def.DisplayName}\n{def.TotalWork:0} метала",
         };
 
         button.AddThemeFontSizeOverride("font_size", 12);
         button.Pressed += () => GameManager.I?.Command?.BeginBuild(def);
 
+        string tip = TipText(def);
+        button.MouseEntered += () => ShowTip(button, tip);
+        button.MouseExited += () =>
+        {
+            if (_tipOwner == button)
+                HideTip();
+        };
+
         return button;
+    }
+
+    private static string TipText(UnitDefinition def)
+    {
+        // Энергоцена инструмента строителя в подсказку не входит: она зависит от того,
+        // кто строит. Постоянный расход готовой постройки (портал) показываем отдельно.
+        string text = $"{def.DisplayName}\n{def.TotalWork:0} метала";
+
+        float drain = def.Conversion?.EnergyDrain ?? 0f;
+        if (drain > 0f)
+            text += $"\n{drain:0.#} энергии/с";
+
+        return text;
+    }
+
+    private void ShowTip(Button owner, string text)
+    {
+        _tipOwner = owner;
+        _tipLabel.Text = text;
+        _tip.Visible = true;
+        // Размер подписи ещё не пересчитан в этом кадре — откладываем постановку
+        // на _Process, а пока хотя бы показываем панель
+        PlaceTip(owner);
+    }
+
+    private void HideTip()
+    {
+        _tipOwner = null;
+        _tip.Visible = false;
+    }
+
+    /// <summary>
+    /// Ставит подсказку над верхней кромкой кнопки и выравнивает по её левому краю.
+    /// Не следует за курсором: игрок читает подпись у ячейки, а не у мыши.
+    /// </summary>
+    private void PlaceTip(Button owner)
+    {
+        if (!Alive.Is(owner) || !_tip.Visible)
+            return;
+
+        _tip.ResetSize();
+        var rect = owner.GetGlobalRect();
+        var tipSize = _tip.GetCombinedMinimumSize();
+
+        // Если минимум ещё нулевой — берём текущий размер после ResetSize
+        if (tipSize == Vector2.Zero)
+            tipSize = _tip.Size;
+
+        float x = rect.Position.X;
+        float y = rect.Position.Y - tipSize.Y - 6f;
+
+        // Не уезжаем за левый/правый край окна
+        var view = _frame.Size;
+        x = Mathf.Clamp(x, 4f, Mathf.Max(4f, view.X - tipSize.X - 4f));
+        y = Mathf.Max(4f, y);
+
+        _tip.GlobalPosition = new Vector2(x, y);
     }
 }
