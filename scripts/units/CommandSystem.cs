@@ -44,6 +44,9 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private readonly DoubleTap _doubleTap = new();
 
+    /// <summary>Боевые группы. Читает полоса групп внизу экрана.</summary>
+    public ControlGroups Groups { get; } = new();
+
     private Vector2 _bandStart;
     private bool _banding;
 
@@ -104,11 +107,22 @@ public partial class CommandSystem : GameSystem
 
         if (_selected.Count > 0)
         {
-            _selected.Clear();
+            ClearSelection();
             return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Снять выделение целиком. Выбранная группа при этом перестаёт быть выбранной:
+    /// подсветка в полосе групп обязана показывать то, что действительно выделено.
+    /// Сами группы не трогаются — они переживают любую смену выделения.
+    /// </summary>
+    private void ClearSelection()
+    {
+        _selected.Clear();
+        Groups.Current = -1;
     }
 
     public override void Step(double dt)
@@ -118,8 +132,9 @@ public partial class CommandSystem : GameSystem
 
         EnsureNodes();
 
-        // Выделенное могло погибнуть или достроиться — держим список живым
+        // Выделенное могло погибнуть или достроиться — держим списки живыми
         _selected.RemoveAll(actor => !Alive.Is(actor as Node));
+        Groups.Sweep();
 
         if (Pending == null)
             return;
@@ -137,6 +152,18 @@ public partial class CommandSystem : GameSystem
 
         if (@event is InputEventMouse mouseEvent)
             _cursor = GetViewport().GetCanvasTransform().AffineInverse() * mouseEvent.Position;
+
+        if (@event is InputEventKey { Pressed: true, Echo: false } key
+            && ControlGroups.SlotOf(key.Keycode) is var slot and >= 0)
+        {
+            if (key.CtrlPressed)
+                AssignGroup(slot);
+            else
+                SelectGroup(slot);
+
+            GetViewport().SetInputAsHandled();
+            return;
+        }
 
         if (@event is not InputEventMouseButton mouse)
             return;
@@ -168,6 +195,41 @@ public partial class CommandSystem : GameSystem
         }
     }
 
+    // ── боевые группы ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Ctrl+цифра — записать нынешнее выделение в слот. Тем же сочетанием группа
+    /// и пополняется: добрали в выделение кого нужно, повторили — состав переписан.
+    /// Отдельного «добавить в группу» поэтому не требуется.
+    ///
+    /// Слот сразу становится выбранным: игрок только что подтвердил, что держит именно
+    /// этот отряд, и подсветка обязана это показать.
+    /// </summary>
+    private void AssignGroup(int slot)
+    {
+        Groups.Assign(slot, _selected);
+        Groups.Current = _selected.Count > 0 ? slot : -1;
+    }
+
+    /// <summary>
+    /// Цифра — выбрать группу. Выбор заменяет прежнее выделение целиком: группа и есть
+    /// готовый отряд, а не добавка к тому, что под рукой.
+    ///
+    /// Пустой слот не трогает ничего. Стереть выделение промахом по незанятой цифре —
+    /// потеря без всякой пользы, а роспуск группы делается сочетанием с Ctrl.
+    /// </summary>
+    private void SelectGroup(int slot)
+    {
+        var members = Groups.Members(slot);
+
+        if (members.Count == 0)
+            return;
+
+        _selected.Clear();
+        _selected.AddRange(members);
+        Groups.Current = slot;
+    }
+
     // ── выделение ──────────────────────────────────────────────────────────────
 
     private void FinishBand()
@@ -178,8 +240,13 @@ public partial class CommandSystem : GameSystem
         _banding = false;
 
         bool add = Input.IsKeyPressed(Key.Shift);
+
+        // Свободное выделение и выбор группы взаимно исключают друг друга: набирая
+        // отряд заново, игрок уходит от группы, и подсветка гаснет. А вот добавление
+        // по Shift группу не рушит — добранные попадают в выделение, но не в состав
+        // слота, пока его не перезапишут сочетанием с Ctrl
         if (!add)
-            _selected.Clear();
+            ClearSelection();
 
         if (_bandStart.DistanceTo(_cursor) < BandThreshold)
         {

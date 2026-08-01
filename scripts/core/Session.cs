@@ -107,6 +107,11 @@ public partial class Session : Node2D
             return;
         }
 
-        Systems.Spawn.SpawnUnit(CommanderScene, Const.CellCenter(new Vector2I(3, 0)));
+        var commander = Systems.Spawn.SpawnUnit(CommanderScene, Const.CellCenter(new Vector2I(3, 0)));
+
+        // Коммандер сразу лежит в первой группе. Приказы уходят только выделенным,
+        // поэтому без этого начало игры требовало бы сперва найти его глазами
+        // и щёлкнуть; с готовой группой довольно нажать единицу
+        Systems.Command?.Groups.Assign(0, new IOrderable[] { commander });
     }
 }

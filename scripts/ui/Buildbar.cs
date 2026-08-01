@@ -46,7 +46,8 @@ public partial class Buildbar : CanvasLayer
         column.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 
         var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        margin.AddThemeConstantOverride("margin_bottom", 18);
+        // Снизу оставляем место полосе боевых групп: она стоит у самого края
+        margin.AddThemeConstantOverride("margin_bottom", 42);
         column.AddChild(margin);
 
         _sections = new HBoxContainer

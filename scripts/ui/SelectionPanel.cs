@@ -36,7 +36,7 @@ public partial class SelectionPanel : CanvasLayer
 
         var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         margin.AddThemeConstantOverride("margin_left", 12);
-        margin.AddThemeConstantOverride("margin_bottom", 18);
+        margin.AddThemeConstantOverride("margin_bottom", 42);
         row.AddChild(margin);
 
         var column = new VBoxContainer

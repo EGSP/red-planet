@@ -22,6 +22,7 @@
 [ext_resource type="Script" path="res://scripts/ui/ResourceBar.cs" id="24_resources"]
 [ext_resource type="Script" path="res://scripts/ui/SelectionPanel.cs" id="25_selection"]
 [ext_resource type="Script" path="res://scripts/ui/CommandPanel.cs" id="26_commands"]
+[ext_resource type="Script" path="res://scripts/ui/ControlGroupBar.cs" id="27_groups"]
 [ext_resource type="PackedScene" path="res://scenes/units/Commander.tscn" id="18_commander"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
 [ext_resource type="PackedScene" path="res://scenes/world/OreDeposit.tscn" id="20_ore"]
@@ -130,6 +131,9 @@ script = ExtResource("26_commands")
 
 [node name="Buildbar" type="CanvasLayer" parent="View"]
 script = ExtResource("23_buildbar")
+
+[node name="ControlGroupBar" type="CanvasLayer" parent="View"]
+script = ExtResource("27_groups")
 
 [node name="PauseMenu" type="CanvasLayer" parent="View"]
 script = ExtResource("22_pause")

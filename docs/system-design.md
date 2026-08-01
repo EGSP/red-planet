@@ -114,6 +114,7 @@ Root (Node)                     ← приложение: живёт от зап
         ├── SelectionPanel  — состав выделения, слева внизу
         ├── CommandPanel    — доступные приказы, справа
         ├── Buildbar        — строительная панель, внизу по центру
+        ├── ControlGroupBar — полоса боевых групп, у самого низа
         └── PauseMenu (слой 10)
 
 Content (автозагрузка)          ← справочники: переживают любую сессию
@@ -781,13 +782,14 @@ scripts/
 ├─ world/      Playground, WorkNode, Blueprint, OreDeposit, Building, сетка, камера,
 │              призрак, OreSpawnSystem
 ├─ units/      Unit, Commander, Bot, Order, OrderSet, OrderQueue (+IOrderable),
-│              SelectionGroup, DoubleTap, OrderSystem, CommandSystem, BotAiSystem
+│              SelectionGroup, ControlGroups, DoubleTap, OrderSystem, CommandSystem,
+│              BotAiSystem (+ selection.md — свод поведения выделения)
 ├─ enemies/    Enemy, EnemyAiSystem, EnemySpawnSystem
 ├─ combat/     Faction, Weapon, Targeting, Projectile, WeaponSystem, ProjectileSystem, DamageSystem
 ├─ economy/    EconomyLedger, EconomySystem, Jobs, Repair
 ├─ buildings/  Factory, Turret, Assembler, AssemblerSystem
 └─ ui/         Hud, ResourceBar, SelectionPanel, CommandPanel, Buildbar, BuildbarLayout,
-               MainMenu, PauseMenu, UiFrame, HealthBar, OrderOverlay
+               ControlGroupBar, MainMenu, PauseMenu, UiFrame, HealthBar, OrderOverlay
 
 resources/     units/*.tres, buildables/*.tres, enemies/*.tres, weapons/*.tres,
                buildbars/*.toml (+ buildbar.md — формат и соглашение о координатах)
