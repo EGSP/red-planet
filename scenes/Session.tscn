@@ -23,6 +23,9 @@
 [ext_resource type="Script" path="res://scripts/ui/SelectionPanel.cs" id="25_selection"]
 [ext_resource type="Script" path="res://scripts/ui/CommandPanel.cs" id="26_commands"]
 [ext_resource type="Script" path="res://scripts/ui/ControlGroupBar.cs" id="27_groups"]
+[ext_resource type="Script" path="res://scripts/pressure/TerrorSystem.cs" id="28_terror"]
+[ext_resource type="Script" path="res://scripts/ui/TerrorBar.cs" id="29_terrorbar"]
+[ext_resource type="Resource" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
 
 [node name="Session" type="Node2D"]
@@ -82,6 +85,12 @@ script = ExtResource("15_damage")
 Phase = 2
 StepOrder = 10
 
+[node name="TerrorSystem" type="Node" parent="Systems"]
+script = ExtResource("28_terror")
+Settings = ExtResource("30_terrorsettings")
+Phase = 2
+StepOrder = 20
+
 [node name="Playground" type="Node2D" parent="."]
 script = ExtResource("3_playground")
 Terrain = NodePath("Terrain")
@@ -116,6 +125,9 @@ script = ExtResource("17_hud")
 
 [node name="ResourceBar" type="CanvasLayer" parent="View"]
 script = ExtResource("24_resources")
+
+[node name="TerrorBar" type="CanvasLayer" parent="View"]
+script = ExtResource("29_terrorbar")
 
 [node name="SelectionPanel" type="CanvasLayer" parent="View"]
 script = ExtResource("25_selection")

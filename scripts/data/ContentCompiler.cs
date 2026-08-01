@@ -307,6 +307,8 @@ public static class ContentCompiler
             EnergyStorage = basis.EnergyStorage,
             SpawnWeight = basis.SpawnWeight,
             StandoffFraction = basis.StandoffFraction,
+            ExpansionWeight = basis.ExpansionWeight,
+            ArmyWeight = basis.ArmyWeight,
         };
 
         if (document.Has("tags"))
@@ -372,6 +374,18 @@ public static class ContentCompiler
         {
             definition.MetalStorage = storage.Float("metal", basis.MetalStorage);
             definition.EnergyStorage = storage.Float("energy", basis.EnergyStorage);
+        }
+
+        // Незаданный вес и вес, заданный нулём, — разные вещи: первый означает «возьми
+        // умолчание по роду», второй — «эта сущность в показатель не входит». Поэтому
+        // ключи читаются только при наличии, а не через Float с запасным значением
+        if (document.Section("terror") is { } terror)
+        {
+            if (terror.Has("expansion"))
+                definition.ExpansionWeight = terror.Float("expansion");
+
+            if (terror.Has("army"))
+                definition.ArmyWeight = terror.Float("army");
         }
 
         if (document.Section("spawn") is { } spawn)

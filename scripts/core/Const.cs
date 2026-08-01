@@ -66,6 +66,16 @@ public static class Const
     /// <summary>Радиус окружности появления врагов в пикселях.</summary>
     public static float EnemySpawnRadiusPx => MetalSpotFieldRadius * EnemyRingFactor * Unit;
 
+    /// <summary>
+    /// Точка высадки — центр стартовой клетки, вокруг которой встаёт база.
+    ///
+    /// От неё, а не от текущего центра базы, отсчитывается удалённость построек для террора.
+    /// Центр базы смещается по мере роста, и тогда дальняя постройка со временем сама собой
+    /// становилась бы ближней — то есть расширение удешевляло бы уже сделанное расширение.
+    /// Точка высадки неподвижна, поэтому удалённость означает ровно то, что должна.
+    /// </summary>
+    public static Vector2 LandingPoint => CellCenter(Vector2I.Zero);
+
     public static Vector2 CellCorner(Vector2I cell) => new(cell.X * Unit, cell.Y * Unit);
 
     public static Vector2 CellCenter(Vector2I cell) =>

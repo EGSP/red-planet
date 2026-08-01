@@ -97,6 +97,7 @@ public partial class GameManager : Node
         // Сначала собираем состав, потом подписываем — тогда они могут ссылаться друг на друга.
         Projections.Add(new StockpileProjection());
         Projections.Add(new CombatProjection());
+        Projections.Add(new TimeSeriesProjection());
         Projections.SubscribeAll(Events);
     }
 
@@ -145,4 +146,7 @@ public partial class GameManager : Node
 
     /// <summary>Счёт боя: пришло, уничтожено, потеряно.</summary>
     public CombatProjection Combat => Projections.Get<CombatProjection>();
+
+    /// <summary>Ряды наблюдаемых величин по ходу партии: террор, а позже и доход.</summary>
+    public TimeSeriesProjection Metrics => Projections.Get<TimeSeriesProjection>();
 }

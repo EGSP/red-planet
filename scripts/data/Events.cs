@@ -99,6 +99,33 @@ public struct EntityDestroyed : IEventRecord
     public Vector2 Pos;
 }
 
+/// <summary>
+/// Замер наблюдаемой величины на момент времени. Документ транзиентный, как и все прочие:
+/// хранит ряд не журнал, а <see cref="TimeSeriesProjection"/>.
+///
+/// ЭТО НЕ ФАКТ, А СРЕЗ, и разница существенна. Прочие документы отвечают на вопрос
+/// «что случилось», этот — на вопрос «сколько было в такой-то момент». В терминах 1С
+/// первое есть документ, второе — периодический регистр сведений. Смешать их значило бы
+/// превратить журнал из шины в хранилище, а он для этого не предназначен: чистится каждый
+/// кадр и растёт без предела, если чистку отключить.
+/// </summary>
+[TransientEvent]
+public struct MetricSampled : IEventRecord
+{
+    public int SequenceId { get; set; }
+
+    /// <summary>Имя ряда: terror.raw, terror.production, income.metal.</summary>
+    public string Channel;
+
+    public float Value;
+
+    /// <summary>
+    /// Номер замера от начала партии. Он же отметка времени: шаг постоянен, поэтому
+    /// хранить секунды отдельно незачем — время равно номеру, умноженному на шаг.
+    /// </summary>
+    public int Tick;
+}
+
 /// <summary>Враг вышел на карту.</summary>
 [TransientEvent]
 public struct EnemySpawned : IEventRecord
