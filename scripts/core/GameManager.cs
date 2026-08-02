@@ -153,6 +153,11 @@ public partial class GameManager : Node
             system.Link();
 
         SystemsLinked = true;
+
+        // Меньшие приоритеты _Process исполняются раньше. Камера остаётся на нулевом,
+        // а графический прогон систем идёт после неё: мировая точка под курсором должна
+        // учитывать положение камеры уже текущего кадра.
+        ProcessPriority = 1;
     }
 
     /// <summary>
@@ -168,14 +173,18 @@ public partial class GameManager : Node
 
     public override void _PhysicsProcess(double dt)
     {
-        Scheduler.RunFrame(dt);
+        Scheduler.RunCycle(UpdateCycle.PhysicsProcess, dt);
 
-        // Состав мира меняется здесь, после всех систем: рождённое за кадр входит в разрезы
-        // разом, погибшее разом выметается. Иначе одни системы видели бы новичка, а другие нет
+        // Состав мира и транзиентные документы меняются только здесь, после физических
+        // систем: рождённое за шаг входит в разрезы разом, погибшее разом выметается.
+        // Графический цикл к симуляции не относится и частоту этого шага не повышает
         Index.Sweep();
 
         Events.ClearTransient();
     }
+
+    public override void _Process(double dt) =>
+        Scheduler.RunCycle(UpdateCycle.Process, dt);
 
     /// <summary>Ярлык к самой ходовой проекции — общему хранилищу базы.</summary>
     public StockpileProjection Stockpile => Projections.Get<StockpileProjection>();

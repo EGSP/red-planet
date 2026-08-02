@@ -12,8 +12,23 @@ public enum Phase
 }
 
 /// <summary>
+/// Цикл обновления Godot, в котором планировщик вызывает систему.
+/// Это не потоки исполнения: <see cref="Node._PhysicsProcess"/> и
+/// <see cref="Node._Process"/> — разные циклы одного главного потока движка.
+/// </summary>
+public enum UpdateCycle
+{
+    /// <summary>Физический цикл — <see cref="Node._PhysicsProcess"/>.</summary>
+    PhysicsProcess = 0,
+
+    /// <summary>Графический цикл — <see cref="Node._Process"/>.</summary>
+    Process = 1,
+}
+
+/// <summary>
 /// Свой планировщик вместо неявного обхода дерева нод: порядок систем задаётся явно,
-/// кадр целиком гоняется из одного _PhysicsProcess у GameManager.
+/// а GameManager зовёт его из обоих циклов обновления — физического и графического.
+/// Каждая система сама объявляет, в каком цикле ей исполняться.
 ///
 /// Здесь же поиск системы по типу. Отдельного контейнера под это заводить нельзя:
 /// планировщик — единственное место, которое знает состав систем, и параллельный
@@ -82,7 +97,11 @@ public sealed class Scheduler
         return null;
     }
 
-    public void RunFrame(double dt)
+    /// <summary>
+    /// Прогон систем выбранного цикла обновления. Порядок внутри цикла — по фазе
+    /// и <see cref="GameSystem.StepOrder"/>; системы другого цикла пропускаются.
+    /// </summary>
+    public void RunCycle(UpdateCycle cycle, double dt)
     {
         if (_dirty)
         {
@@ -103,7 +122,12 @@ public sealed class Scheduler
         }
 
         foreach (var system in _systems)
+        {
+            if (system.UpdateCycle != cycle)
+                continue;
+
             system.Step(dt);
+        }
     }
 
     /// <summary>

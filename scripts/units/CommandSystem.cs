@@ -5,6 +5,11 @@ using Godot;
 /// Приказы игрока, выделение и режим строительства.
 /// Клиент отдаёт намерения, применяет их симуляция — привычка на будущее.
 ///
+/// Исполняется в графическом цикле (<see cref="UpdateCycle.Process"/>) после
+/// <see cref="CursorSystem"/>: курсор, рамка и призрак застройки должны совпадать
+/// с отрисовкой и движением камеры, а не с шагом физики. Симуляция от этого не учащается.
+/// Мировые координаты мыши считаются только в <see cref="CursorSystem"/>.
+///
 /// ЧТО ПРИКАЗАТЬ, РЕШАЕТ ЦЕЛЬ ПОД КУРСОРОМ, а не заранее выбранный режим: щёлкнули по врагу —
 /// атака, по каркасу — стройка, по повреждённому — ремонт, по месторождению — копка, по земле —
 /// движение. Одна кнопка на всё, как в PA.
@@ -30,6 +35,7 @@ public partial class CommandSystem : GameSystem
     /// <summary>Дальше этого протаскивания клик считается рамкой, а не выбором одного.</summary>
     private const float BandThreshold = 8f;
 
+    private CursorSystem _cursor;
     private PlacementGhost _ghost;
     private OrderOverlay _overlay;
 
@@ -39,9 +45,6 @@ public partial class CommandSystem : GameSystem
     private PathOverlay _paths;
     private BoidsOverlay _boids;
     private DebugDraw _debugDraw;
-
-    /// <summary>Курсор в мировых координатах — берём из событий, а не опросом.</summary>
-    private Vector2 _cursor;
 
     private readonly List<IOrderable> _selected = new();
 
@@ -98,7 +101,14 @@ public partial class CommandSystem : GameSystem
     /// <summary>Рамка выделения, пока её тянут.</summary>
     public bool Banding => _banding;
 
-    public Rect2 Band => new Rect2(_bandStart, _cursor - _bandStart).Abs();
+    /// <summary>
+    /// Рамка для отрисовки: конец берётся из визуальной позиции курсора, чтобы при
+    /// включённом прогнозе рамка совпадала с призраком, а не с запаздывающей фактической
+    /// точкой. Игровое завершение рамки передаёт точную позицию события отдельно.
+    /// </summary>
+    public Rect2 Band => _cursor == null
+        ? default
+        : new Rect2(_bandStart, _cursor.VisualWorldPosition - _bandStart).Abs();
 
     /// <summary>
     /// Вторая фаза: площадка мира к этому мигу собрана, поэтому служебную графику
@@ -107,6 +117,11 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     protected override void OnLink()
     {
+        _cursor = GM.System<CursorSystem>();
+
+        if (_cursor == null)
+            GD.PushError("[CommandSystem] CursorSystem не найдена: мировые координаты мыши недоступны");
+
         _doubleTap.Interval = DoubleTapInterval;
 
         if (GM.Playground != null)
@@ -172,7 +187,7 @@ public partial class CommandSystem : GameSystem
 
     public override void Step(double dt)
     {
-        if (GM.Playground == null)
+        if (GM.Playground == null || _cursor == null)
             return;
 
         EnsureNodes();
@@ -191,22 +206,20 @@ public partial class CommandSystem : GameSystem
         if (!_ghost.Visible)
             return;
 
-        // Пока кнопку не нажали, план состоит из одного места под курсором: вектора ещё нет,
-        // а значит нет ни угла, ни раскладки
-        var anchor = _dragging ? _buildAnchor : _cursor;
+        // Представление читает визуальную позицию: при прогнозе призрак упреждает задержку,
+        // при движении камеры без мыши точку уже пересчитал CursorSystem
+        var visual = _cursor.VisualWorldPosition;
+        var anchor = _dragging ? _buildAnchor : visual;
 
-        BuildPlan.Compute(GM, Pending, anchor, _cursor, Input.IsKeyPressed(Key.Alt), _plan);
+        BuildPlan.Compute(GM, Pending, anchor, visual, Input.IsKeyPressed(Key.Alt), _plan);
 
         _ghost.QueueRedraw();
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (GM?.Playground == null)
+        if (GM?.Playground == null || _cursor == null)
             return;
-
-        if (@event is InputEventMouse mouseEvent)
-            _cursor = GetViewport().GetCanvasTransform().AffineInverse() * mouseEvent.Position;
 
         if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
@@ -232,17 +245,21 @@ public partial class CommandSystem : GameSystem
         if (@event is not InputEventMouseButton mouse)
             return;
 
+        // Кнопки берут точную позицию события и никогда не прогнозируемую:
+        // приказ обязан уйти туда, куда ткнули
+        var point = _cursor.WorldFromEvent(mouse);
+
         switch (mouse.ButtonIndex)
         {
             // Постройка ставится не по нажатию, а по отпусканию: между ними игрок задаёт
             // угол и раскладку, и до отпускания решение не принято
             case MouseButton.Left when mouse.Pressed && Building:
-                _buildAnchor = _cursor;
+                _buildAnchor = point;
                 _dragging = true;
                 break;
 
             case MouseButton.Left when _dragging:
-                PlaceBatch();
+                PlaceBatch(point);
                 break;
 
             // Рамку начинаем сразу: одиночный клик — это её вырожденный случай,
@@ -252,12 +269,12 @@ public partial class CommandSystem : GameSystem
             // к управлению отрядом, и держать за ним постройку больше незачем
             case MouseButton.Left when mouse.Pressed:
                 CancelBuild();
-                _bandStart = _cursor;
+                _bandStart = point;
                 _banding = true;
                 break;
 
             case MouseButton.Left:
-                FinishBand();
+                FinishBand(point);
                 break;
 
             // Правая кнопка посреди протаскивания отменяет только его: выбор в панели
@@ -272,7 +289,7 @@ public partial class CommandSystem : GameSystem
 
             case MouseButton.Right when mouse.Pressed:
                 CancelBuild();
-                IssueOrder();
+                IssueOrder(point);
                 break;
         }
     }
@@ -314,7 +331,7 @@ public partial class CommandSystem : GameSystem
 
     // ── выделение ──────────────────────────────────────────────────────────────
 
-    private void FinishBand()
+    private void FinishBand(Vector2 point)
     {
         if (!_banding)
             return;
@@ -330,9 +347,9 @@ public partial class CommandSystem : GameSystem
         if (!add)
             ClearSelection();
 
-        if (_bandStart.DistanceTo(_cursor) < BandThreshold)
+        if (_bandStart.DistanceTo(point) < BandThreshold)
         {
-            var one = ActorUnderCursor();
+            var one = ActorAt(point);
 
             // Повтор по той же цели означает «и всех таких же». Прямое указание игрока,
             // поэтому ни родство, ни преобладание здесь не применяются
@@ -344,7 +361,7 @@ public partial class CommandSystem : GameSystem
             return;
         }
 
-        var band = Band;
+        var band = new Rect2(_bandStart, point - _bandStart).Abs();
         var caught = new List<IOrderable>();
 
         foreach (var actor in GM.Index.All<IOrderable>())
@@ -398,14 +415,10 @@ public partial class CommandSystem : GameSystem
     private static bool Commandable(IOrderable actor) =>
         actor.Faction == Faction.Player && actor.AllowedOrders.Any;
 
-    private IOrderable ActorUnderCursor()
-    {
-        var cursor = _cursor;
-
-        return GM.Index.All<IOrderable>()
-            .Where(actor => Commandable(actor) && Hit(actor, cursor))
-            .Nearest(cursor, actor => actor.GlobalPosition);
-    }
+    private IOrderable ActorAt(Vector2 point) =>
+        GM.Index.All<IOrderable>()
+            .Where(actor => Commandable(actor) && Hit(actor, point))
+            .Nearest(point, actor => actor.GlobalPosition);
 
     private static bool Hit(IOrderable actor, Vector2 point)
     {
@@ -427,7 +440,7 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private List<IOrderable> Recipients() => _selected;
 
-    private void IssueOrder()
+    private void IssueOrder(Vector2 point)
     {
         var recipients = Recipients();
         if (recipients.Count == 0)
@@ -436,20 +449,20 @@ public partial class CommandSystem : GameSystem
         bool queue = Input.IsKeyPressed(Key.Shift);
 
         // Цель разбираем один раз на всех: она общая, а вид приказа у каждого свой
-        var victim = EnemyUnderCursor();
-        var occupant = GM.Obstacles.At(_cursor) as Node;
-        var damagedUnit = DamagedUnitUnderCursor();
+        var victim = EnemyAt(point);
+        var occupant = GM.Obstacles.At(point) as Node;
+        var damagedUnit = DamagedUnitAt(point);
 
         foreach (var actor in recipients)
-            Send(actor, victim, occupant, damagedUnit, queue);
+            Send(actor, victim, occupant, damagedUnit, queue, point);
     }
 
     /// <summary>
-    /// Один приказ по цели под курсором. Порядок разбора — от самого определённого
+    /// Один приказ по цели в указанной точке. Порядок разбора — от самого определённого
     /// к самому общему: враг, каркас, повреждённое, и только потом голая земля.
     /// </summary>
     private void Send(IOrderable actor, Node2D victim, Node occupant, Node2D damagedUnit,
-        bool queue)
+        bool queue, Vector2 point)
     {
         if (victim != null && Give(actor, queue, Order.Attack(victim)))
             return;
@@ -458,13 +471,13 @@ public partial class CommandSystem : GameSystem
             && GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint))
             return;
 
-        // Ремонт: сначала постройка на клетке, потом юнит под курсором
+        // Ремонт: сначала постройка на клетке, потом юнит в точке приказа
         var damaged = Repairable(occupant as Node2D) ?? damagedUnit;
 
         if (damaged != null && GiveWork(actor, queue, Order.Repair(damaged), damaged))
             return;
 
-        Give(actor, queue, Order.MoveTo(_cursor));
+        Give(actor, queue, Order.MoveTo(point));
     }
 
     /// <summary>
@@ -500,29 +513,21 @@ public partial class CommandSystem : GameSystem
         queue ? actor.Orders.TryEnqueue(orders) : actor.Orders.TrySet(orders);
 
     /// <summary>
-    /// Враг, по которому щёлкнули. Корпус небольшой, поэтому даём припуск —
+    /// Враг в указанной точке. Корпус небольшой, поэтому даём припуск —
     /// попадать точно в кружок мышью неудобно, а промах уводит юнита гулять.
     /// </summary>
-    private Node2D EnemyUnderCursor()
-    {
-        var cursor = _cursor;
-
-        return GM.Units[Faction.Hostile]
-            .Where(enemy => enemy.GlobalPosition.DistanceTo(cursor)
+    private Node2D EnemyAt(Vector2 point) =>
+        GM.Units[Faction.Hostile]
+            .Where(enemy => enemy.GlobalPosition.DistanceTo(point)
                             <= enemy.HitRadius + PickSlack)
-            .Nearest(cursor, enemy => enemy.GlobalPosition);
-    }
+            .Nearest(point, enemy => enemy.GlobalPosition);
 
-    private Node2D DamagedUnitUnderCursor()
-    {
-        var cursor = _cursor;
-
-        return GM.Units[Faction.Player]
-            .Where(unit => unit.GlobalPosition.DistanceTo(cursor) <= unit.HitRadius + PickSlack)
-            .Nearest(cursor, unit => unit.GlobalPosition) is { } found && Repairable(found) != null
+    private Node2D DamagedUnitAt(Vector2 point) =>
+        GM.Units[Faction.Player]
+            .Where(unit => unit.GlobalPosition.DistanceTo(point) <= unit.HitRadius + PickSlack)
+            .Nearest(point, unit => unit.GlobalPosition) is { } found && Repairable(found) != null
             ? found
             : null;
-    }
 
     /// <summary>Годится ли под ремонт: своё, повреждённое и с курсом ремонта.</summary>
     private static Node2D Repairable(Node2D node) =>
@@ -537,10 +542,11 @@ public partial class CommandSystem : GameSystem
     /// красными всё протаскивание, и отказывать за всю партию из-за одного занятого места
     /// значило бы требовать безошибочного ведения мыши.
     ///
-    /// План считается заново, а не берётся от последнего кадра: между кадром и отпусканием
-    /// кнопки курсор успевает сдвинуться, и поставить нужно то, что игрок видел последним.
+    /// План считается заново по точной позиции отпускания кнопки, а не по визуальному
+    /// прогнозу и не по последнему кадру представления: между кадром и отпусканием курсор
+    /// успевает сдвинуться, и поставить нужно то, куда игрок ткнул фактически.
     /// </summary>
-    private void PlaceBatch()
+    private void PlaceBatch(Vector2 point)
     {
         _dragging = false;
 
@@ -549,7 +555,7 @@ public partial class CommandSystem : GameSystem
         if (def == null || BlueprintScene == null)
             return;
 
-        BuildPlan.Compute(GM, def, _buildAnchor, _cursor, Input.IsKeyPressed(Key.Alt), _plan);
+        BuildPlan.Compute(GM, def, _buildAnchor, point, Input.IsKeyPressed(Key.Alt), _plan);
 
         // Строить пойдут выделенные — как и с любым другим приказом. Без выделения
         // каркасы просто встанут на места и будут ждать, пока за них возьмутся
