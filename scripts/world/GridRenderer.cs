@@ -5,7 +5,7 @@ public partial class GridRenderer : Node2D
 {
     public override void _Draw()
     {
-        int r = Const.WorldRadiusCells;
+        int r = World.RadiusCells;
         float min = -r * Const.Unit;
         float max = (r + 1) * Const.Unit;
 

@@ -7,7 +7,7 @@
 
 [gd_resource type="Resource" script_class="WaveSettings" load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/pressure/WaveSettings.cs" id="1_settings"]
+[ext_resource type="Script" uid="uid://bbhxpav5et4cb" path="res://scripts/pressure/WaveSettings.cs" id="1_settings"]
 
 [resource]
 script = ExtResource("1_settings")
@@ -25,6 +25,10 @@ FirstDelay = 120.0
 ChillIntervalOffset = 0.1
 
 ; ── Умолчания формы появления ────────────────────────────────────────────────────────
+;
+; Каждое значение ниже действует только для той волны, которая не задала одноимённый ключ
+; в своей секции [spawn]. Обе дуги сейчас задают все волны без исключения, поэтому здешние
+; значения на игру не влияют и остаются страховкой для волны, описанной без формы.
 ;
 ; Ближняя дуга уже дальней: наступление сходится к базе остриём, а не идёт ровной стеной.
 ; Такая волна бьёт в одну точку обороны, и это делает её отличимой от фона, который

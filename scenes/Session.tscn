@@ -27,10 +27,11 @@
 [ext_resource type="Script" path="res://scripts/ui/ControlGroupBar.cs" id="27_groups"]
 [ext_resource type="Script" path="res://scripts/pressure/TerrorSystem.cs" id="28_terror"]
 [ext_resource type="Script" path="res://scripts/ui/TerrorBar.cs" id="29_terrorbar"]
-[ext_resource type="Resource" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
-[ext_resource type="Resource" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
+[ext_resource type="TerrorSettings" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
+[ext_resource type="PressureSettings" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
 [ext_resource type="Script" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
-[ext_resource type="Resource" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
+[ext_resource type="WaveSettings" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
+[ext_resource type="WorldSettings" path="res://resources/tuning/world.tres" id="40_worldsettings"]
 [ext_resource type="Script" path="res://scripts/core/VictorySystem.cs" id="31_victory"]
 [ext_resource type="Script" path="res://scripts/ui/PortalCountdownBar.cs" id="32_portalbar"]
 [ext_resource type="Script" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
@@ -45,6 +46,7 @@ StartingMetal = 250.0
 [node name="Systems" type="Node" parent="."]
 script = ExtResource("2_manager")
 Playground = NodePath("../Playground")
+WorldTuning = ExtResource("40_worldsettings")
 
 [node name="CommandSystem" type="Node" parent="Systems"]
 script = ExtResource("5_command")
@@ -78,6 +80,7 @@ StepOrder = 30
 
 [node name="MetalSpotSystem" type="Node" parent="Systems"]
 script = ExtResource("9_metalspots")
+Settings = ExtResource("40_worldsettings")
 StepOrder = 50
 
 [node name="PressureSystem" type="Node" parent="Systems"]
@@ -88,6 +91,7 @@ StepOrder = 55
 [node name="WaveSystem" type="Node" parent="Systems"]
 script = ExtResource("38_waves")
 Settings = ExtResource("39_wavesettings")
+WorldTuning = ExtResource("40_worldsettings")
 StepOrder = 56
 
 [node name="WeaponSystem" type="Node" parent="Systems"]

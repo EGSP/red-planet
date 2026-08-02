@@ -8,8 +8,9 @@ public static class Const
 {
     public const int Unit = 64;
 
-    /// <summary>Мир — квадрат 41x41 клетка с центром в (0,0).</summary>
-    public const int WorldRadiusCells = 20;
+    // Размер мира здесь больше не задаётся: он переехал в ресурс настроек и читается
+    // через World. Причина — в способе настройки: величина подбирается глазом по карте,
+    // а не выводится из правил, поэтому правиться должна там, где карта видна
 
     // ── Навигация и постановка ────────────────────────────────────────────────────
     //
@@ -19,15 +20,6 @@ public static class Const
 
     /// <summary>Ячейка навигационного растра. Четыре на клетку застройки.</summary>
     public const int NavCell = 16;
-
-    /// <summary>Клеток застройки по стороне мира.</summary>
-    public const int WorldCells = WorldRadiusCells * 2 + 1;
-
-    /// <summary>Сторона мира в пикселях.</summary>
-    public const int WorldSizePx = WorldCells * Unit;
-
-    /// <summary>Ячеек навигации по стороне мира.</summary>
-    public const int NavWidth = WorldSizePx / NavCell;
 
     /// <summary>
     /// Обязательный зазор между строениями, пикселей. Един для всех.
@@ -73,34 +65,13 @@ public static class Const
     /// </summary>
     public const int PatternLimit = 100;
 
-    /// <summary>Левый верхний угол мира в пикселях.</summary>
-    public static Vector2 WorldMin => new(-WorldRadiusCells * Unit, -WorldRadiusCells * Unit);
-
-    public static Rect2 WorldBounds => new(WorldMin, new Vector2(WorldSizePx, WorldSizePx));
-
-    // ── Точки метала ──────────────────────────────────────────────────────────────
+    // ── Точки метала и кольцо появления противника ────────────────────────────────
     //
-    // Расставляются один раз при создании мира и больше не меняются: точка вечна,
-    // и восстанавливать в ней нечего. Все точки одинаковы — богатство числом не задаётся.
-    // Разницу между ними создаёт только положение: до дальней дольше идти и труднее
-    // её прикрыть, и этого достаточно, чтобы выбор «куда расширяться» имел цену.
-
-    /// <summary>Сколько точек метала на карте.</summary>
-    public const int MetalSpotCount = 14;
-
-    /// <summary>Дальше этого радиуса точек нет: у самой границы мира их не разместить.</summary>
-    public const int MetalSpotFieldRadius = 15;
-
-    /// <summary>Ближе этого радиуса точек нет — иначе они встанут прямо в базу.</summary>
-    public const int MetalSpotBaseClearance = 4;
-
-    /// <summary>Минимальное расстояние между точками, клеток: иначе они собираются в кучу.</summary>
-    public const int MetalSpotSpacing = 3;
-
-    // Сколько точек гарантированно лежит рядом со стартом. Без гарантии случайная раскладка
-    // иногда оставляет начало вовсе без метала, и партия проиграна ещё до первого решения
-    public const int MetalSpotStartCount = 3;
-    public const int MetalSpotStartRadius = 8;
+    // Переехали в ресурс WorldSettings (resources/tuning/world.tres). Причина в способе
+    // настройки: эти величины подбираются глазом по карте, и править их следует там,
+    // где карта видна, — в инспекторе рядом с предпросмотром SessionPreview. Здесь
+    // остались лишь те числа, от которых зависят размеры массивов растра навигации,
+    // а они объявлены как const и ползунком не меняются.
 
     /// <summary>На каком расстоянии бот держится от коммандера, когда идёт следом.</summary>
     public static float FollowDistancePx => Unit * 3f;
@@ -111,10 +82,6 @@ public static class Const
     // роняет производительность базы
     public const float BaseMetalCapacity = 1500f;
     public const float BaseEnergyCapacity = 450f;
-
-    // Враги приходят из-за поля точек: дальние точки лежат на линии их подхода,
-    // и экстрактор на краю карты обороняется тяжелее, чем экстрактор у базы
-    public const float EnemyRingFactor = 1.3f;
 
     // Темп восполнения потерь противника. Объём давления числом здесь больше не задаётся:
     // он выводится из террора бюджетом мощи — см. PressureSettings
@@ -129,9 +96,6 @@ public static class Const
     /// Недостроенное ломается заметно легче — стройка под обстрелом должна быть рискованной.
     /// </summary>
     public const float BlueprintHealthFactor = 0.4f;
-
-    /// <summary>Радиус окружности появления врагов в пикселях.</summary>
-    public static float EnemySpawnRadiusPx => MetalSpotFieldRadius * EnemyRingFactor * Unit;
 
     /// <summary>
     /// Точка высадки — центр стартовой клетки, вокруг которой встаёт база.

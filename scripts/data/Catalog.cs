@@ -53,6 +53,9 @@ public sealed class Catalog
     public ToolDefinition Tool(string id) =>
         id != null && _tools.TryGetValue(id, out var tool) ? tool : null;
 
+    public WaveDefinition Wave(string id) =>
+        id != null && _waves.TryGetValue(id, out var wave) ? wave : null;
+
     public BuildbarDefinition Buildbar(string id) =>
         id != null && _buildbars.TryGetValue(id, out var bar) ? bar : null;
 

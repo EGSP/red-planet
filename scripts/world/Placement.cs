@@ -113,7 +113,7 @@ public static class Placement
 
         var area = Footprint(def, center, facing);
 
-        if (!Const.WorldBounds.Encloses(area.Bounds))
+        if (!World.Bounds.Encloses(area.Bounds))
             return false;
 
         var claim = area.Grow(Const.BuildMarginPx);

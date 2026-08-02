@@ -52,6 +52,13 @@ public partial class WaveSystem : GameSystem
     [Export] public WaveSettings Settings;
 
     /// <summary>
+    /// Настройки мира. Нужны ради одного числа — радиуса окружности появления, от которого
+    /// отсчитывается форма. Поле здесь затем, чтобы связь была видна в сцене: подвинув поле
+    /// точек метала, вы двигаете и линию подхода волн.
+    /// </summary>
+    [Export] public WorldSettings WorldTuning;
+
+    /// <summary>
     /// Во сколько раз запрошенный предыдущей волной тег поднимает шанс волны с этим тегом.
     ///
     /// Именно множитель, а не выбор напрямую: пожелание должно оставаться пожеланием.
@@ -66,13 +73,16 @@ public partial class WaveSystem : GameSystem
     private readonly RandomNumberGenerator _rng = new();
     private readonly List<WaveRecord> _history = new();
 
-    // Рабочие списки живут полем, а не переменной шага: набор состава идёт раз в полторы
-    // минуты, но выделять под него память заново незачем
+    /// <summary>Набор состава. Тот же класс зовёт предпросмотр в редакторе.</summary>
+    private readonly WaveComposer _composer = new();
+
+    // Рабочие списки живут полем, а не переменной шага: отбор идёт раз в полторы минуты,
+    // но выделять под него память заново незачем
     private readonly List<WaveDefinition> _candidates = new();
     private readonly List<float> _weights = new();
-    private readonly List<UnitDefinition> _allowed = new();
-    private readonly List<UnitDefinition> _pool = new();
-    private readonly List<UnitDefinition> _composition = new();
+
+    /// <summary>Состав по убыванию мощи — в том порядке, в каком он встаёт по рядам.</summary>
+    private readonly List<UnitDefinition> _ordered = new();
 
     private string[] _preferred = System.Array.Empty<string>();
     private float _timer;
@@ -95,6 +105,10 @@ public partial class WaveSystem : GameSystem
             GD.PushWarning("[WaveSystem] настройки не назначены, взяты умолчания");
             Settings = new WaveSettings();
         }
+
+        // Незаполненное поле берёт действующие настройки мира: иначе форма появления
+        // считалась бы от умолчаний класса и расходилась бы с той, что видит игрок
+        WorldTuning ??= World.Settings;
 
         _timer = Settings.FirstDelay;
     }
@@ -181,159 +195,19 @@ public partial class WaveSystem : GameSystem
     {
         float budget = wave.Budget(terror);
 
-        Compose(wave, budget);
+        _composer.Compose(GM.Catalog, wave, budget, _rng);
 
-        var shape = Settings.ShapeOf(wave.Shape);
+        var shape = Settings.ShapeOf(wave.Shape, WorldTuning.SpawnRadiusPx);
         float center = _rng.RandfRange(0f, Mathf.Tau);
         int extraRows = Deploy(shape, center);
 
-        float spent = 0f;
-
-        foreach (var definition in _composition)
-            spent += definition.ArmyPower;
-
+        float spent = _composer.Spent;
         float chill = Settings.ChillAfter(wave, _rng);
 
         _timer = chill;
         _preferred = wave.PreferNext;
 
         Record(wave, terror, budget, spent, shape, center, chill, extraRows);
-    }
-
-    /// <summary>
-    /// Набрать состав в пределах бюджета.
-    ///
-    /// ДВА ПРОХОДА, И ОНИ РАЗНЫЕ. Сначала выполняются целевые доли — те части бюджета,
-    /// которые волна отвела конкретным видам; затем остаток тратится свободно среди всего
-    /// допустимого. Порядок списков в файле при этом значим: он и есть порядок исполнения
-    /// долей. Неявная сортировка, скажем по величине доли, поставила бы результат в
-    /// зависимость от чисел, которые правят ради баланса, а не ради очерёдности.
-    /// </summary>
-    private void Compose(WaveDefinition wave, float budget)
-    {
-        _composition.Clear();
-        Allowed(wave);
-
-        if (_allowed.Count == 0)
-        {
-            GD.PushWarning($"[WaveSystem] волна «{wave.Id}»: допустимых видов не осталось");
-            return;
-        }
-
-        float spent = 0f;
-
-        foreach (var list in wave.UnitLists)
-        {
-            if (list.TargetBudgetShare <= 0f)
-                continue;
-
-            Pool(list);
-            spent = Quota(_pool, budget * list.TargetBudgetShare, budget, spent);
-        }
-
-        Quota(_allowed, budget, budget, spent);
-    }
-
-    /// <summary>
-    /// Потратить на виды из pool отведённую им квоту.
-    ///
-    /// Последний вид берётся и тогда, когда квота им перебирается: условие проверяется
-    /// ДО добавления, а не после. Иначе «потратить на этих треть бюджета» почти никогда
-    /// не выполнялось бы — доля кратна цене вида лишь по случайности, и набор
-    /// останавливался бы, не дойдя до неё.
-    ///
-    /// Ограничение при этом одно и общее: сколько бы ни осталось в квоте, за пределы
-    /// бюджета волны набор не выходит.
-    /// </summary>
-    private float Quota(List<UnitDefinition> pool, float quota, float budget, float spent)
-    {
-        if (pool.Count == 0)
-            return spent;
-
-        float used = 0f;
-
-        while (used < quota)
-        {
-            var definition = pool[_rng.RandiRange(0, pool.Count - 1)];
-            float power = definition.ArmyPower;
-
-            if (spent + power > budget)
-            {
-                // В остаток бюджета не помещается именно этот вид, но может поместиться
-                // другой из того же списка — перебираем дешёвые, прежде чем сдаться
-                if (!Cheapest(pool, budget - spent, out definition))
-                    break;
-
-                power = definition.ArmyPower;
-            }
-
-            _composition.Add(definition);
-            spent += power;
-            used += power;
-        }
-
-        return spent;
-    }
-
-    /// <summary>Самый дешёвый вид, помещающийся в остаток. Ложь — не помещается ни один.</summary>
-    private static bool Cheapest(List<UnitDefinition> pool, float available,
-        out UnitDefinition found)
-    {
-        found = null;
-
-        foreach (var definition in pool)
-            if (definition.ArmyPower <= available &&
-                (found == null || definition.ArmyPower < found.ArmyPower))
-                found = definition;
-
-        return found != null;
-    }
-
-    /// <summary>
-    /// Допустимые виды. Списки allow сужают: есть хоть один — допустимо только их
-    /// объединение; нет ни одного — допустимы все виды противника. Списки deny
-    /// вычитаются после. Списки limit на отбор не влияют вовсе, у них только доля.
-    /// </summary>
-    private void Allowed(WaveDefinition wave)
-    {
-        _allowed.Clear();
-        bool narrowed = false;
-
-        foreach (var list in wave.UnitLists)
-        {
-            if (list.Mode != UnitListMode.Allow)
-                continue;
-
-            narrowed = true;
-
-            foreach (var definition in list.Units)
-                if (!_allowed.Contains(definition))
-                    _allowed.Add(definition);
-        }
-
-        if (!narrowed)
-            foreach (var definition in GM.Catalog.Enemies)
-                if (definition.ArmyPower > 0f)
-                    _allowed.Add(definition);
-
-        foreach (var list in wave.UnitLists)
-        {
-            if (list.Mode != UnitListMode.Deny)
-                continue;
-
-            foreach (var definition in list.Units)
-                _allowed.Remove(definition);
-        }
-    }
-
-    /// <summary>Виды списка, оставшиеся допустимыми после сужения и вычитания.</summary>
-    private void Pool(WaveUnitList list)
-    {
-        _pool.Clear();
-
-        foreach (var definition in list.Units)
-            if (_allowed.Contains(definition))
-                _pool.Add(definition);
     }
 
     // ── Расстановка ───────────────────────────────────────────────────────────────
@@ -349,72 +223,33 @@ public partial class WaveSystem : GameSystem
     /// </summary>
     private int Deploy(WaveShape shape, float center)
     {
-        if (_composition.Count == 0)
+        _ordered.Clear();
+        _ordered.AddRange(_composer.Composition);
+
+        if (_ordered.Count == 0)
             return 0;
 
         // Крупные идут в передние ряды: иначе живучие плетутся позади и вступают в бой
         // последними, хотя вся их роль — принять первый удар
-        _composition.Sort((a, b) => b.ArmyPower.CompareTo(a.ArmyPower));
+        _ordered.Sort((a, b) => b.ArmyPower.CompareTo(a.ArmyPower));
 
-        int groups = Mathf.Min(shape.Groups, _composition.Count);
+        int groups = Mathf.Min(shape.Groups, _ordered.Count);
         int extra = 0;
 
         for (int g = 0; g < groups; g++)
         {
-            float angle = center + g * Mathf.DegToRad(shape.GroupsArcDegrees);
+            float angle = WaveFormation.GroupAngle(shape, center, g);
             int index = 0;
 
-            for (int i = g; i < _composition.Count; i += groups)
+            for (int i = g; i < _ordered.Count; i += groups)
             {
-                var (position, row) = Slot(shape, angle, index++);
-                Spawn(_composition[i], position);
+                var (position, row) = WaveFormation.Slot(shape, angle, index++);
+                Spawn(_ordered[i], position);
                 extra = Mathf.Max(extra, row);
             }
         }
 
-        int planned = Rows(shape);
-
-        return Mathf.Max(extra + 1 - planned, 0);
-    }
-
-    /// <summary>Сколько рядов помещается в заданную глубину. Не меньше одного.</summary>
-    private static int Rows(WaveShape shape) =>
-        Mathf.Max(Mathf.FloorToInt(shape.DepthPx / shape.SpacingPx) + 1, 1);
-
-    /// <summary>
-    /// Место с порядковым номером внутри очага и номер ряда, в который оно попало.
-    ///
-    /// Ряды идут от ближнего к базе наружу с шагом в промежуток, мест в ряду столько,
-    /// сколько их помещается по длине дуги на этой глубине. Когда состав не умещается
-    /// в заданную глубину, ряды продолжаются за дальнюю дугу тем же шагом: заявленная
-    /// плотность важнее заявленной глубины, поскольку слишком тесная расстановка приводит
-    /// к расталкиванию в первые же секунды, тогда как лишний ряд позади просто отстаёт.
-    /// Ширина у таких рядов остаётся как у дальней дуги — экстраполировать угол нельзя,
-    /// иначе форма расходится тем сильнее, чем больше волна.
-    /// </summary>
-    private static (Vector2 Position, int Row) Slot(WaveShape shape, float center, int index)
-    {
-        int rows = Rows(shape);
-        float step = shape.SpacingPx;
-        int row = 0;
-
-        while (true)
-        {
-            float t = rows > 1 ? Mathf.Min(row / (float)(rows - 1), 1f) : Mathf.Min(row, 1f);
-            float radius = shape.NearRadiusPx + row * step;
-            int places = Mathf.Max(Mathf.FloorToInt(shape.ArcAt(t) * radius / step) + 1, 1);
-
-            if (index < places)
-            {
-                float offset = (index - (places - 1) * 0.5f) * step;
-                float angle = center + offset / radius;
-
-                return (Heading.Forward(angle) * radius, row);
-            }
-
-            index -= places;
-            row++;
-        }
+        return Mathf.Max(extra + 1 - WaveFormation.Rows(shape), 0);
     }
 
     private void Spawn(UnitDefinition definition, Vector2 position)
@@ -439,7 +274,7 @@ public partial class WaveSystem : GameSystem
     private void Record(WaveDefinition wave, float terror, float budget, float spent,
         WaveShape shape, float center, float chill, int extraRows)
     {
-        string composition = Describe();
+        string composition = _composer.Describe();
         float degrees = Mathf.RadToDeg(center);
 
         _history.Add(new WaveRecord
@@ -476,32 +311,5 @@ public partial class WaveSystem : GameSystem
             Groups = shape.Groups,
             ChillSeconds = chill,
         });
-    }
-
-    /// <summary>Состав перечислением видов с количествами: «стрелок ×6, толстяк ×2».</summary>
-    private string Describe()
-    {
-        if (_composition.Count == 0)
-            return "пусто";
-
-        var counts = new Dictionary<string, int>();
-        var order = new List<string>();
-
-        foreach (var definition in _composition)
-        {
-            string name = definition.DisplayName.Length > 0 ? definition.DisplayName : definition.Id;
-
-            if (!counts.TryAdd(name, 1))
-                counts[name]++;
-            else
-                order.Add(name);
-        }
-
-        var parts = new List<string>(order.Count);
-
-        foreach (string name in order)
-            parts.Add($"{name} ×{counts[name]}");
-
-        return string.Join(", ", parts);
     }
 }

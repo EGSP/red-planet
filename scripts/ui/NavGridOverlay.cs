@@ -51,7 +51,7 @@ public partial class NavGridOverlay : Node2D
         if (DebugFlags.NavBlocked || DebugFlags.NavClearance || DebugFlags.NavComponents)
         {
             Refresh(gm);
-            DrawTextureRect(_texture, Const.WorldBounds, false);
+            DrawTextureRect(_texture, World.Bounds, false);
         }
 
         if (DebugFlags.Footprints)

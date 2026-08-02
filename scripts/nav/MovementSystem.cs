@@ -494,7 +494,7 @@ public partial class MovementSystem : GameSystem
 
             position = GM.Obstacles.PushOut(position, radius);
 
-            var bounds = Const.WorldBounds;
+            var bounds = World.Bounds;
             position.X = Mathf.Clamp(position.X, bounds.Position.X + radius, bounds.End.X - radius);
             position.Y = Mathf.Clamp(position.Y, bounds.Position.Y + radius, bounds.End.Y - radius);
 

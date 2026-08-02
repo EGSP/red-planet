@@ -1,0 +1,21 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/tools/SessionPreview.cs" id="1_preview"]
+[ext_resource type="WorldSettings" path="res://resources/tuning/world.tres" id="2_world"]
+[ext_resource type="WaveSettings" path="res://resources/tuning/waves.tres" id="3_waves"]
+
+[node name="Preview" type="Node2D"]
+
+; Камера нужна не редактору, а запуску сцены отдельно: так стенд можно открыть как игру
+; и увидеть поле целиком, не отодвигая вид руками
+[node name="Camera" type="Camera2D" parent="."]
+position = Vector2(32, 32)
+zoom = Vector2(0.22, 0.22)
+
+[node name="SessionPreview" type="Node2D" parent="."]
+script = ExtResource("1_preview")
+WorldTuning = ExtResource("2_world")
+Waves = ExtResource("3_waves")
+Terror = 40.0
+DirectionDegrees = 200.0
+WaveSeed = 1

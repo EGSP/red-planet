@@ -21,8 +21,19 @@ using Godot;
 public sealed class NavGrid
 {
     public const int Cell = Const.NavCell;
-    public const int Width = Const.NavWidth;
-    public const int Area = Width * Width;
+
+    /// <summary>
+    /// Ячеек по стороне. Величина перестала быть константой вместе с тем, как размер мира
+    /// переехал в настройки: растр покрывает поле целиком, поэтому его сторона есть
+    /// следствие размера поля, а не самостоятельное число.
+    ///
+    /// Массивы под неё выделяются при создании карты и пересоздаются, если размер поля
+    /// изменился, — см. <see cref="Fit"/>. По ходу партии этого не происходит: настройки
+    /// правятся между партиями и в редакторе.
+    /// </summary>
+    public static int Width => World.NavWidth;
+
+    public static int Area => Width * Width;
 
     /// <summary>Расстояние в третях ячейки: шаг по стороне.</summary>
     private const int Straight = 3;
@@ -35,10 +46,10 @@ public sealed class NavGrid
 
     private readonly ObstacleMap _obstacles;
 
-    private readonly bool[] _blocked = new bool[Area];
+    private bool[] _blocked = new bool[Area];
 
     /// <summary>Расстояние до ближайшей непроходимой ячейки, в третях ячейки.</summary>
-    private readonly int[] _distance = new int[Area];
+    private int[] _distance = new int[Area];
 
     /// <summary>
     /// Метки связных областей, своя раскладка на каждый порог клиренса. Считаются лениво:
@@ -64,11 +75,11 @@ public sealed class NavGrid
     // ── координаты ────────────────────────────────────────────────────────────────
 
     public static Vector2I ToCell(Vector2 world) => new(
-        Mathf.FloorToInt((world.X - Const.WorldMin.X) / Cell),
-        Mathf.FloorToInt((world.Y - Const.WorldMin.Y) / Cell));
+        Mathf.FloorToInt((world.X - World.Min.X) / Cell),
+        Mathf.FloorToInt((world.Y - World.Min.Y) / Cell));
 
     public static Vector2 ToWorld(Vector2I cell) =>
-        Const.WorldMin + new Vector2(cell.X + 0.5f, cell.Y + 0.5f) * Cell;
+        World.Min + new Vector2(cell.X + 0.5f, cell.Y + 0.5f) * Cell;
 
     public static Vector2 ToWorld(int index) =>
         ToWorld(new Vector2I(index % Width, index / Width));
@@ -221,10 +232,29 @@ public sealed class NavGrid
     /// </summary>
     public void Fresh()
     {
-        if (_sourceRevision == _obstacles.Revision)
+        if (_sourceRevision == _obstacles.Revision && _blocked.Length == Area)
             return;
 
+        Fit();
         Rebuild();
+    }
+
+    /// <summary>
+    /// Подогнать массивы под текущий размер поля.
+    ///
+    /// Нужно потому, что размер мира стал настройкой: карта создаётся раньше, чем сцена
+    /// успевает назначить настройки, и в редакторе поле правят прямо во время работы.
+    /// Проверка стоит одно сравнение длины на запрос, а без неё изменённый размер означал бы
+    /// обращение за границы массива.
+    /// </summary>
+    private void Fit()
+    {
+        if (_blocked.Length == Area)
+            return;
+
+        _blocked = new bool[Area];
+        _distance = new int[Area];
+        _components.Clear();
     }
 
     /// <summary>
@@ -293,7 +323,7 @@ public sealed class NavGrid
 
     /// <summary>Ячейка растра как прямоугольник мира — для точной проверки пересечения.</summary>
     private static Obb CellShape(int x, int y) => Obb.FromRect(new Rect2(
-        Const.WorldMin + new Vector2(x, y) * Cell,
+        World.Min + new Vector2(x, y) * Cell,
         new Vector2(Cell, Cell)));
 
     /// <summary>

@@ -23,9 +23,17 @@ public readonly struct WaveShape
     public readonly int Groups;
     public readonly float GroupsArcDegrees;
 
+    /// <summary>
+    /// Радиус окружности появления, от которого отсчитываются обе дуги. Передаётся снаружи,
+    /// а не берётся из настроек мира напрямую: в предпросмотре форма показывается для того
+    /// радиуса, который правится в инспекторе прямо сейчас, а не для действующего в игре.
+    /// </summary>
+    public readonly float BaseRadiusPx;
+
     public WaveShape(float nearArc, float farArc, float radiusOffset, float radiusDepth,
-        float spacing, int groups, float groupsArc)
+        float spacing, int groups, float groupsArc, float baseRadiusPx)
     {
+        BaseRadiusPx = Mathf.Max(baseRadiusPx, 1f);
         NearArcDegrees = Mathf.Max(nearArc, 0f);
         FarArcDegrees = Mathf.Max(farArc, 0f);
         RadiusOffsetMultiplier = Mathf.Max(radiusOffset, 0.01f);
@@ -36,10 +44,10 @@ public readonly struct WaveShape
     }
 
     /// <summary>Радиус ближней к базе дуги в пикселях.</summary>
-    public float NearRadiusPx => Const.EnemySpawnRadiusPx * RadiusOffsetMultiplier;
+    public float NearRadiusPx => BaseRadiusPx * RadiusOffsetMultiplier;
 
     /// <summary>Глубина формы в пикселях: расстояние между дугами.</summary>
-    public float DepthPx => Const.EnemySpawnRadiusPx * RadiusDepthMultiplier;
+    public float DepthPx => BaseRadiusPx * RadiusDepthMultiplier;
 
     public float SpacingPx => SpacingCells * Const.Unit;
 
@@ -62,6 +70,7 @@ public readonly struct WaveShape
 /// в этот момент. Величины подбираются порознь и по разным признакам, а держать их
 /// в одном ресурсе значило бы подбирать вместе.
 /// </summary>
+[Tool]
 [GlobalClass]
 public partial class WaveSettings : Resource
 {
@@ -89,40 +98,49 @@ public partial class WaveSettings : Resource
 
     // ── Умолчания формы появления ─────────────────────────────────────────────────
 
-    [ExportGroup("Форма появления")]
+    // Группа названа умолчаниями не для красоты: любое поле ниже действует лишь тогда,
+    // когда одноимённый ключ не задан в секции [spawn] файла волны. Без этого в названии
+    // ползунок, перекрытый всеми волнами разом, выглядит сломанным, а не переопределённым
+    [ExportGroup("Умолчания формы появления")]
 
-    /// <summary>Угол ближней к базе дуги, градусов.</summary>
+    /// <summary>
+    /// Умолчание для угла ближней к базе дуги, градусов. Сейчас перекрыто всеми волнами
+    /// без исключения: ширина удара и есть замысел волны, поэтому её задают поимённо.
+    /// </summary>
     [Export] public float NearArcDegrees = 30f;
 
-    /// <summary>Угол дальней дуги, градусов.</summary>
+    /// <summary>Умолчание для угла дальней дуги, градусов.</summary>
     [Export] public float FarArcDegrees = 40f;
 
-    /// <summary>Положение ближней дуги в долях радиуса появления фона.</summary>
+    /// <summary>
+    /// Умолчание для положения ближней дуги в долях радиуса появления фона. Единственное
+    /// поле группы, которое не перекрывает ни одна волна: кольцо появления общее для всех.
+    /// </summary>
     [Export] public float RadiusOffsetMultiplier = 1f;
 
-    /// <summary>Глубина формы в долях радиуса появления фона.</summary>
+    /// <summary>Умолчание для глубины формы в долях радиуса появления фона.</summary>
     [Export] public float RadiusDepthMultiplier = 0.12f;
 
     /// <summary>
-    /// Промежуток между соседями и между рядами, в клетках. Он же задаёт плотность
-    /// наступления: чем меньше, тем теснее строй.
+    /// Умолчание для промежутка между соседями и между рядами, в клетках. Он же задаёт
+    /// плотность наступления: чем меньше, тем теснее строй.
     ///
     /// Меряется между центрами мест, поэтому нижняя граница определяется самым крупным
     /// видом: при радиусе корпуса в 0.45 клетки безопасный минимум составляет 0.9.
     /// </summary>
     [Export] public float SpacingCells = 1f;
 
-    /// <summary>Число очагов появления. Единица — волна приходит с одной стороны.</summary>
+    /// <summary>Умолчание для числа очагов. Единица — волна приходит с одной стороны.</summary>
     [Export] public int Groups = 1;
 
-    /// <summary>Угловое расстояние между соседними очагами, градусов.</summary>
+    /// <summary>Умолчание для углового расстояния между соседними очагами, градусов.</summary>
     [Export] public float GroupsArcDegrees = 90f;
 
     /// <summary>
     /// Форма волны: заданное волной поверх умолчаний. Волна описывает отличия, а не
     /// повторяет весь набор, поэтому здесь и происходит слияние.
     /// </summary>
-    public WaveShape ShapeOf(WaveShapeOverrides over)
+    public WaveShape ShapeOf(WaveShapeOverrides over, float baseRadiusPx)
     {
         over ??= new WaveShapeOverrides();
 
@@ -133,7 +151,8 @@ public partial class WaveSettings : Resource
             over.RadiusDepthMultiplier ?? RadiusDepthMultiplier,
             over.SpacingCells ?? SpacingCells,
             over.Groups ?? Groups,
-            over.GroupsArcDegrees ?? GroupsArcDegrees);
+            over.GroupsArcDegrees ?? GroupsArcDegrees,
+            baseRadiusPx);
     }
 
     /// <summary>Интервал отдыха после волны, с её множителем и с разбросом.</summary>

@@ -25,6 +25,14 @@ public partial class GameManager : Node
     /// <summary>Мир сессии: сюда Spawner складывает всё рождённое.</summary>
     [Export] public Playground Playground;
 
+    /// <summary>
+    /// Настройки мира: размер поля, раскладка точек метала, кольцо появления противника.
+    /// Назначаются здесь, а действуют через <see cref="World"/>, поскольку границы поля
+    /// спрашивает и тот код, которому менеджер сессии не нужен, — растр навигации,
+    /// постановка построек, отрисовка ориентиров.
+    /// </summary>
+    [Export] public WorldSettings WorldTuning;
+
     /// <summary>Журнал документов — шина, через которую системы говорят друг с другом.</summary>
     public EventStore Events { get; } = new();
 
@@ -100,6 +108,11 @@ public partial class GameManager : Node
     public override void _EnterTree()
     {
         I = this;
+
+        // Настройки мира ставим первой строкой: от них зависят границы поля и размер
+        // растра навигации, а тот создаётся здесь же, несколькими строками ниже
+        if (WorldTuning != null)
+            World.Settings = WorldTuning;
 
         // Площадка — сестринская ветка, и к этому мигу она уже собрана: дерево сцены
         // создаётся целиком до того, как хоть кто-то в нём получит _EnterTree

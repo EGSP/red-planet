@@ -26,7 +26,7 @@ using Godot;
 /// пришлось бы вместе.
 ///
 /// Появляются юниты на окружности вокруг базы радиусом с внешнее кольцо руды, взятым
-/// с запасом (Const.EnemyRingFactor): дальние месторождения оказываются на линии подхода,
+/// с запасом (WorldSettings.RingFactor): дальние месторождения оказываются на линии подхода,
 /// и добыча на краю кольца перестаёт быть безопасной.
 /// </summary>
 public partial class PressureSystem : GameSystem
@@ -111,7 +111,7 @@ public partial class PressureSystem : GameSystem
     private void Spawn(UnitDefinition def)
     {
         float angle = _rng.RandfRange(0f, Mathf.Tau);
-        var position = Heading.Forward(angle) * Const.EnemySpawnRadiusPx;
+        var position = Heading.Forward(angle) * World.SpawnRadiusPx;
 
         var enemy = GM.Spawn.SpawnUnit(def, position, Faction.Hostile);
         enemy.Origin = PressureOrigin.Ambient;
