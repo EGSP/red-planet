@@ -31,6 +31,18 @@ public sealed class BuildbarSectionDefinition
 }
 
 /// <summary>
+/// Режим панели: постановка каркасов на карту или очередь завода.
+/// </summary>
+public enum BuildbarKind
+{
+    /// <summary>Кнопка включает режим постановки (коммандер, фабрикатор).</summary>
+    Placement,
+
+    /// <summary>Кнопка добавляет или снимает слот в очереди выделенного завода.</summary>
+    Plant,
+}
+
+/// <summary>
 /// Строительная панель юнита: что он умеет строить и как это разложено по секциям.
 ///
 /// Панель — справочник, а не свойство юнита: юнит ссылается на неё по строковому
@@ -49,6 +61,9 @@ public sealed class BuildbarDefinition
     /// накладываются поверх и уступают ей спорные ячейки.
     /// </summary>
     public int Priority = 10;
+
+    /// <summary>Постановка на карту или очередь производства завода.</summary>
+    public BuildbarKind Kind = BuildbarKind.Placement;
 
     public readonly List<BuildbarSectionDefinition> Sections = new();
 }

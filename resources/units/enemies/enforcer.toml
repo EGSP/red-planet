@@ -1,0 +1,23 @@
+# Enforcer: ядро поздней волны. Высокий суммарный DPS при умеренной цене.
+
+id      = "enforcer"
+extends = "base_enemy"
+name    = "Enforcer"
+color   = [0.7, 0.25, 0.4]
+tools   = ["enforcer_guns"]
+
+[body]
+max_health  = 225.0
+radius      = 0.42
+hull        = "hex"
+armor_rings = 1
+
+[movement]
+speed      = 2.4
+turn_speed = 140.0
+
+[battle]
+standoff = 0.75
+
+[terror]
+army_power = 3.0

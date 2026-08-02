@@ -157,8 +157,12 @@ public static class ContentCompiler
                     kinds |= WorkKinds.Build;
                     break;
 
+                case "repair":
+                    kinds |= WorkKinds.Repair;
+                    break;
+
                 default:
-                    document.Error($"неизвестный вид работы «{name}». Допустимые: build");
+                    document.Error($"неизвестный вид работы «{name}». Допустимые: build, repair");
                     break;
             }
 
@@ -312,6 +316,11 @@ public static class ContentCompiler
             StandoffFraction = basis.StandoffFraction,
             ExpansionWeight = basis.ExpansionWeight,
             ArmyPowerWeight = basis.ArmyPowerWeight,
+            Hull = basis.Hull,
+            HullAspect = basis.HullAspect,
+            ArmorRings = basis.ArmorRings,
+            FrontPlate = basis.FrontPlate,
+            Plant = basis.Plant,
         };
 
         if (document.Has("tags"))
@@ -329,6 +338,10 @@ public static class ContentCompiler
             definition.MaxHealth = body.Float("max_health", basis.MaxHealth);
             definition.Radius = body.Float("radius", basis.Radius);
             definition.VisionRange = body.Float("vision_range", basis.VisionRange);
+            definition.Hull = body.Enum("hull", basis.Hull);
+            definition.HullAspect = body.Float("hull_aspect", basis.HullAspect);
+            definition.ArmorRings = body.Int("armor_rings", basis.ArmorRings);
+            definition.FrontPlate = body.Bool("front_plate", basis.FrontPlate);
         }
 
         if (document.Section("movement") is { } movement)
@@ -407,6 +420,26 @@ public static class ContentCompiler
         if (document.Section("battle") is { } battle)
             definition.StandoffFraction = battle.Float("standoff", basis.StandoffFraction);
 
+        if (document.Section("plant") is { } plant)
+        {
+            var prior = basis.Plant ?? new PlantDefinition();
+            var dirs = plant.Has("rolloff_directions")
+                ? plant.Vector2List("rolloff_directions")
+                : prior.RolloffDirections;
+
+            if (dirs.Length == 0)
+                dirs = new[] { Vector2.Right, Vector2.Left };
+
+            definition.Plant = new PlantDefinition
+            {
+                FactoryCooldown = plant.Float("factory_cooldown", prior.FactoryCooldown),
+                BuildPower = plant.Float("build_power", prior.BuildPower),
+                EnergyPerPower = plant.Float("energy_per_power", prior.EnergyPerPower),
+                RolloffDirections = dirs,
+                RolloffClearance = plant.Float("rolloff_clearance", prior.RolloffClearance),
+            };
+        }
+
         return definition;
     }
 
@@ -449,6 +482,7 @@ public static class ContentCompiler
         {
             Id = document.RequiredString("id"),
             Priority = document.Int("priority", 10),
+            Kind = document.Enum("kind", BuildbarKind.Placement),
         };
 
         var sections = document.Sections("sections");
@@ -640,6 +674,12 @@ public static class ContentCompiler
                              $"панель «{definition.Buildbar}»");
                 errors++;
             }
+
+            if (definition.Class == UnitClass.Plant && definition.Plant == null)
+            {
+                GD.PushError($"[Контент] «{definition.Id}»: class = plant требует секцию [plant]");
+                errors++;
+            }
         }
 
         errors += LinkWaves(catalog);
@@ -829,8 +869,10 @@ public static class ContentCompiler
                     errors++;
                     break;
 
+                // Рука годится и строителю, и ремонтнику: перечислять оба умения незачем,
+                // потому что CanRepair истинно и у чистого строителя
                 case WorkToolDefinition work:
-                    if (work.CanBuild)
+                    if (work.CanWork)
                         definition.BuildTool ??= work;
 
                     break;

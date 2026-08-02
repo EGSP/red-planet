@@ -314,9 +314,44 @@ public partial class SessionPreview : Node2D
                 var (position, _) = WaveFormation.Slot(wave.Shape, angle, index++);
                 var definition = wave.Ordered[i];
 
-                ShapeDraw.Circle(this, position, definition.RadiusPx,
-                    ShapeStyle.Solid(definition.Color));
+                DrawUnitSilhouette(position, definition);
             }
+        }
+    }
+
+    private void DrawUnitSilhouette(Vector2 position, UnitDefinition definition)
+    {
+        float radius = definition.RadiusPx;
+        var style = ShapeStyle.Solid(definition.Color);
+
+        switch (definition.Hull)
+        {
+            case HullShape.Rect:
+            {
+                float aspect = Mathf.Max(definition.HullAspect, 0.5f);
+                float length = radius * 2f * Mathf.Sqrt(aspect);
+                float width = radius * 2f / Mathf.Sqrt(aspect);
+                ShapeDraw.Rect(this, new Rect2(position.X - length * 0.5f,
+                    position.Y - width * 0.5f, length, width), style);
+                break;
+            }
+
+            case HullShape.Hex:
+            {
+                var points = new Vector2[6];
+                for (int i = 0; i < 6; i++)
+                {
+                    float a = Mathf.Tau * i / 6f;
+                    points[i] = position + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius;
+                }
+
+                ShapeDraw.Polygon(this, points, style);
+                break;
+            }
+
+            default:
+                ShapeDraw.Circle(this, position, radius, style);
+                break;
         }
     }
 

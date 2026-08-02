@@ -17,6 +17,12 @@ public partial class OrderSystem : GameSystem
 	{
 		foreach (var actor in GM.Index.All<IOrderable>())
 		{
+			// Выезд из корпуса — жёсткое ограничение, не приказ: пока юнит Leaving,
+			// очередь не исполняется и не завершается (иначе скопированный rally
+			// с завода счёл бы себя исполненным ещё внутри корпуса)
+			if (actor is IMobile { Movement.Leaving: true })
+				continue;
+
 			var orders = actor.Orders;
 
 			// Цель пала, каркас достроен, месторождение выработано — приказ исчерпан

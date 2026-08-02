@@ -39,6 +39,9 @@ public partial class PlayerAiSystem : GameSystem
                 || worker is Commander)
                 continue;
 
+            if (worker is IMobile { Movement.Leaving: true })
+                continue;
+
             // Отсчёт до переигровки цели ведём у всех подвижных: он нужен и тому,
             // кто сейчас идёт следом, — иначе цель искалась бы каждый кадр
             if (worker is Unit unit)

@@ -1,27 +1,7 @@
-; Настройка постоянного давления: сколько противника стоит на карте и как быстро
-; восполняются его потери. Описание механики целиком — в PressureSystem.cs.
-;
-; ВНИМАНИЕ. Эти комментарии живут ровно до первого сохранения из инспектора: движок
-; переписывает .tres целиком и всё, чего нет в свойствах, теряет.
+[gd_resource type="Resource" script_class="PressureSettings" format=3 uid="uid://dpydcpt1gpoip"]
 
-[gd_resource type="Resource" script_class="PressureSettings" load_steps=2 format=3]
-
-[ext_resource type="Script" path="res://scripts/pressure/PressureSettings.cs" id="1_settings"]
+[ext_resource type="Script" uid="uid://dxvqoak4t51mi" path="res://scripts/pressure/PressureSettings.cs" id="1_settings"]
 
 [resource]
 script = ExtResource("1_settings")
-
-; Сколько боевой мощи противника даёт одно очко террора. Единственное место, где очки
-; переводятся в мощь: величины разной природы, и приравнять их напрямую нельзя.
-; Для ориентира: террор в 50 очков при этом коэффициенте даёт бюджет в 10 мощи,
-; то есть десять стрелков либо пять толстяков
 PowerPerTerror = 0.2
-
-; Пол бюджета на первые секунды партии, пока слагаемое времени ещё около нуля
-MinimumPower = 1.0
-
-; Пауза между появлениями, секунд. Задаёт темп восполнения, а не объём давления
-SpawnInterval = 10.0
-
-; Отсрочка первого появления — время развернуть базу
-FirstDelay = 30.0

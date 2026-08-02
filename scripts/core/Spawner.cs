@@ -234,6 +234,7 @@ public sealed class Spawner
         UnitClass.Factory => new Factory(),
         UnitClass.Turret => new Turret(),
         UnitClass.Assembler => new Assembler(),
+        UnitClass.Plant => new Plant(),
         _ => new Building(),
     };
 

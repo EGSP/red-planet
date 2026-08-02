@@ -24,6 +24,10 @@ public partial class WeaponSystem : GameSystem
         {
             armed.Gun.Tick(dt);
 
+            // Содержимое корпуса завода не стреляет и не должно получать огонь в ответ
+            if (armed is IMobile { Movement.Leaving: true })
+                continue;
+
             var weapon = armed.Weapon;
             if (weapon == null || !armed.CanFire)
                 continue;

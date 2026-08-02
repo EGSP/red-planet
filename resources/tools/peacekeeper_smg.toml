@@ -1,10 +1,10 @@
-# Скорострел: очередь с большим разбросом. Опасен вблизи и толпой.
+# Скорострел Peacekeeper: очередь с разбросом, опасен толпой.
 
-id   = "skirmisher_smg"
-name = "Скорострел"
+id   = "peacekeeper_smg"
+name = "Скорострел Peacekeeper"
 kind = "weapon"
 
-range             = 5.5
+range             = 4.7
 damage            = 3.5
 fire_interval     = 0.15
 projectile_speed  = 20.0

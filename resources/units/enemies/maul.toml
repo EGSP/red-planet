@@ -1,0 +1,26 @@
+# Maul: прочный ближний танк Legion. Дробовик сведён к редким тяжёлым выстрелам.
+
+id      = "maul"
+extends = "base_enemy"
+name    = "Maul"
+color   = [0.85, 0.3, 0.25]
+tools   = ["maul_cannon"]
+
+[body]
+max_health  = 400.0
+radius      = 0.48
+hull        = "rect"
+hull_aspect = 1.15
+# Дробовик бьёт в упор — тот же признак ближнего боя, что у Inferno
+front_plate = true
+
+[movement]
+speed      = 2.0
+turn_speed = 45.0
+brake      = 5.0
+
+[battle]
+standoff = 0.65
+
+[terror]
+army_power = 2.0

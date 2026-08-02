@@ -222,6 +222,43 @@ public sealed class TomlDocument
     }
 
     /// <summary>
+    /// Список двумерных векторов: [[1, 0], [-1, 0]]. Нет ключа — пустой список.
+    /// </summary>
+    public Vector2[] Vector2List(string key)
+    {
+        if (!Take(key, out object value))
+            return System.Array.Empty<Vector2>();
+
+        if (value is not TomlArray array)
+            return Fail(key, "список векторов [[x, y], ...]", System.Array.Empty<Vector2>());
+
+        var result = new Vector2[array.Count];
+
+        for (int i = 0; i < array.Count; i++)
+        {
+            if (array[i] is not TomlArray pair || pair.Count < 2)
+            {
+                Error($"в списке «{key}» элемент {i} должен быть [x, y]");
+                result[i] = Vector2.Zero;
+                continue;
+            }
+
+            result[i] = new Vector2(NumberAt(pair, 0, $"{key}[{i}].x"),
+                NumberAt(pair, 1, $"{key}[{i}].y"));
+        }
+
+        return result;
+    }
+
+    private float NumberAt(TomlArray array, int index, string where) =>
+        array[index] switch
+        {
+            double number => (float)number,
+            long number => number,
+            _ => Fail(where, "число", 0f),
+        };
+
+    /// <summary>
     /// Цвет списком из трёх или четырёх долей: [0.4, 0.9, 0.5]. Именно долями, а не байтами —
     /// так же, как цвет задаётся в коде движка, и переводить в уме ничего не приходится.
     /// </summary>

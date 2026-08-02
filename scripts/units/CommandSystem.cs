@@ -443,9 +443,12 @@ public partial class CommandSystem : GameSystem
     /// <summary>
     /// Выделяем только то, чем можно управлять: свой и с непустым набором приказов.
     /// Месторождение и склад в рамку не попадут — приказать им всё равно нечего.
+    /// Юнит, ещё выезжающий из корпуса завода, некликабелен.
     /// </summary>
     private static bool Commandable(IOrderable actor) =>
-        actor.Faction == Faction.Player && actor.AllowedOrders.Any;
+        actor.Faction == Faction.Player
+        && actor.AllowedOrders.Any
+        && !Targeting.Leaving(actor);
 
     private IOrderable ActorAt(Vector2 point) =>
         GM.Index.All<IOrderable>()
@@ -550,13 +553,15 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private Node2D EnemyAt(Vector2 point) =>
         GM.Units[Faction.Hostile]
-            .Where(enemy => enemy.GlobalPosition.DistanceTo(point)
+            .Where(enemy => !Targeting.Leaving(enemy)
+                            && enemy.GlobalPosition.DistanceTo(point)
                             <= enemy.HitRadius + PickSlack)
             .Nearest(point, enemy => enemy.GlobalPosition);
 
     private Node2D DamagedUnitAt(Vector2 point) =>
         GM.Units[Faction.Player]
-            .Where(unit => unit.GlobalPosition.DistanceTo(point) <= unit.HitRadius + PickSlack)
+            .Where(unit => !Targeting.Leaving(unit)
+                           && unit.GlobalPosition.DistanceTo(point) <= unit.HitRadius + PickSlack)
             .Nearest(point, unit => unit.GlobalPosition) is { } found && Repairable(found) != null
             ? found
             : null;

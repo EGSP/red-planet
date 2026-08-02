@@ -1,0 +1,23 @@
+# Shank: средний танк Legion. Ответ на Ant — прочнее, урон выше, разворот медленнее.
+
+id      = "shank"
+extends = "base_enemy"
+name    = "Shank"
+color   = [0.75, 0.4, 0.35]
+tools   = ["shank_cannon"]
+
+[body]
+max_health  = 150.0
+radius      = 0.4
+hull        = "hex"
+
+[movement]
+speed      = 2.0
+turn_speed = 90.0
+brake      = 7.0
+
+[battle]
+standoff = 0.75
+
+[terror]
+army_power = 2.0

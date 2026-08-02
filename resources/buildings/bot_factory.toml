@@ -1,0 +1,35 @@
+# Завод ботов: очередь производства без каркаса на карте.
+# Юнит появляется в центре корпуса и выезжает по rolloff_directions.
+
+id       = "bot_factory"
+name     = "Завод"
+class    = "plant"
+color    = [0.45, 0.55, 0.7]
+buildbar = "bot_factory_buildbar"
+tags     = ["structure", "basic"]
+
+[footprint]
+rows           = ["##", "##"]
+pattern        = "line"
+pattern_alt    = "square"
+# Между заводами нужен проход: собранное с них выезжает
+pattern_step   = "margin"
+facing_degrees = -90.0
+
+[body]
+max_health   = 1500.0
+vision_range = 8.0
+
+[plant]
+factory_cooldown    = 3.0
+build_power         = 10.0
+energy_per_power    = 1.0
+rolloff_directions  = [[1.0, 0.0], [-1.0, 0.0]]
+# На сколько клеток вперёд смотреть, выбирая сторону выезда. Ноль означает «только само
+# место выезда»: завод стоит в застройке, соседи прижаты вплотную, и упор прямо по курсу
+# выезду не мешает — юнит выходит из корпуса и поворачивает вбок. Поднимать имеет смысл
+# только там, где заводу нужен именно прямой выезд
+rolloff_clearance   = 0.0
+
+[assembly]
+cost_metal = 600.0

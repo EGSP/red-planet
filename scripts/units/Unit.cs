@@ -413,13 +413,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
             selected: GizmoGate.IsSelected(this));
 
-        ShapeDraw.Circle(this, Vector2.Zero, radius,
-            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f, WidthMode.Screen),
-            24);
-
-        // Ось «вперёд»: нода уже повёрнута, поэтому в локальных координатах это просто вправо
-        ShapeDraw.Line(this, Vector2.Zero, new Vector2(radius * 1.5f, 0f),
-            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
+        DrawHull(radius);
+        DrawForwardMark(radius);
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
 
@@ -427,5 +422,101 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (Alive.Is(_attached))
             ShapeDraw.Line(this, Vector2.Zero, ToLocal(_attached.GlobalPosition),
                 DrawTheme.Line(VizKind.WorkBeamBuild));
+    }
+
+    /// <summary>Корпус по силуэту из определения: круг, прямоугольник или шестиугольник.</summary>
+    private void DrawHull(float radius)
+    {
+        var fill = ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f,
+            WidthMode.Screen);
+
+        switch (Definition.Hull)
+        {
+            case HullShape.Rect:
+                DrawRectHull(radius, fill);
+                break;
+
+            case HullShape.Hex:
+                DrawPolygonHull(radius, 6, fill);
+                break;
+
+            default:
+                ShapeDraw.Circle(this, Vector2.Zero, radius, fill, 24);
+                break;
+        }
+
+        // Дополнительные контуры брони
+        for (int ring = 1; ring <= Definition.ArmorRings; ring++)
+        {
+            float gap = radius * 0.12f * ring;
+            var outline = ShapeStyle.Outline(new Color(0f, 0f, 0f, 0.55f), 1.5f, WidthMode.Screen);
+
+            switch (Definition.Hull)
+            {
+                case HullShape.Rect:
+                    DrawRectHull(radius + gap, outline);
+                    break;
+
+                case HullShape.Hex:
+                    DrawPolygonHull(radius + gap, 6, outline);
+                    break;
+
+                default:
+                    ShapeDraw.Circle(this, Vector2.Zero, radius + gap, outline, 24);
+                    break;
+            }
+        }
+
+        // Ближний бой: заливка передней трети поверх корпуса. Признак берётся из
+        // определения, а не выводится из дальности оружия, — см. UnitDefinition.FrontPlate
+        if (Definition.FrontPlate)
+        {
+            float tip = radius * 0.55f;
+            ShapeDraw.Rect(this, new Rect2(radius * 0.15f, -tip * 0.7f, tip, tip * 1.4f),
+                ShapeStyle.Solid(Definition.Color.Lightened(0.15f)));
+        }
+    }
+
+    private void DrawRectHull(float radius, ShapeStyle style)
+    {
+        float aspect = Mathf.Max(Definition.HullAspect, 0.5f);
+        float length = radius * 2f * Mathf.Sqrt(aspect);
+        float width = radius * 2f / Mathf.Sqrt(aspect);
+        ShapeDraw.Rect(this, new Rect2(-length * 0.5f, -width * 0.5f, length, width), style);
+    }
+
+    private void DrawPolygonHull(float radius, int sides, ShapeStyle style)
+    {
+        var points = new Vector2[sides];
+
+        for (int i = 0; i < sides; i++)
+        {
+            float angle = Mathf.Tau * i / sides;
+            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+        }
+
+        ShapeDraw.Polygon(this, points, style);
+    }
+
+    /// <summary>
+    /// Ствол или манипулятор. Длина ствола растёт с дальностью оружия;
+    /// у ремонтника без ствола — дуга спереди.
+    /// </summary>
+    private void DrawForwardMark(float radius)
+    {
+        if (Definition.CanRepair && Definition.Weapon == null)
+        {
+            ShapeDraw.Arc(this, Vector2.Zero, radius * 1.15f, -0.7f, 0.7f,
+                ShapeStyle.Outline(new Color(0.45f, 0.85f, 1f, 0.85f), 2.5f, WidthMode.Screen));
+            return;
+        }
+
+        float barrel = radius * 1.2f;
+        if (Definition.Weapon != null)
+            barrel = radius + Mathf.Clamp(Definition.Weapon.RangePx * 0.12f, radius * 0.4f,
+                radius * 2.2f);
+
+        ShapeDraw.Line(this, Vector2.Zero, new Vector2(barrel, 0f),
+            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
     }
 }

@@ -136,8 +136,12 @@ public sealed class ObstacleMap
     /// Это ЖЁСТКОЕ ОГРАНИЧЕНИЕ, а не сила: применяется после интегрирования движения
     /// и решает задачу достоверно. Силой её решать нельзя — любая комбинация управляющих
     /// сил рано или поздно загонит юнита внутрь здания, и сила лишь уменьшает вероятность.
+    ///
+    /// <paramref name="except"/> — препятствие, из которого выталкивать не нужно:
+    /// юнит, выезжающий из завода, ещё внутри его корпуса и не должен выскакивать
+    /// к ближайшей грани вместо точки rolloff.
     /// </summary>
-    public Vector2 PushOut(Vector2 position, float radius)
+    public Vector2 PushOut(Vector2 position, float radius, IObstacle except = null)
     {
         var probe = new Rect2(position - new Vector2(radius, radius),
             new Vector2(radius * 2f, radius * 2f));
@@ -149,12 +153,37 @@ public sealed class ObstacleMap
 
             foreach (var obstacle in bucket)
             {
+                if (ReferenceEquals(obstacle, except))
+                    continue;
+
                 if (_shapes.TryGetValue(obstacle, out var shape))
                     position = Eject(position, radius, shape);
             }
         }
 
         return position;
+    }
+
+    /// <summary>Есть ли препятствие ещё в карте. Нужно выезду: завод могли снести.</summary>
+    public bool Contains(IObstacle obstacle) =>
+        obstacle != null && _shapes.ContainsKey(obstacle);
+
+    /// <summary>
+    /// Пересекается ли окружность с запомненным прямоугольником препятствия.
+    /// Считается так же, как касание в Eject: ближайшая точка на OBB и расстояние до неё.
+    /// </summary>
+    public bool CircleHits(IObstacle obstacle, Vector2 position, float radius)
+    {
+        if (!_shapes.TryGetValue(obstacle, out var shape))
+            return false;
+
+        var local = shape.ToLocal(position);
+        var half = shape.Half;
+        var closest = new Vector2(
+            Mathf.Clamp(local.X, -half.X, half.X),
+            Mathf.Clamp(local.Y, -half.Y, half.Y));
+
+        return (local - closest).LengthSquared() < radius * radius;
     }
 
     /// <summary>

@@ -84,6 +84,41 @@ public sealed class Movement
     /// <summary>Сколько секунд сущность не продвигается. Ноль означает «идёт нормально».</summary>
     public float StuckFor;
 
+    // ── выезд из корпуса завода ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Завод, из корпуса которого сущность сейчас выезжает. Пока ссылка не null,
+    /// сущность игнорирует выталкивание из этого препятствия и движется к ExitPoint
+    /// принудительно — без поиска пути и без расталкивания в свою сторону.
+    /// </summary>
+    public IObstacle Exit;
+
+    /// <summary>Внешняя точка выезда: центр завода плюс направление rolloff.</summary>
+    public Vector2 ExitPoint;
+
+    /// <summary>Сколько секунд уже длится выезд.</summary>
+    public float ExitFor;
+
+    /// <summary>Юнит ещё внутри корпуса или на отрезке выезда.</summary>
+    public bool Leaving => Exit != null;
+
+    /// <summary>Начать выезд. Зовёт завод в момент SpawnUnit.</summary>
+    public void BeginExit(IObstacle obstacle, Vector2 point)
+    {
+        Exit = obstacle;
+        ExitPoint = point;
+        ExitFor = 0f;
+        Settled = false;
+    }
+
+    /// <summary>Снять состояние выезда. После этого юнит подчиняется обычным правилам.</summary>
+    public void EndExit()
+    {
+        Exit = null;
+        ExitPoint = Vector2.Zero;
+        ExitFor = 0f;
+    }
+
     // ── только для отрисовки отладки ──────────────────────────────────────────────
 
     public Vector2 SeekForce;

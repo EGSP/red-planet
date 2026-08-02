@@ -32,6 +32,54 @@ public enum UnitClass
     /// набирать давление. Сторона задаётся не здесь, а тем, кто сущность создаёт.
     /// </summary>
     Enemy,
+
+    /// <summary>
+    /// Завод юнитов: очередь производства без каркаса на карте, выпуск с выездом из корпуса.
+    /// Не путать с <see cref="Factory"/> — тот жжёт энергию в метал.
+    /// </summary>
+    Plant,
+}
+
+/// <summary>Силуэт корпуса подвижной сущности. Хитбокс при этом остаётся кругом.</summary>
+public enum HullShape
+{
+    Circle,
+    Rect,
+    Hex,
+}
+
+/// <summary>Параметры завода юнитов. Секции нет — сущность не производит очередь.</summary>
+public sealed class PlantDefinition
+{
+    /// <summary>Пауза после того, как выпущенный юнит покинул корпус, секунд.</summary>
+    public float FactoryCooldown = 3f;
+
+    /// <summary>Мощность сборки: метал в секунду при полной производительности базы.</summary>
+    public float BuildPower = 10f;
+
+    /// <summary>Расход энергии на единицу мощности сборки.</summary>
+    public float EnergyPerPower = 1f;
+
+    /// <summary>
+    /// Локальные направления выезда относительно facing корпуса. Ось вперёд — +X.
+    /// Пустой список — перед и зад по умолчанию.
+    /// </summary>
+    public Vector2[] RolloffDirections = { Vector2.Right, Vector2.Left };
+
+    /// <summary>
+    /// На сколько клеток вперёд от точки выезда проверяется продолжение дороги.
+    /// Ноль означает, что проверяется только само место выезда.
+    ///
+    /// ПОЧЕМУ ЭТО НАСТРОЙКА, А НЕ ЧИСЛО В КОДЕ. Проверка продолжения нужна, чтобы завод
+    /// предпочёл ту сторону, откуда есть куда ехать, но её область неизбежно заезжает
+    /// на соседние постройки при плотной застройке, и выезд объявляется закрытым там,
+    /// где юнит спокойно вышел бы и повернул вбок. Насколько далеко смотреть — свойство
+    /// конкретного завода и плотности базы, а не общего правила, поэтому величина живёт
+    /// в справочнике и по умолчанию выключена.
+    /// </summary>
+    public float RolloffClearance;
+
+    public float RolloffClearancePx => RolloffClearance * Const.Unit;
 }
 
 /// <summary>
@@ -135,6 +183,25 @@ public sealed class UnitDefinition
 
     /// <summary>Радиус корпуса подвижной сущности в юнитах: и рисуется по нему, и попадают в него.</summary>
     public float Radius = 0.35f;
+
+    /// <summary>Силуэт корпуса. На хитбокс и навигацию не влияет.</summary>
+    public HullShape Hull = HullShape.Circle;
+
+    /// <summary>Отношение длины к ширине для <see cref="HullShape.Rect"/>.</summary>
+    public float HullAspect = 1.5f;
+
+    /// <summary>Число дополнительных контуров брони вокруг корпуса.</summary>
+    public int ArmorRings;
+
+    /// <summary>
+    /// Залитая передняя часть корпуса — признак ближнего боя из свода соответствий
+    /// (docs/gamedesign/units.md, «Визуальный язык»).
+    ///
+    /// Признак задаётся явно, а не выводится из дальности оружия порогом: порог пришлось бы
+    /// подбирать под нынешний набор стволов, и любая правка дальности меняла бы силуэт
+    /// сама собой. Остальные части силуэта — hull, armor_rings — заданы так же.
+    /// </summary>
+    public bool FrontPlate;
 
     /// <summary>Радиус обзора в юнитах. Он же рабочая зона для башни-сборщика.</summary>
     public float VisionRange = 8f;
@@ -283,13 +350,16 @@ public sealed class UnitDefinition
     /// <summary>Ствол. Найден компилятором среди инструментов, здесь лежит готовым.</summary>
     public WeaponDefinition Weapon;
 
-    /// <summary>Строительная рука. Ею же идёт ремонт.</summary>
+    /// <summary>Рабочий инструмент: стройка и/или ремонт.</summary>
     public WorkToolDefinition BuildTool;
 
-    public bool CanBuild => BuildTool != null;
+    /// <summary>Параметры завода. Заданы только у <see cref="UnitClass.Plant"/>.</summary>
+    public PlantDefinition Plant;
 
-    /// <summary>Чинит тот же инструмент, что и строит: отдельной ремонтной мощности нет.</summary>
-    public bool CanRepair => BuildTool != null;
+    public bool CanBuild => BuildTool is { CanBuild: true };
+
+    /// <summary>Чинит тот, у кого в инструменте есть ремонт — в том числе без права строить.</summary>
+    public bool CanRepair => BuildTool is { CanRepair: true };
 
     /// <summary>Берётся ли строитель за юнитов, а не только за постройки.</summary>
     public bool CanRepairUnits => BuildTool is { RepairsUnits: true };
@@ -311,7 +381,7 @@ public sealed class UnitDefinition
     /// по занятости сетки. Клетку юнит освобождает, когда собран, а не когда поставлен.
     /// </summary>
     public bool IsStructure => Class is UnitClass.Structure or UnitClass.Factory
-        or UnitClass.Turret or UnitClass.Assembler;
+        or UnitClass.Turret or UnitClass.Assembler or UnitClass.Plant;
 
     /// <summary>
     /// Занимает ли сущность место: у каркаса — на время стройки, у постройки — всегда.
