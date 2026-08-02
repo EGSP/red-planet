@@ -4,15 +4,22 @@ using Godot;
 /// Юнит с очередью приказов. Движется к цели, а войдя в радиус инструмента —
 /// подключается к узлу работы. Сам ресурсы не двигает: только сообщает свою мощность.
 ///
-/// Он же цель для врага и он же носитель ствола, если ствол задан справочником.
+/// Он же цель для чужой стороны и он же носитель ствола, если ствол задан справочником.
 /// Стрелять юнит начинает только без приказов: работа важнее, а огонь по площадям
 /// вместо стройки — не то, чего ждёшь от отданного приказа.
 ///
 /// Приказы юнит только ИСПОЛНЯЕТ. Кто их раздаёт — игрок через CommandSystem или мозговая
 /// система — его не касается, а чего ему отдать нельзя, отсекает набор AllowedOrders.
+///
+/// ОДИН КЛАСС НА ОБЕ СТОРОНЫ. Отдельного класса Enemy больше нет: противник — такой же юнит,
+/// и различие сторон выражается полем Faction, а не типом узла. Раньше два класса повторяли
+/// друг за другом подход к цели, доворот, дистанцию остановки, гибель и отрисовку, причём
+/// с расхождениями в мелочах, — а расходились они именно потому, что правку вносили в один
+/// файл из двух. Из этого следует и правило для систем: сторону надо спрашивать у сущности,
+/// а не выводить из того, в каком разрезе она нашлась.
 /// </summary>
 public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
-    IRepairable, IOrderable, IMobile
+    IRepairable, IOrderable, IWorker, IMobile
 {
     /// <summary>
     /// Определение. Ставит Spawner при создании: узел юнита собственной сцены не имеет,
@@ -32,7 +39,23 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     private WorkNode _attached;
 
+    /// <summary>Сколько осталось до переигровки цели. Ведёт мозговая система, она же и решает.</summary>
+    private float _retarget;
+
     public Unit() => Orders = new OrderQueue(this);
+
+    /// <summary>
+    /// Пора ли искать цель заново. Прежняя может быть и жива — просто рядом выросло что-то
+    /// ближе, поэтому выбор переигрывается по таймеру, а не только по гибели цели.
+    ///
+    /// Свойство общее для обеих сторон: юнит игрока без работы выбирает цель по тем же
+    /// правилам, что и юнит противника.
+    /// </summary>
+    public bool NeedsTarget => Orders.Idle || _retarget <= 0f;
+
+    public void TickRetarget(double dt) => _retarget -= (float)dt;
+
+    public void NoteTargeted() => _retarget = Const.RetargetDelay;
 
     public bool Idle => Orders.Idle;
 
@@ -48,7 +71,22 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public string DisplayName => Definition?.DisplayName ?? "юнит";
 
-    public virtual Faction Faction => Faction.Player;
+    /// <summary>
+    /// Чья сторона. Ставит Spawner при создании, и после этого значение постоянно: разрезы
+    /// индекса по стороне пересобираются раз в кадр и смены ключа посреди партии не терпят.
+    ///
+    /// Сторона не берётся из определения намеренно. Определение описывает, что сущность
+    /// собой представляет, а кому она принадлежит — обстоятельство создания: один и тот же
+    /// вид должна иметь возможность выставить любая сторона.
+    /// </summary>
+    public Faction Faction { get; set; } = Faction.Player;
+
+    /// <summary>
+    /// Откуда юнит взялся. Смысл имеет только у стороны противника: по этому признаку
+    /// система давления отличает постоянный фон, который занимает место в бюджете,
+    /// от волны, которая приходит поверх него. У стороны игрока значение не читается.
+    /// </summary>
+    public PressureOrigin Origin { get; set; } = PressureOrigin.Ambient;
 
     /// <summary>
     /// Что юниту можно приказать. Выводится из того, чем он снабжён, а не задаётся списком:
@@ -105,9 +143,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         QueueRedraw();
     }
 
+    /// <summary>
+    /// Заявка в экономику. Чужая сторона своей экономики не ведёт, поэтому её юниты выходят
+    /// сразу: ведомость в игре одна, и складывать в неё производство противника значило бы
+    /// приписывать игроку чужой доход.
+    /// </summary>
     public void Declare(EconomyLedger ledger)
     {
-        if (Definition == null)
+        if (Definition == null || Faction != Faction.Player)
             return;
 
         ledger.AddIncome(ResourceKind.Energy, Definition.EnergyProduction);
@@ -122,7 +165,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>Своё производство идёт всегда, просадка производительности его не касается.</summary>
     public void Run(double dt, EconomyRates rates)
     {
-        if (Definition == null)
+        if (Definition == null || Faction != Faction.Player)
             return;
 
         var events = GameManager.I.Events;

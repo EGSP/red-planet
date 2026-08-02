@@ -1,17 +1,21 @@
 using Godot;
 
 /// <summary>
-/// Башня-сборщик: делает работу фабрикатора, но с места не сходит. Строит каркасы
-/// и чинит постройки в радиусе своего обзора — что попало в круг, то и обслуживает.
+/// Башня-сборщик: тот же фабрикатор, только здание. Строит каркасы и чинит постройки
+/// в пределах своего манипулятора — что попало в круг, то и обслуживает.
 ///
-/// Логика выбора работы общая с ботами (см. Jobs): сначала стройка, потом ремонт.
-/// Разница ровно одна — бот к работе идёт, а башня ждёт, пока работа окажется рядом.
+/// ЧЕМ ЗАНЯТЬСЯ, РЕШАЕТ НЕ ОНА. Задачи ей раздаёт <see cref="PlayerAiSystem"/> наравне
+/// с подвижными исполнителями: порядок предпочтений у них общий, поиск работы общий
+/// (см. <see cref="Jobs"/>), а различаются они только пределами поиска, и те выводятся
+/// из определения. Раньше выбор занятия был написан здесь, а отдельная система лишь
+/// спрашивала башню и ставила ей же выбранное, — то есть одно правило жило в двух слоях,
+/// хотя везде в остальном решает система, а сущность исполняет.
 ///
 /// В стройке башня участвует как обычный исполнитель: подключается к каркасу своей
 /// мощностью, и дальше каркас сам заявляет спрос. А ремонт она делает сама, поэтому
 /// в экономике участвует ещё и напрямую.
 /// </summary>
-public partial class Assembler : Building
+public partial class Assembler : Building, IWorker
 {
     /// <summary>
     /// Манипулятор башни. Такой же инструмент, как рука фабрикатора, и лежит в том же
@@ -24,9 +28,6 @@ public partial class Assembler : Building
 
     private float EnergyPerPower => Arm?.EnergyPerPower ?? 0f;
 
-    /// <summary>Берётся ли башня чинить юнитов, а не только постройки.</summary>
-    private bool RepairUnits => Definition?.CanRepairUnits ?? false;
-
     private WorkNode _attached;
     private Node2D _repairTarget;
 
@@ -37,25 +38,6 @@ public partial class Assembler : Building
     /// <summary>Башня стоит на месте, поэтому ходить ей некуда — только работать.</summary>
     public override OrderSet AllowedOrders =>
         OrderSet.None.With(OrderKind.Build).With(OrderKind.Repair);
-
-    /// <summary>
-    /// Чем заняться, если приказа нет. Решение принимает AssemblerSystem — она же и ставит
-    /// приказ; башня его только исполняет. Порядок общий с ботами: сначала стройка,
-    /// потом ремонт, и всё в пределах своего круга.
-    /// </summary>
-    public Order ChooseJob()
-    {
-        // Докуда башня дотягивается работой — дело манипулятора, а не обзора.
-        // Раньше это был один и тот же радиус просто потому, что другого числа не было
-        float reach = Arm?.RangePx ?? VisionRadius;
-
-        var blueprint = Jobs.NearestBlueprint(GlobalPosition, reach);
-        if (blueprint != null)
-            return Order.Work(OrderKind.Build, blueprint);
-
-        var damaged = Jobs.NearestDamaged(GlobalPosition, reach, RepairUnits);
-        return damaged != null ? Order.Repair(damaged) : null;
-    }
 
     public override void RunOrder(Order order, double dt)
     {

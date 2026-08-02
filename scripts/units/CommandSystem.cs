@@ -506,7 +506,7 @@ public partial class CommandSystem : GameSystem
     {
         var cursor = _cursor;
 
-        return GM.Index.All<Enemy>()
+        return GM.Units[Faction.Hostile]
             .Where(enemy => enemy.GlobalPosition.DistanceTo(cursor)
                             <= enemy.HitRadius + PickSlack)
             .Nearest(cursor, enemy => enemy.GlobalPosition);
@@ -516,7 +516,7 @@ public partial class CommandSystem : GameSystem
     {
         var cursor = _cursor;
 
-        return GM.Index.All<Unit>()
+        return GM.Units[Faction.Player]
             .Where(unit => unit.GlobalPosition.DistanceTo(cursor) <= unit.HitRadius + PickSlack)
             .Nearest(cursor, unit => unit.GlobalPosition) is { } found && Repairable(found) != null
             ? found

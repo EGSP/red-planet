@@ -95,6 +95,23 @@ public partial class TerrorSettings : Resource
     [Export] public float ArmyWeight = 35f;
     [Export] public float ArmyTail = 0.15f;
 
+    // ── Время ─────────────────────────────────────────────────────────────────────
+    //
+    // Единственное слагаемое, на которое игрок не влияет ничем. Оно задаёт пол, ниже
+    // которого давление не опускается, сколько бы игрок ни сидел на месте: без него
+    // выгодной оказалась бы стратегия не строить вовсе, а тогда обесценивается первый
+    // узел петли — экспансия. Вес держим ниже прочих: время не должно перебивать то,
+    // что игрок делает сам, иначе показатель перестанет отвечать на свой вопрос.
+
+    [ExportGroup("Время")]
+    [Export] public Curve TimeCurve;
+
+    /// <summary>Длительность партии, которая считается полной, секунд. Пятнадцать минут.</summary>
+    [Export] public float TimeReference = 900f;
+
+    [Export] public float TimeWeight = 15f;
+    [Export] public float TimeTail = 0.15f;
+
     // ── Запасная кривая ───────────────────────────────────────────────────────────
 
     [ExportGroup("Запасная кривая")]
@@ -123,6 +140,9 @@ public partial class TerrorSettings : Resource
 
     public float Army(float raw) =>
         Shape(ArmyCurve, raw, ArmyReference, ArmyWeight, ArmyTail);
+
+    public float Time(float raw) =>
+        Shape(TimeCurve, raw, TimeReference, TimeWeight, TimeTail);
 
     /// <summary>
     /// Сырая величина в очки террора: нормировать опорным значением, провести через кривую,

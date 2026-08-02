@@ -144,4 +144,7 @@ public struct EnemySpawned : IEventRecord
     public string DefinitionId;
 
     public Vector2 Pos;
+
+    /// <summary>Фон или волна. По разбору партии видно, чем именно было создано напряжение.</summary>
+    public PressureOrigin Origin;
 }

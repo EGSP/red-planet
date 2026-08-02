@@ -84,6 +84,15 @@ public partial class GameManager : Node
     /// </summary>
     public KeySlice<Faction, IDamageable> Targets { get; private set; }
 
+    /// <summary>
+    /// Подвижные сущности, разложенные по сторонам. Нужен потому, что после слияния классов
+    /// тип узла о стороне больше ничего не говорит: и армия игрока в терроре, и объём
+    /// давления противника считаются по одному и тому же классу Unit и различаются только
+    /// стороной. Обход с отсевом чужих дал бы полный проход на каждый спрос, а спрашивают
+    /// этот состав и мозговые системы, и подсчёт показателей.
+    /// </summary>
+    public KeySlice<Faction, Unit> Units { get; private set; }
+
     private int _lastEntityId;
 
     public int NewId() => ++_lastEntityId;
@@ -105,6 +114,7 @@ public partial class GameManager : Node
         // Постоянные разрезы заводим здесь же, где и проекции: состав производного
         // состояния должен быть виден в одном месте, а не всплывать по коду систем
         Targets = Index.SliceBy<IDamageable, Faction>(target => target.Faction);
+        Units = Index.SliceBy<Unit, Faction>(unit => unit.Faction);
 
         // Порядок держим явным: если проекция читает другую, зависимость идёт раньше.
         // Сначала собираем состав, потом подписываем — тогда они могут ссылаться друг на друга.

@@ -114,7 +114,7 @@ public interface IObstacle
 | [`PlacementGhost`](../scripts/world/PlacementGhost.cs) | прямоугольники клеток | весь план застройки: повёрнутый прямоугольник и контур зазора на каждое место |
 | [`GridRenderer`](../scripts/world/GridRenderer.cs) | сетка застройки | оставлен визуальным ориентиром; правилом быть перестал |
 | `BlueprintPlaced`, `BuildingSpawned`, `ConstructionCompleted` | поле `Vector2I Cell` | поле `Vector2 Pos`; у первых двух добавлен угол `Facing` |
-| [`Unit`](../scripts/units/Unit.cs), [`Enemy`](../scripts/enemies/Enemy.cs) | `MoveToward` прямо в обработчике приказа | реализуют `IMobile`, объявляют намерение через `Movement.Seek` |
+| [`Unit`](../scripts/units/Unit.cs) — один класс на обе стороны | `MoveToward` прямо в обработчике приказа | реализуют `IMobile`, объявляют намерение через `Movement.Seek` |
 
 ### 4.5 Поворот и паттерн застройки
 

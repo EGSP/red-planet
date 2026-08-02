@@ -5,15 +5,14 @@
 [ext_resource type="Script" path="res://scripts/world/Playground.cs" id="3_playground"]
 [ext_resource type="Script" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
 [ext_resource type="Script" path="res://scripts/units/CommandSystem.cs" id="5_command"]
-[ext_resource type="Script" path="res://scripts/units/BotAiSystem.cs" id="6_botai"]
+[ext_resource type="Script" path="res://scripts/units/PlayerAiSystem.cs" id="6_playerai"]
 [ext_resource type="Script" path="res://scripts/units/OrderSystem.cs" id="7_order"]
 [ext_resource type="Script" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
 [ext_resource type="Script" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
 [ext_resource type="Script" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
 [ext_resource type="Script" path="res://scripts/economy/EconomySystem.cs" id="8_economy"]
 [ext_resource type="Script" path="res://scripts/world/MetalSpotSystem.cs" id="9_metalspots"]
-[ext_resource type="Script" path="res://scripts/buildings/AssemblerSystem.cs" id="10_assembler"]
-[ext_resource type="Script" path="res://scripts/enemies/EnemySpawnSystem.cs" id="11_enemyspawn"]
+[ext_resource type="Script" path="res://scripts/pressure/PressureSystem.cs" id="11_pressure"]
 [ext_resource type="Script" path="res://scripts/enemies/EnemyAiSystem.cs" id="12_enemyai"]
 [ext_resource type="Script" path="res://scripts/combat/WeaponSystem.cs" id="13_weapon"]
 [ext_resource type="Script" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
@@ -29,6 +28,7 @@
 [ext_resource type="Script" path="res://scripts/pressure/TerrorSystem.cs" id="28_terror"]
 [ext_resource type="Script" path="res://scripts/ui/TerrorBar.cs" id="29_terrorbar"]
 [ext_resource type="Resource" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
+[ext_resource type="Resource" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
 [ext_resource type="Script" path="res://scripts/core/VictorySystem.cs" id="31_victory"]
 [ext_resource type="Script" path="res://scripts/ui/PortalCountdownBar.cs" id="32_portalbar"]
 [ext_resource type="Script" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
@@ -50,17 +50,13 @@ BlueprintScene = ExtResource("19_blueprint")
 DoubleTapInterval = 0.35
 Phase = 0
 
-[node name="BotAiSystem" type="Node" parent="Systems"]
-script = ExtResource("6_botai")
+[node name="PlayerAiSystem" type="Node" parent="Systems"]
+script = ExtResource("6_playerai")
 StepOrder = 10
 
 [node name="EnemyAiSystem" type="Node" parent="Systems"]
 script = ExtResource("12_enemyai")
 StepOrder = 12
-
-[node name="AssemblerSystem" type="Node" parent="Systems"]
-script = ExtResource("10_assembler")
-StepOrder = 15
 
 [node name="OrderSystem" type="Node" parent="Systems"]
 script = ExtResource("7_order")
@@ -82,8 +78,9 @@ StepOrder = 30
 script = ExtResource("9_metalspots")
 StepOrder = 50
 
-[node name="EnemySpawnSystem" type="Node" parent="Systems"]
-script = ExtResource("11_enemyspawn")
+[node name="PressureSystem" type="Node" parent="Systems"]
+script = ExtResource("11_pressure")
+Settings = ExtResource("37_pressuresettings")
 StepOrder = 55
 
 [node name="WeaponSystem" type="Node" parent="Systems"]

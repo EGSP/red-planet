@@ -1,9 +1,14 @@
 using Godot;
 
 /// <summary>
-/// Террор: числовая мера того, насколько игрок себя обнаружил. Складывается из трёх слагаемых —
-/// мощности производства, экспансии и мощи армии, — каждое из которых проходит через свою
-/// кривую насыщения и берётся со своим весом.
+/// Террор: числовая мера того, насколько игрок себя обнаружил. Складывается из четырёх
+/// слагаемых — мощности производства, экспансии, мощи армии и времени партии, — каждое
+/// из которых проходит через свою кривую насыщения и берётся со своим весом.
+///
+/// ВРЕМЯ — ЕДИНСТВЕННОЕ СЛАГАЕМОЕ, НА КОТОРОЕ ИГРОК НЕ ВЛИЯЕТ. Оно и не про обнаружение,
+/// а про пол, ниже которого давление не опускается: иначе выгодной оказалась бы стратегия
+/// не строить вовсе, и первый узел петли обесценился бы. Вес его держится ниже прочих,
+/// чтобы показатель по-прежнему отвечал прежде всего за действия игрока.
 ///
 /// КУДА ЭТО ВСТРАИВАЕТСЯ. В стрелку «Экспансия → Давление» игрового цикла. Она объявлена
 /// обязательной, но до сих пор работала неявно и геометрически: чем длиннее периметр, тем
@@ -24,9 +29,9 @@ using Godot;
 /// освобождена движком, и читать её определение нельзя — понадобился бы ещё и словарь,
 /// переживающий смерть ключа. Цена сложности выше цены обхода.
 ///
-/// НА ВОЛНЫ ПОКА НЕ ВЛИЯЕТ. Показатель считается и показывается, но в бюджет волны
-/// не подключён: кривые надо откалибровать на реальных партиях прежде, чем они начнут
-/// менять сложность.
+/// КУДА ПОКАЗАТЕЛЬ УХОДИТ. Сглаженное значение читает <see cref="PressureSystem"/> и переводит
+/// в бюджет постоянного давления. Волн пока нет; когда появятся, они будут считаться от того же
+/// показателя, но поверх бюджета, а не внутри него.
 /// </summary>
 public partial class TerrorSystem : GameSystem
 {
@@ -47,14 +52,18 @@ public partial class TerrorSystem : GameSystem
     /// <summary>Сумма весов построек, умноженных на коэффициент их зоны удалённости.</summary>
     public float RawExpansion { get; private set; }
 
-    /// <summary>Сумма весов подвижных сущностей игрока.</summary>
+    /// <summary>Сумма мощи подвижных сущностей игрока.</summary>
     public float RawArmy { get; private set; }
+
+    /// <summary>Сколько идёт партия, секунд игрового времени.</summary>
+    public float RawTime { get; private set; }
 
     // ── Вклады, после кривых ──────────────────────────────────────────────────────
 
     public float Production { get; private set; }
     public float Expansion { get; private set; }
     public float Army { get; private set; }
+    public float Time { get; private set; }
 
     /// <summary>Показатель на этот миг. Его видит игрок.</summary>
     public float Raw { get; private set; }
@@ -106,12 +115,14 @@ public partial class TerrorSystem : GameSystem
         RawProduction = Produce(settings);
         RawExpansion = Expand(settings);
         RawArmy = Arm();
+        RawTime += interval;
 
         Production = settings.Production(RawProduction);
         Expansion = settings.Expansion(RawExpansion);
         Army = settings.Army(RawArmy);
+        Time = settings.Time(RawTime);
 
-        Raw = Production + Expansion + Army;
+        Raw = Production + Expansion + Army + Time;
 
         Smooth(settings, interval);
         Publish();
@@ -165,18 +176,19 @@ public partial class TerrorSystem : GameSystem
     }
 
     /// <summary>
-    /// Мощь армии: сумма весов подвижных сущностей игрока, без географии.
+    /// Мощь армии: сумма мощи подвижных сущностей игрока, без географии.
     ///
-    /// Враги в разрез не попадают — у них свой класс. Это не совпадение, на которое можно
-    /// положиться молча: показатель меряет игрока, и войди сюда противник, он рос бы
-    /// от самих волн и разгонял бы себя.
+    /// Разрез берётся по СТОРОНЕ, а не по типу узла. Раньше противник отсекался сам собой,
+    /// поскольку имел отдельный класс; после слияния классов такого отсева нет, и полагаться
+    /// на него было бы уже нельзя: показатель меряет игрока, и войди сюда противник, он рос
+    /// бы от собственных волн и разгонял бы себя.
     /// </summary>
     private float Arm()
     {
         float sum = 0f;
 
-        foreach (var unit in GM.Index.All<Unit>())
-            sum += unit.Definition?.TerrorArmy ?? 0f;
+        foreach (var unit in GM.Units[Faction.Player])
+            sum += unit.Definition?.ArmyPower ?? 0f;
 
         return sum;
     }
@@ -206,6 +218,7 @@ public partial class TerrorSystem : GameSystem
         Metric("terror.production", Production);
         Metric("terror.expansion", Expansion);
         Metric("terror.army", Army);
+        Metric("terror.time", Time);
     }
 
     private void Metric(string channel, float value) =>

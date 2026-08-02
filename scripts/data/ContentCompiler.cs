@@ -41,8 +41,8 @@ public static class ContentCompiler
     private static readonly string[] UnitDirs =
     {
         "res://resources/units/",
+        "res://resources/units/enemies/",
         "res://resources/buildings/",
-        "res://resources/enemies/",
     };
 
     /// <summary>Собрать содержимое. Ошибки печатаются в журнал, итог — сколько их было.</summary>
@@ -307,10 +307,9 @@ public static class ContentCompiler
             MetalProduction = basis.MetalProduction,
             MetalStorage = basis.MetalStorage,
             EnergyStorage = basis.EnergyStorage,
-            SpawnWeight = basis.SpawnWeight,
             StandoffFraction = basis.StandoffFraction,
             ExpansionWeight = basis.ExpansionWeight,
-            ArmyWeight = basis.ArmyWeight,
+            ArmyPowerWeight = basis.ArmyPowerWeight,
         };
 
         if (document.Has("tags"))
@@ -396,15 +395,15 @@ public static class ContentCompiler
             if (terror.Has("expansion"))
                 definition.ExpansionWeight = terror.Float("expansion");
 
-            if (terror.Has("army"))
-                definition.ArmyWeight = terror.Float("army");
+            if (terror.Has("army_power"))
+                definition.ArmyPowerWeight = terror.Float("army_power");
         }
 
-        if (document.Section("spawn") is { } spawn)
-        {
-            definition.SpawnWeight = spawn.Float("weight", basis.SpawnWeight);
-            definition.StandoffFraction = spawn.Float("standoff", basis.StandoffFraction);
-        }
+        // Раздел боя описывает то, как сущность ведёт себя в схватке. Раньше доля подхода
+        // лежала в разделе spawn вместе с весом появления, хотя к появлению отношения
+        // не имеет: определение обязано описывать сам юнит, а не то, как его выставляют
+        if (document.Section("battle") is { } battle)
+            definition.StandoffFraction = battle.Float("standoff", basis.StandoffFraction);
 
         return definition;
     }

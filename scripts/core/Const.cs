@@ -116,14 +116,13 @@ public static class Const
     // и экстрактор на краю карты обороняется тяжелее, чем экстрактор у базы
     public const float EnemyRingFactor = 1.3f;
 
-    // Держим давление таким, чтобы коммандер в одиночку успевал отстреливаться:
-    // своих турелей у игрока пока нет, и толпа сносит базу за полминуты
-    public const int EnemyPopulation = 4;
+    // Темп восполнения потерь противника. Объём давления числом здесь больше не задаётся:
+    // он выводится из террора бюджетом мощи — см. PressureSettings
     public const float EnemySpawnDelay = 10f;
     public const float EnemyFirstDelay = 30f;
 
-    /// <summary>Как часто враг переигрывает выбор цели, секунд.</summary>
-    public const float EnemyRetargetDelay = 1.5f;
+    /// <summary>Как часто юнит переигрывает выбор цели, секунд. Одинаково для обеих сторон.</summary>
+    public const float RetargetDelay = 1.5f;
 
     /// <summary>
     /// Доля прочности готовой постройки, которая есть у её каркаса.
