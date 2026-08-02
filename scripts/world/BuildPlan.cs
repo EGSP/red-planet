@@ -38,7 +38,7 @@ public static class BuildPlan
     /// Короче этого протаскивание считается щелчком: угол по нему не читается, потому что
     /// дрожание руки на паре пикселей давало бы произвольный поворот.
     /// </summary>
-    private const float AngleThreshold = 8f;
+    public const float AngleThreshold = 8f;
 
     /// <summary>
     /// Рассчитать план. Список заполняется заново, первым в нём всегда идёт место
@@ -94,8 +94,11 @@ public static class BuildPlan
     }
 
     /// <summary>Какая раскладка сейчас действует: обычная или та, что под Alt.</summary>
-    private static BuildPattern Pattern(UnitDefinition def, bool alt) =>
+    public static BuildPattern PatternOf(UnitDefinition def, bool alt) =>
         alt && def.PatternAlt != BuildPattern.None ? def.PatternAlt : def.Pattern;
+
+    /// <summary>Какая раскладка сейчас действует: обычная или та, что под Alt.</summary>
+    private static BuildPattern Pattern(UnitDefinition def, bool alt) => PatternOf(def, alt);
 
     /// <summary>
     /// Угол постройки. Строение разворачивается поперёк протаскивания, а не вдоль: ряд

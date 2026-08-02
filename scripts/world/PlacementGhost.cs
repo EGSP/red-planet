@@ -16,6 +16,10 @@ using Godot;
 /// Если выбранная постройка со стволом, у каждого места рисуется ещё и круг атаки:
 /// иначе нельзя оценить перекрытие с уже стоящими турелями (их круги включает
 /// <see cref="GizmoGate.ShowArmedCoverage"/>).
+///
+/// У раскладки по залежам (<see cref="BuildPattern.MetalArea"/>) дополнительно рисуется
+/// круг растягивания: радиус тот же, по которому <see cref="BuildPlan"/> отбирает точки
+/// метала, иначе видно только будущие экстракторы, а границу охвата — нет.
 /// </summary>
 public partial class PlacementGhost : Node2D
 {
@@ -28,10 +32,31 @@ public partial class PlacementGhost : Node2D
     /// </summary>
     public List<BuildSpot> Spots = new();
 
+    /// <summary>
+    /// Центр круга растягивания по залежам — первая (притянутая) точка плана.
+    /// Имеет смысл только при <see cref="StretchRadius"/> &gt; 0.
+    /// </summary>
+    public Vector2 StretchCenter;
+
+    /// <summary>
+    /// Радиус охвата залежей при протаскивании. Ноль — круг не рисуется
+    /// (щелчок без растягивания или раскладка не по залежам).
+    /// </summary>
+    public float StretchRadius;
+
     public override void _Draw()
     {
         if (Definition == null)
             return;
+
+        if (StretchRadius > 0f)
+        {
+            // Тот же зелёный, что у годного места: заливка слабее габарита, чтобы
+            // сами экстракторы поверх круга оставались читаемыми
+            ShapeDraw.Circle(this, StretchCenter, StretchRadius,
+                DrawTheme.Filled(VizKind.PlacementValid, 0.10f, 0.75f, 2f, WidthMode.Screen),
+                64);
+        }
 
         var weapon = Definition.Weapon;
 

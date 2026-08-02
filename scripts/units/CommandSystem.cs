@@ -145,7 +145,10 @@ public partial class CommandSystem : GameSystem
         _plan.Clear();
 
         if (_ghost != null)
+        {
             _ghost.Visible = false;
+            _ghost.StretchRadius = 0f;
+        }
     }
 
     /// <summary>
@@ -207,16 +210,42 @@ public partial class CommandSystem : GameSystem
         _ghost.Visible = Building || _dragging;
 
         if (!_ghost.Visible)
+        {
+            _ghost.StretchRadius = 0f;
             return;
+        }
 
         // Представление читает визуальную позицию: при прогнозе призрак упреждает задержку,
         // при движении камеры без мыши точку уже пересчитал CursorSystem
         var visual = _cursor.VisualWorldPosition;
         var anchor = _dragging ? _buildAnchor : visual;
+        bool alt = Input.IsKeyPressed(Key.Alt);
 
-        BuildPlan.Compute(GM, Pending, anchor, visual, Input.IsKeyPressed(Key.Alt), _plan);
+        BuildPlan.Compute(GM, Pending, anchor, visual, alt, _plan);
+        UpdateStretchGhost(anchor, visual, alt);
 
         _ghost.QueueRedraw();
+    }
+
+    /// <summary>
+    /// Круг охвата залежей у призрака. Радиус и центр совпадают с тем, что считает
+    /// <see cref="BuildPlan"/> для <see cref="BuildPattern.MetalArea"/>: иначе игрок
+    /// видел бы помеченные экстракторы, но не границу, по которой они отобраны.
+    /// </summary>
+    private void UpdateStretchGhost(Vector2 anchor, Vector2 cursor, bool alt)
+    {
+        _ghost.StretchRadius = 0f;
+
+        if (BuildPlan.PatternOf(Pending, alt) != BuildPattern.MetalArea)
+            return;
+
+        float radius = anchor.DistanceTo(cursor);
+
+        if (radius < BuildPlan.AngleThreshold || _plan.Count == 0)
+            return;
+
+        _ghost.StretchCenter = _plan[0].Center;
+        _ghost.StretchRadius = radius;
     }
 
     public override void _UnhandledInput(InputEvent @event)

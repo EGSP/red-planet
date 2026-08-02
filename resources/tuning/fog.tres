@@ -4,6 +4,6 @@
 
 [resource]
 script = ExtResource("1_fog")
-FogColor = Color(0.37369287, 0.37659925, 0.467214, 0.34901962)
-OutlineColor = Color(0.4455, 0.835725, 0.99, 0.9019608)
+FogColor = Color(0.19793725, 0.19793722, 0.19793722, 0.34901962)
+OutlineColor = Color(0.4455, 0.835725, 0.99, 0.45882353)
 OutlineWidthPx = 0.5
