@@ -77,10 +77,20 @@ public static class BuildPlan
 
         var direction = drag / length;
 
-        if (pattern == BuildPattern.Line)
-            Line(gm, def, origin, facing, direction, length, taken, into);
-        else
-            Field(gm, def, origin, facing, drag, pattern == BuildPattern.Diamond, taken, into);
+        switch (pattern)
+        {
+            case BuildPattern.Line:
+                Line(gm, def, origin, facing, direction, length, taken, into);
+                break;
+
+            case BuildPattern.Diamond:
+                Diamond(gm, def, origin, facing, direction, length, taken, into);
+                break;
+
+            default:
+                Field(gm, def, origin, facing, direction, length, taken, into);
+                break;
+        }
     }
 
     /// <summary>Какая раскладка сейчас действует: обычная или та, что под Alt.</summary>
@@ -106,9 +116,13 @@ public static class BuildPlan
     }
 
     /// <summary>
-    /// Цепочка вдоль протаскивания. Промежуток растягивается до конца отрезка, поэтому
-    /// последнее строение стоит точно под курсором, а сам промежуток плавно растёт от
-    /// обязательного до двойного и возвращается к обязательному, когда в ряд входит ещё одно.
+    /// Цепочка вдоль протаскивания. Промежуток постоянен и равен шагу: он выведен из размера
+    /// строения, и растягивать его до курсора нельзя.
+    ///
+    /// РАСТЯЖЕНИЕ БЫЛО ОШИБКОЙ. Промежуток, поделённый на число мест, давал последнее строение
+    /// точно под курсором, но ценой того, что весь ряд ехал от любого движения мыши: два
+    /// одинаково выложенных ряда получались с разными просветами, и застройка переставала
+    /// быть плотной. Курсор задаёт, докуда тянется ряд, а не как в нём стоят строения.
     /// </summary>
     private static void Line(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
         Vector2 direction, float length, List<Obb> taken, List<BuildSpot> into)
@@ -116,72 +130,111 @@ public static class BuildPlan
         float step = Step(def, facing, direction);
         int count = Mathf.FloorToInt(length / step);
 
-        if (count < 1)
-            return;
-
-        float spacing = length / count;
-
         for (int i = 1; i <= count && into.Count < Const.PatternLimit; i++)
-            Accept(gm, def, origin + direction * spacing * i, facing, taken, into);
+            Accept(gm, def, origin + direction * step * i, facing, taken, into);
     }
 
     /// <summary>
-    /// Заполнение области, у которой точка нажатия и курсор — противоположные углы.
+    /// Квадратная застройка: тот же ряд, что и в цепочке, плюс такое же число рядов рядом с ним.
     ///
-    /// РЕШЁТКА ИДЁТ ПО МИРОВЫМ ОСЯМ, а не по направлению протаскивания. Иначе она вырождается:
-    /// направление задаёт вектор, и в его собственных координатах курсор всегда лежит
-    /// на оси, то есть у области нет второй стороны. Строения при этом всё равно повёрнуты
-    /// по вектору — ряды остаются ровными, потому что промежуток считается по тени
-    /// повёрнутого прямоугольника, а не по стороне формы.
+    /// РЕШЁТКА ИДЁТ ПО ВЕКТОРУ ПРОТАСКИВАНИЯ, промежутки в ней — размеры строения с зазором,
+    /// и ничем другим они не задаются. Смысл раскладки в плотности: строения стоят стенка
+    /// к стенке, а курсор решает только то, сколько их поместилось.
     ///
-    /// Ромб отличается от квадрата двумя вещами: решётка мельче в корень из двух и берётся
-    /// каждый второй узел. Тогда ближайшие соседи стоят по диагонали ровно на том же
-    /// промежутке, что и в сплошной раскладке, а мест выходит вдвое меньше.
+    /// ШИРИНА РАВНА ДЛИНЕ, потому что задать её отдельно нечем. Вектор протаскивания
+    /// израсходован целиком: направление ушло на угол строений, длина — на счёт мест,
+    /// а отклонение курсора от оси измерить невозможно, поскольку ось поворачивается
+    /// вслед за курсором и отклонение всегда нулевое. Отсюда квадрат: сколько строений
+    /// в ряду, столько и рядов.
+    ///
+    /// Ряды расходятся от линии протаскивания в обе стороны поровну, поэтому застройка
+    /// растёт вокруг того места, куда игрок ведёт мышь, а не сносит её вбок.
     /// </summary>
     private static void Field(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
-        Vector2 drag, bool diamond, List<Obb> taken, List<BuildSpot> into)
+        Vector2 direction, float length, List<Obb> taken, List<BuildSpot> into)
     {
-        float stepX = Step(def, facing, Vector2.Right);
-        float stepY = Step(def, facing, Vector2.Down);
+        var across = direction.Orthogonal();
 
-        if (diamond)
-        {
-            stepX *= Mathf.Sqrt2 * 0.5f;
-            stepY *= Mathf.Sqrt2 * 0.5f;
-        }
+        float stepAlong = Step(def, facing, direction);
+        float stepAcross = Step(def, facing, across);
 
-        int columns = Mathf.FloorToInt(Mathf.Abs(drag.X) / stepX);
-        int rows = Mathf.FloorToInt(Mathf.Abs(drag.Y) / stepY);
+        int count = Mathf.FloorToInt(length / stepAlong) + 1;
 
-        if (columns < 1 && rows < 1)
+        if (count < 2)
             return;
 
-        // Промежуток растягивается до края области по каждой оси отдельно — по той же
-        // причине, что и в цепочке: угол области должен приходиться на строение
-        float spacingX = columns > 0 ? Mathf.Abs(drag.X) / columns : 0f;
-        float spacingY = rows > 0 ? Mathf.Abs(drag.Y) / rows : 0f;
+        // Середина полосы приходится на линию протаскивания. При нечётном числе рядов
+        // средний ряд ложится точно на неё, при чётном линия проходит между двумя рядами
+        float middle = (count - 1) * 0.5f;
 
-        float signX = Mathf.Sign(drag.X);
-        float signY = Mathf.Sign(drag.Y);
-
-        for (int row = 0; row <= rows; row++)
+        for (int row = 0; row < count; row++)
         {
-            for (int column = 0; column <= columns; column++)
+            for (int column = 0; column < count; column++)
             {
                 if (into.Count >= Const.PatternLimit)
                     return;
 
-                if (row == 0 && column == 0)
-                    continue;
+                var center = origin
+                             + direction * stepAlong * column
+                             + across * stepAcross * (row - middle);
 
-                if (diamond && (row + column) % 2 != 0)
+                // Место под точкой нажатия занесено в план первым
+                if (center.DistanceSquaredTo(origin) < 1f)
                     continue;
-
-                var center = origin + new Vector2(
-                    signX * spacingX * column,
-                    signY * spacingY * row);
 
                 Accept(gm, def, center, facing, taken, into);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ромб вокруг первой постройки: строения занимают узлы решётки, чьё расстояние
+    /// от неё в шагах не превышает радиуса.
+    ///
+    /// РАДИУС, А НЕ ОБЛАСТЬ ДО КУРСОРА. Курсор здесь задаёт только величину — сколько шагов
+    /// ромб занимает во все стороны, — а растёт раскладка вокруг первого строения. Тем она
+    /// и отличается от квадрата: квадрат выкладывается от точки нажатия к курсору, а ромб
+    /// разворачивается симметрично, и место, куда игрок нажал, остаётся его серединой.
+    ///
+    /// На первом шаге получаются четыре соседа по осям решётки, на втором к ним добавляются
+    /// диагональные и следующие осевые, и так далее. Промежутки те же, что в сплошной
+    /// раскладке: соседи по оси стоят стенка к стенке, а диагональные углы остаются
+    /// открытыми — из-за них ромб и прикрывает больше места, чем квадрат той же плотности.
+    ///
+    /// Обход идёт кольцами от середины наружу: при упоре в предел числа мест в план
+    /// попадает ближнее к игроку, а не случайный край раскладки.
+    /// </summary>
+    private static void Diamond(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
+        Vector2 direction, float length, List<Obb> taken, List<BuildSpot> into)
+    {
+        var across = direction.Orthogonal();
+
+        float stepAlong = Step(def, facing, direction);
+        float stepAcross = Step(def, facing, across);
+
+        int radius = Mathf.FloorToInt(length / stepAlong);
+
+        for (int ring = 1; ring <= radius; ring++)
+        {
+            for (int along = -ring; along <= ring; along++)
+            {
+                int side = ring - Mathf.Abs(along);
+
+                // Узлы кольца: при нулевом отступе поперёк узел на кольце один, иначе их два
+                for (int sign = -1; sign <= 1; sign += 2)
+                {
+                    if (into.Count >= Const.PatternLimit)
+                        return;
+
+                    var center = origin
+                                 + direction * stepAlong * along
+                                 + across * stepAcross * side * sign;
+
+                    Accept(gm, def, center, facing, taken, into);
+
+                    if (side == 0)
+                        break;
+                }
             }
         }
     }
@@ -232,7 +285,9 @@ public static class BuildPlan
         var shape = Placement.Footprint(def, Vector2.Zero, facing);
         float span = shape.Reach(axis.Normalized()) * 2f;
 
-        return span + Const.BuildMarginPx * Mathf.Max(def.PatternStep, 0f);
+        // Добавок в полпикселя разводит соседей, чьи зазоры иначе сходились бы ровно
+        // в касание, — см. Const.PatternSlackPx
+        return span + Const.BuildMarginPx * Mathf.Max(def.PatternStep, 0f) + Const.PatternSlackPx;
     }
 
     /// <summary>

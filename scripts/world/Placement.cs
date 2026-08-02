@@ -77,7 +77,9 @@ public static class Placement
             if (!area.Escape(gm.Obstacles.ShapeOf(blocker), out var push))
                 break;
 
-            moved += push;
+            // Выход считается до касания краями, а его хватает не всегда: то же округление,
+            // из-за которого разводятся соседи в раскладке, отказывает и здесь
+            moved += push + push.Normalized() * Const.PatternSlackPx;
             area = area.MovedTo(moved);
 
             if (cursor.DistanceTo(moved) > Const.ClingLimitPx)
