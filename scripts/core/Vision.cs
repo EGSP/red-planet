@@ -29,6 +29,14 @@ public static class VisionGizmo
         if (radius <= 0f)
             return;
 
-        canvas.DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 48, new Color(tint, 0.09f), 1f);
+        // Слабая заливка + экранный контур: при zoom 0.25 дуга остаётся читаемой,
+        // а десятки дисков не перекрывают карту
+        ShapeDraw.Circle(canvas, Vector2.Zero, radius,
+            ShapeStyle.Filled(
+                new Color(tint, 0.025f),
+                new Color(tint, 0.12f),
+                1f,
+                WidthMode.Screen),
+            48);
     }
 }

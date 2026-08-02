@@ -21,13 +21,20 @@ public static class WeaponGizmo
         if (weapon == null)
             return;
 
-        canvas.DrawArc(Vector2.Zero, weapon.RangePx, 0f, Mathf.Tau, 64, new Color(tint, 0.2f), 1.5f);
+        // Слабая заливка зоны + устойчивый контур дальности
+        ShapeDraw.Circle(canvas, Vector2.Zero, weapon.RangePx,
+            ShapeStyle.Filled(
+                new Color(tint, 0.035f),
+                new Color(tint, 0.22f),
+                1.5f,
+                WidthMode.Screen),
+            64);
 
         float cone = weapon.AimCone;
         float length = weapon.RangePx * ConeLength;
-        var edge = new Color(tint, 0.35f);
+        var edge = ShapeStyle.Outline(new Color(tint, 0.35f), 1f, WidthMode.Screen);
 
-        canvas.DrawLine(Vector2.Zero, Heading.Forward(facingOffset + cone) * length, edge, 1f);
-        canvas.DrawLine(Vector2.Zero, Heading.Forward(facingOffset - cone) * length, edge, 1f);
+        ShapeDraw.Line(canvas, Vector2.Zero, Heading.Forward(facingOffset + cone) * length, edge);
+        ShapeDraw.Line(canvas, Vector2.Zero, Heading.Forward(facingOffset - cone) * length, edge);
     }
 }

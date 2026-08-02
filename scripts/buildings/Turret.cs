@@ -89,16 +89,15 @@ public partial class Turret : Building, IArmed
             new Vector2(-back, back * 0.85f),
         };
 
-        DrawColoredPolygon(body, Definition.Color);
-        DrawPolyline(new[] { body[0], body[1], body[2], body[0] },
-            new Color(0f, 0f, 0f, 0.45f), 2f);
+        ShapeDraw.Polygon(this, body,
+            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.45f), 2f, WidthMode.Screen));
 
         // Основание стоит под углом постановки и вслед за башней не крутится — снимаем
         // поворот ноды и ставим вместо него угол корпуса
         DrawSetTransform(Vector2.Zero, BodyFacing - Rotation, Vector2.One);
-        DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(Definition.Color, 0.3f));
-        DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(0f, 0f, 0f, 0.35f),
-            false, 2f);
+        ShapeDraw.Rect(this, new Rect2(-half, -half, Const.Unit, Const.Unit),
+            ShapeStyle.Filled(new Color(Definition.Color, 0.3f), new Color(0f, 0f, 0f, 0.35f), 2f,
+                WidthMode.Screen));
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
         HealthBar.Draw(this, Health, Const.Unit * 0.9f, -half - 10f, Rotation);

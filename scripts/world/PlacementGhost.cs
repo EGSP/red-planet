@@ -34,30 +34,10 @@ public partial class PlacementGhost : Node2D
             var color = spot.Valid ? new Color(0.3f, 1f, 0.4f) : new Color(1f, 0.3f, 0.3f);
             var area = Placement.Footprint(Definition, spot.Center, spot.Facing);
 
-            Outline(area, new Color(color, 0.22f), true);
-            Outline(area, color, false, 2f);
-            Outline(area.Grow(Const.BuildMarginPx), new Color(color, 0.35f), false, 1f);
+            ShapeDraw.Obb(this, area, ShapeStyle.Solid(new Color(color, 0.22f)));
+            ShapeDraw.Obb(this, area, ShapeStyle.Outline(color, 2f, WidthMode.Screen));
+            ShapeDraw.Obb(this, area.Grow(Const.BuildMarginPx),
+                ShapeStyle.Outline(new Color(color, 0.35f), 1.5f, WidthMode.MinScreen));
         }
-    }
-
-    /// <summary>
-    /// Повёрнутый прямоугольник в координатах ноды. Заливка и контур рисуются разными
-    /// вызовами движка, поэтому способ рисования выбирается признаком.
-    /// </summary>
-    private void Outline(in Obb area, Color color, bool filled, float width = 1f)
-    {
-        var corners = area.Corners();
-        var local = new Vector2[corners.Length];
-
-        for (int i = 0; i < corners.Length; i++)
-            local[i] = corners[i] - GlobalPosition;
-
-        if (filled)
-        {
-            DrawColoredPolygon(local, color);
-            return;
-        }
-
-        DrawPolyline(new[] { local[0], local[1], local[2], local[3], local[0] }, color, width);
     }
 }

@@ -413,17 +413,19 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         VisionGizmo.Draw(this, Definition.VisionRadiusPx, Definition.Color);
         WeaponGizmo.Draw(this, Weapon, Definition.Color);
 
-        DrawCircle(Vector2.Zero, radius, Definition.Color);
-        DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 24, new Color(0f, 0f, 0f, 0.4f), 2f);
+        ShapeDraw.Circle(this, Vector2.Zero, radius,
+            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f, WidthMode.Screen),
+            24);
 
         // Ось «вперёд»: нода уже повёрнута, поэтому в локальных координатах это просто вправо
-        DrawLine(Vector2.Zero, new Vector2(radius * 1.5f, 0f), new Color(1f, 1f, 1f, 0.8f), 2.5f);
+        ShapeDraw.Line(this, Vector2.Zero, new Vector2(radius * 1.5f, 0f),
+            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
 
         // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей
         if (Alive.Is(_attached))
-            DrawLine(Vector2.Zero, ToLocal(_attached.GlobalPosition),
-                new Color(1f, 1f, 0.5f, 0.6f), 2f);
+            ShapeDraw.Line(this, Vector2.Zero, ToLocal(_attached.GlobalPosition),
+                ShapeStyle.Outline(new Color(1f, 1f, 0.5f, 0.6f), 2f, WidthMode.Screen));
     }
 }

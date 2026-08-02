@@ -13,21 +13,21 @@
 /// </summary>
 public partial class OrderSystem : GameSystem
 {
-    public override void Step(double dt)
-    {
-        foreach (var actor in GM.Index.All<IOrderable>())
-        {
-            var orders = actor.Orders;
+	public override void Step(double dt)
+	{
+		foreach (var actor in GM.Index.All<IOrderable>())
+		{
+			var orders = actor.Orders;
 
-            // Цель пала, каркас достроен, месторождение выработано — приказ исчерпан
-            orders.DropInvalid();
+			// Цель пала, каркас достроен, месторождение выработано — приказ исчерпан
+			orders.DropInvalid();
 
-            var current = orders.Current;
+			var current = orders.Current;
 
-            if (current == null)
-                actor.OnIdle(dt);
-            else
-                actor.RunOrder(current, dt);
-        }
-    }
+			if (current == null)
+				actor.OnIdle(dt);
+			else
+				actor.RunOrder(current, dt);
+		}
+	}
 }

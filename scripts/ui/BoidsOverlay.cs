@@ -72,8 +72,11 @@ public partial class BoidsOverlay : Node2D
 
         if (DebugFlags.BoidRadii)
         {
-            DrawArc(at, radius, 0f, Mathf.Tau, 20, Body, 1.5f);
-            DrawArc(at, radius * (movement?.SenseFactor ?? 3.5f), 0f, Mathf.Tau, 40, Sense, 1f);
+            // Контур читаемый; заливка слабая, чтобы диски не перекрывали карту.
+            ShapeDraw.Circle(this, at, radius,
+                ShapeStyle.Filled(new Color(Body, 0.05f), new Color(Body, 0.85f), 2f, WidthMode.Screen), 20);
+            ShapeDraw.Circle(this, at, radius * (movement?.SenseFactor ?? 3.5f),
+                ShapeStyle.Filled(new Color(Sense, 0.04f), new Color(Sense, 0.55f), 1.5f, WidthMode.MinScreen), 40);
         }
 
         if (DebugFlags.BoidNeighbours)
@@ -95,6 +98,7 @@ public partial class BoidsOverlay : Node2D
     private void DrawNeighbours(IMobile mobile, Vector2 at, float sense)
     {
         var gm = GameManager.I;
+        var style = ShapeStyle.Outline(Link, 1.5f, WidthMode.MinScreen);
 
         foreach (var other in gm.Index.All<IMobile>())
         {
@@ -104,13 +108,14 @@ public partial class BoidsOverlay : Node2D
             if (mobile.GlobalPosition.DistanceTo(other.GlobalPosition) > sense)
                 continue;
 
-            DrawLine(at, ToLocal(other.GlobalPosition), Link, 1f);
+            ShapeDraw.Line(this, at, ToLocal(other.GlobalPosition), style);
         }
     }
 
     private void DrawCells(MovementSystem movement)
     {
         float side = movement.BucketSize;
+        var style = ShapeStyle.Outline(Cells, 1f, WidthMode.MinScreen);
 
         foreach (var pair in movement.Buckets)
         {
@@ -118,7 +123,7 @@ public partial class BoidsOverlay : Node2D
                 continue;
 
             var corner = new Vector2(pair.Key.X * side, pair.Key.Y * side);
-            DrawRect(new Rect2(ToLocal(corner), side, side), Cells, false, 1f);
+            ShapeDraw.Rect(this, new Rect2(ToLocal(corner), side, side), style);
         }
     }
 
@@ -128,11 +133,7 @@ public partial class BoidsOverlay : Node2D
         if (force.LengthSquared() < 0.0004f)
             return;
 
-        var to = from + force * ForceScale;
-        var direction = (to - from).Normalized();
-
-        DrawLine(from, to, color, 2f);
-        DrawLine(to, to - direction.Rotated(0.4f) * 8f, color, 2f);
-        DrawLine(to, to - direction.Rotated(-0.4f) * 8f, color, 2f);
+        ShapeDraw.Arrow(this, from, from + force * ForceScale,
+            ShapeStyle.Outline(color, 2f, WidthMode.Screen));
     }
 }

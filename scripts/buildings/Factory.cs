@@ -55,6 +55,7 @@ public partial class Factory : Building
         var rect = new Rect2(-size * 0.5f, size);
 
         var color = Working ? new Color(0.4f, 1f, 0.5f) : new Color(0.5f, 0.5f, 0.5f);
-        DrawCircle(new Vector2(rect.End.X - 10f, rect.Position.Y + 10f), 5f, color);
+        ShapeDraw.Circle(this, new Vector2(rect.End.X - 10f, rect.Position.Y + 10f), 5f,
+            ShapeStyle.Solid(color));
     }
 }

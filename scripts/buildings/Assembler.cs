@@ -119,18 +119,19 @@ public partial class Assembler : Building, IWorker
         var target = Alive.Is(_attached) ? (Node2D)_attached : _repairTarget;
 
         if (Alive.Is(target))
-            DrawLine(Vector2.Zero, ToLocal(target.GlobalPosition),
-                new Color(0.6f, 1f, 0.7f, 0.55f), 2f);
+            ShapeDraw.Line(this, Vector2.Zero, ToLocal(target.GlobalPosition),
+                ShapeStyle.Outline(new Color(0.6f, 1f, 0.7f, 0.55f), 2f, WidthMode.Screen));
 
         // Манипулятор: три коротких луча из центра — знак того, что башня рабочая
         var arm = Working ? new Color(0.6f, 1f, 0.7f) : new Color(0.55f, 0.6f, 0.6f);
+        var armLine = ShapeStyle.Outline(arm, 3f, WidthMode.Screen);
 
         for (int i = 0; i < 3; i++)
         {
             float angle = Mathf.Tau * i / 3f - Mathf.Pi * 0.5f;
-            DrawLine(Vector2.Zero, Heading.Forward(angle) * half * 0.7f, arm, 3f);
+            ShapeDraw.Line(this, Vector2.Zero, Heading.Forward(angle) * half * 0.7f, armLine);
         }
 
-        DrawCircle(Vector2.Zero, half * 0.22f, arm);
+        ShapeDraw.Circle(this, Vector2.Zero, half * 0.22f, ShapeStyle.Solid(arm));
     }
 }

@@ -64,10 +64,11 @@ public partial class PathOverlay : Node2D
             return;
 
         float half = NavGrid.Cell * 0.5f;
+        var style = ShapeStyle.Solid(Visited);
 
         foreach (var point in pathfinding.Expanded)
-            DrawRect(new Rect2(ToLocal(point) - new Vector2(half, half),
-                NavGrid.Cell, NavGrid.Cell), Visited);
+            ShapeDraw.Rect(this, new Rect2(ToLocal(point) - new Vector2(half, half),
+                NavGrid.Cell, NavGrid.Cell), style);
     }
 
     private void DrawPath(PathfindingSystem pathfinding, IMobile mobile)
@@ -81,6 +82,11 @@ public partial class PathOverlay : Node2D
             ? Failed
             : Ahead;
 
+        var behind = ShapeStyle.Outline(Behind, 1.5f, WidthMode.MinScreen);
+        var ahead = ShapeStyle.Outline(color, 2f, WidthMode.Screen);
+        var waypoint = ShapeStyle.Filled(new Color(color, 0.55f), color, 1.5f, WidthMode.MinScreen);
+        var goal = ShapeStyle.Filled(new Color(color, 0.35f), new Color(color, 0.7f), 2f, WidthMode.Screen);
+
         var from = mobile.GlobalPosition;
 
         for (int i = 0; i < handle.Points.Count; i++)
@@ -92,16 +98,16 @@ public partial class PathOverlay : Node2D
             // откуда сущность пришла и не крутится ли она на месте
             if (i < handle.Cursor)
             {
-                DrawLine(ToLocal(previous), ToLocal(to), Behind, 1.5f);
+                ShapeDraw.Line(this, ToLocal(previous), ToLocal(to), behind);
                 continue;
             }
 
             var start = i == handle.Cursor ? from : previous;
 
-            DrawLine(ToLocal(start), ToLocal(to), color, 2f);
-            DrawCircle(ToLocal(to), 3.5f, color);
+            ShapeDraw.Line(this, ToLocal(start), ToLocal(to), ahead);
+            ShapeDraw.Circle(this, ToLocal(to), 3.5f, waypoint);
         }
 
-        DrawCircle(ToLocal(handle.Goal), 5f, new Color(color, 0.5f));
+        ShapeDraw.Circle(this, ToLocal(handle.Goal), 5f, goal);
     }
 }

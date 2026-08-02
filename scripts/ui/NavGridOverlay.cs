@@ -134,24 +134,15 @@ public partial class NavGridOverlay : Node2D
 
     private void DrawFootprints(GameManager gm)
     {
-        var body = new Color(0.4f, 0.85f, 1f, 0.85f);
-        var margin = new Color(1f, 0.85f, 0.3f, 0.5f);
+        var body = ShapeStyle.Outline(new Color(0.4f, 0.85f, 1f, 0.85f), 2f, WidthMode.Screen);
+        var margin = ShapeStyle.Outline(new Color(1f, 0.85f, 0.3f, 0.5f), 1.5f, WidthMode.MinScreen);
 
         foreach (var obstacle in gm.Obstacles.All)
         {
             var shape = gm.Obstacles.ShapeOf(obstacle);
 
-            DrawOutline(shape, body, 1.5f);
-            DrawOutline(shape.Grow(Const.BuildMarginPx), margin, 1f);
+            ShapeDraw.Obb(this, shape, body);
+            ShapeDraw.Obb(this, shape.Grow(Const.BuildMarginPx), margin);
         }
-    }
-
-    /// <summary>Контур повёрнутого прямоугольника: замкнутая ломаная по его углам.</summary>
-    private void DrawOutline(in Obb shape, Color color, float width)
-    {
-        var corners = shape.Corners();
-
-        DrawPolyline(new[] { corners[0], corners[1], corners[2], corners[3], corners[0] },
-            color, width);
     }
 }

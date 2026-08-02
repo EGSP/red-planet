@@ -9,19 +9,19 @@ public partial class GridRenderer : Node2D
         float min = -r * Const.Unit;
         float max = (r + 1) * Const.Unit;
 
-        var line = new Color(1f, 1f, 1f, 0.06f);
-        var axis = new Color(1f, 1f, 1f, 0.16f);
+        var line = ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.06f), 1f, WidthMode.Screen);
+        var axis = ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.16f), 1f, WidthMode.Screen);
 
         for (int i = -r; i <= r + 1; i++)
         {
             float p = i * Const.Unit;
-            var color = i == 0 ? axis : line;
+            var style = i == 0 ? axis : line;
 
-            DrawLine(new Vector2(p, min), new Vector2(p, max), color);
-            DrawLine(new Vector2(min, p), new Vector2(max, p), color);
+            ShapeDraw.Line(this, new Vector2(p, min), new Vector2(p, max), style);
+            ShapeDraw.Line(this, new Vector2(min, p), new Vector2(max, p), style);
         }
 
-        DrawRect(new Rect2(min, min, max - min, max - min),
-            new Color(1f, 0.6f, 0.4f, 0.25f), false, 2f);
+        ShapeDraw.Rect(this, new Rect2(min, min, max - min, max - min),
+            ShapeStyle.Outline(new Color(1f, 0.6f, 0.4f, 0.25f), 2f, WidthMode.Screen));
     }
 }

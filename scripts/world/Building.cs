@@ -162,14 +162,14 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         // ноду держит за собой турель, у которой в Rotation ось башни
         DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
 
-        DrawRect(rect, Definition.Color);
-        DrawRect(rect, new Color(0f, 0f, 0f, 0.35f), false, 2f);
+        ShapeDraw.Rect(this, rect,
+            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f, WidthMode.Screen));
 
         // Ось «вперёд» — короткая насечка от центра к краю. Рисуется в координатах корпуса,
         // поэтому насечка вперёд и есть направление корпуса
         float span = Mathf.Min(size.X, size.Y);
-        DrawLine(Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
-            new Color(1f, 1f, 1f, 0.5f), 3f);
+        ShapeDraw.Line(this, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
+            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f), 3f, WidthMode.Screen));
 
         // Подпись и полоса прочности читаются с экрана, а не с корпуса, поэтому поворот
         // на них не распространяется

@@ -154,14 +154,15 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         // и показывать его иначе, чем оно занято, нельзя
         DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
 
-        DrawRect(rect, new Color(Definition.Color, 0.15f));
+        ShapeDraw.Rect(this, rect, ShapeStyle.Solid(new Color(Definition.Color, 0.15f)));
 
         // Заполнение снизу вверх по прогрессу
         float filled = size.Y * Ratio;
-        DrawRect(new Rect2(rect.Position.X, rect.End.Y - filled, size.X, filled),
-            new Color(Definition.Color, 0.55f));
+        ShapeDraw.Rect(this, new Rect2(rect.Position.X, rect.End.Y - filled, size.X, filled),
+            ShapeStyle.Solid(new Color(Definition.Color, 0.55f)));
 
-        DrawRect(rect, new Color(1f, 1f, 1f, 0.7f), false, 2f);
+        ShapeDraw.Rect(this, rect,
+            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.7f), 2f, WidthMode.Screen));
 
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 

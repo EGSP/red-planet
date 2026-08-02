@@ -136,16 +136,18 @@ public partial class SessionPreview : Node2D
         int r = World.RadiusCells;
         float min = -r * Const.Unit;
         float max = (r + 1) * Const.Unit;
+        var grid = ShapeStyle.Outline(GridColor, 1f, WidthMode.Screen);
 
         for (int i = -r; i <= r + 1; i++)
         {
             float p = i * Const.Unit;
 
-            DrawLine(new Vector2(p, min), new Vector2(p, max), GridColor);
-            DrawLine(new Vector2(min, p), new Vector2(max, p), GridColor);
+            ShapeDraw.Line(this, new Vector2(p, min), new Vector2(p, max), grid);
+            ShapeDraw.Line(this, new Vector2(min, p), new Vector2(max, p), grid);
         }
 
-        DrawRect(new Rect2(min, min, max - min, max - min), WorldColor, false, 3f);
+        ShapeDraw.Rect(this, new Rect2(min, min, max - min, max - min),
+            ShapeStyle.Outline(WorldColor, 3f, WidthMode.Screen));
     }
 
     /// <summary>
@@ -157,10 +159,14 @@ public partial class SessionPreview : Node2D
     {
         var center = Const.LandingPoint;
 
-        DrawArc(center, settings.BaseClearancePx, 0f, Mathf.Tau, 96, ClearanceColor, 2f);
-        DrawArc(center, settings.StartRadiusPx, 0f, Mathf.Tau, 96, ClearanceColor, 1f);
-        DrawArc(center, settings.FieldRadiusPx, 0f, Mathf.Tau, 128, FieldColor, 2f);
-        DrawArc(center, settings.SpawnRadiusPx, 0f, Mathf.Tau, 160, SpawnColor, 2f);
+        ShapeDraw.Circle(this, center, settings.BaseClearancePx,
+            ShapeStyle.Outline(ClearanceColor, 2f, WidthMode.Screen), 96);
+        ShapeDraw.Circle(this, center, settings.StartRadiusPx,
+            ShapeStyle.Outline(ClearanceColor, 1f, WidthMode.Screen), 96);
+        ShapeDraw.Circle(this, center, settings.FieldRadiusPx,
+            ShapeStyle.Outline(FieldColor, 2f, WidthMode.Screen), 128);
+        ShapeDraw.Circle(this, center, settings.SpawnRadiusPx,
+            ShapeStyle.Outline(SpawnColor, 2f, WidthMode.Screen), 160);
     }
 
     private void DrawSpots(WorldSettings settings)
@@ -171,8 +177,8 @@ public partial class SessionPreview : Node2D
         // Заливкой, а не контуром: поле целиком помещается в вид только при сильном
         // уменьшении, и линия в два пикселя на нём попросту пропадает
         foreach (var position in placed)
-            DrawRect(new Rect2(position - new Vector2(half, half), half * 2f, half * 2f),
-                SpotColor);
+            ShapeDraw.Rect(this, new Rect2(position - new Vector2(half, half), half * 2f, half * 2f),
+                ShapeStyle.Solid(SpotColor));
 
         if (placed.Count < settings.SpotCount)
             _note = $"точек размещено {placed.Count} из {settings.SpotCount}: " +
@@ -226,7 +232,8 @@ public partial class SessionPreview : Node2D
                 var (position, _) = WaveFormation.Slot(shape, angle, index++);
                 var definition = ordered[i];
 
-                DrawCircle(position, definition.RadiusPx, definition.Color);
+                ShapeDraw.Circle(this, position, definition.RadiusPx,
+                    ShapeStyle.Solid(definition.Color));
             }
         }
 
@@ -244,18 +251,19 @@ public partial class SessionPreview : Node2D
         float far = near + shape.DepthPx;
         float nearArc = shape.ArcAt(0f);
         float farArc = shape.ArcAt(1f);
+        var outline = ShapeStyle.Outline(ShapeColor, 2f, WidthMode.Screen);
 
-        DrawArc(Vector2.Zero, near, center - nearArc * 0.5f, center + nearArc * 0.5f,
-            48, ShapeColor, 2f);
+        ShapeDraw.Arc(this, Vector2.Zero, near, center - nearArc * 0.5f, center + nearArc * 0.5f,
+            outline, 48);
 
-        DrawArc(Vector2.Zero, far, center - farArc * 0.5f, center + farArc * 0.5f,
-            48, ShapeColor, 2f);
+        ShapeDraw.Arc(this, Vector2.Zero, far, center - farArc * 0.5f, center + farArc * 0.5f,
+            outline, 48);
 
         for (int side = -1; side <= 1; side += 2)
-            DrawLine(
+            ShapeDraw.Line(this,
                 Heading.Forward(center + side * nearArc * 0.5f) * near,
                 Heading.Forward(center + side * farArc * 0.5f) * far,
-                ShapeColor, 2f);
+                outline);
     }
 
     private WaveDefinition Wave()

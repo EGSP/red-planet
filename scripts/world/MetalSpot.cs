@@ -38,8 +38,10 @@ public partial class MetalSpot : Node2D
         float half = Const.Unit * 0.5f;
         var metal = new Color(0.85f, 0.45f, 0.2f);
 
-        DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(metal, 0.25f));
-        DrawCircle(Vector2.Zero, half * 0.55f, metal);
-        DrawArc(Vector2.Zero, half * 0.8f, 0f, Mathf.Tau, 24, new Color(metal, 0.7f), 2f);
+        ShapeDraw.Rect(this, new Rect2(-half, -half, Const.Unit, Const.Unit),
+            ShapeStyle.Solid(new Color(metal, 0.25f)));
+        ShapeDraw.Circle(this, Vector2.Zero, half * 0.55f, ShapeStyle.Solid(metal));
+        ShapeDraw.Circle(this, Vector2.Zero, half * 0.8f,
+            ShapeStyle.Outline(new Color(metal, 0.7f), 2f, WidthMode.Screen), 24);
     }
 }

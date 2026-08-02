@@ -31,10 +31,10 @@ public static class HealthBar
         canvas.DrawSetTransform(new Vector2(0f, y).Rotated(-facing), -facing, Vector2.One);
 
         var rect = new Rect2(-width * 0.5f, -height * 0.5f, width, height);
-        canvas.DrawRect(rect, Back);
+        ShapeDraw.Rect(canvas, rect, ShapeStyle.Solid(Back));
 
         var fill = new Rect2(rect.Position, new Vector2(width * health.Ratio, height));
-        canvas.DrawRect(fill, Tint(health.Ratio));
+        ShapeDraw.Rect(canvas, fill, ShapeStyle.Solid(Tint(health.Ratio)));
 
         canvas.DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
     }

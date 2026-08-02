@@ -38,6 +38,7 @@ public partial class CommandSystem : GameSystem
     private NavGridOverlay _navigation;
     private PathOverlay _paths;
     private BoidsOverlay _boids;
+    private DebugDraw _debugDraw;
 
     /// <summary>Курсор в мировых координатах — берём из событий, а не опросом.</summary>
     private Vector2 _cursor;
@@ -614,5 +615,9 @@ public partial class CommandSystem : GameSystem
 
         if (_boids == null || !IsInstanceValid(_boids))
             _boids = GM.Playground.Add(WorldLayer.Effects, new BoidsOverlay());
+
+        // Произвольные маркеры — поверх доменных оверлеев; доступ из кода через DebugDraw.Current.
+        if (_debugDraw == null || !IsInstanceValid(_debugDraw))
+            _debugDraw = GM.Playground.Add(WorldLayer.Effects, new DebugDraw());
     }
 }
