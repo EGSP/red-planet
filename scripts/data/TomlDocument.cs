@@ -197,6 +197,31 @@ public sealed class TomlDocument
     }
 
     /// <summary>
+    /// Список чисел. Нет ключа — пустой список, это не ошибка. Длину проверяет вызывающий:
+    /// сколько чисел уместно, знает смысл поля, а не разбор файла.
+    /// </summary>
+    public float[] Floats(string key)
+    {
+        if (!Take(key, out object value))
+            return Array.Empty<float>();
+
+        if (value is not TomlArray array)
+            return Fail(key, "список чисел", Array.Empty<float>());
+
+        var result = new float[array.Count];
+
+        for (int i = 0; i < array.Count; i++)
+            result[i] = array[i] switch
+            {
+                double number => (float)number,
+                long number => number,
+                _ => Fail($"{key}[{i}]", "число", 0f),
+            };
+
+        return result;
+    }
+
+    /// <summary>
     /// Цвет списком из трёх или четырёх долей: [0.4, 0.9, 0.5]. Именно долями, а не байтами —
     /// так же, как цвет задаётся в коде движка, и переводить в уме ничего не приходится.
     /// </summary>

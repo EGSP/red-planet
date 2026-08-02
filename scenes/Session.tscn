@@ -29,6 +29,8 @@
 [ext_resource type="Script" path="res://scripts/ui/TerrorBar.cs" id="29_terrorbar"]
 [ext_resource type="Resource" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
 [ext_resource type="Resource" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
+[ext_resource type="Script" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
+[ext_resource type="Resource" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
 [ext_resource type="Script" path="res://scripts/core/VictorySystem.cs" id="31_victory"]
 [ext_resource type="Script" path="res://scripts/ui/PortalCountdownBar.cs" id="32_portalbar"]
 [ext_resource type="Script" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
@@ -82,6 +84,11 @@ StepOrder = 50
 script = ExtResource("11_pressure")
 Settings = ExtResource("37_pressuresettings")
 StepOrder = 55
+
+[node name="WaveSystem" type="Node" parent="Systems"]
+script = ExtResource("38_waves")
+Settings = ExtResource("39_wavesettings")
+StepOrder = 56
 
 [node name="WeaponSystem" type="Node" parent="Systems"]
 script = ExtResource("13_weapon")

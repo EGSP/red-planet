@@ -26,6 +26,7 @@ public sealed class Catalog
     private readonly Dictionary<string, UnitDefinition> _units = new();
     private readonly Dictionary<string, ToolDefinition> _tools = new();
     private readonly Dictionary<string, BuildbarDefinition> _buildbars = new();
+    private readonly Dictionary<string, WaveDefinition> _waves = new();
 
     /// <summary>Реестр тегов. Заполняется сборкой из resources/content/tags.toml.</summary>
     public TagRegistry Tags { get; } = new();
@@ -43,6 +44,9 @@ public sealed class Catalog
     public IEnumerable<UnitDefinition> Enemies =>
         _units.Values.Where(definition => definition.Class == UnitClass.Enemy);
 
+    /// <summary>Все волны. Из них подсистема волн отбирает подходящую по террору.</summary>
+    public IReadOnlyCollection<WaveDefinition> Waves => _waves.Values;
+
     public UnitDefinition Unit(string id) =>
         id != null && _units.TryGetValue(id, out var definition) ? definition : null;
 
@@ -58,6 +62,8 @@ public sealed class Catalog
 
     public bool AddBuildbar(BuildbarDefinition bar) => _buildbars.TryAdd(bar.Id, bar);
 
+    public bool AddWave(WaveDefinition wave) => _waves.TryAdd(wave.Id, wave);
+
     /// <summary>
     /// Собрать содержимое с диска. Ошибки не глотаются: сборка с ошибками означает,
     /// что часть определений отсутствует, и увидеть это надо в первую секунду запуска,
@@ -68,7 +74,7 @@ public sealed class Catalog
         int errors = ContentCompiler.Compile(this);
 
         GD.Print($"[Каталог] определений: {_units.Count}, инструментов: {_tools.Count}, " +
-                 $"панелей: {_buildbars.Count}, тегов: {Tags.Names.Count}");
+                 $"панелей: {_buildbars.Count}, волн: {_waves.Count}, тегов: {Tags.Names.Count}");
 
         if (errors > 0)
             GD.PushError($"[Каталог] содержимое собрано с ошибками: {errors}. " +

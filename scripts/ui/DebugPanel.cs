@@ -32,6 +32,7 @@ public partial class DebugPanel : CanvasLayer
     private Label _combat;
     private Label _navigation;
     private Label _paths;
+    private Label _waves;
 
     public override void _Ready()
     {
@@ -205,6 +206,15 @@ public partial class DebugPanel : CanvasLayer
             "«Разных целей» — по этому числу вместе с числом движущихся решается, " +
             "пора ли вводить общее векторное поле вместо отдельных путей.");
 
+        Section(box, "Волны", "Что подсистема волн отобрала и что из этого вышло на карту.");
+        _waves = Readout(box,
+            "Первая строка — сколько осталось до ближайшей волны. Дальше история партии, " +
+            "от новых к старым: время, волна, показатель террора на миг отбора, " +
+            "бюджет и потраченная его часть, состав по видам, направление первого очага " +
+            "и назначенный отдых. Расхождение бюджета с потраченным означает, что остаток " +
+            "было некому занять: самый дешёвый допустимый вид оказался дороже него. " +
+            "«+N рядов» — состав не уместился в заданную глубину формы.");
+
         Section(box, "Управление", null);
 
         var hints = new Label
@@ -330,6 +340,8 @@ public partial class DebugPanel : CanvasLayer
             $"препятствий {gm.Obstacles.Count}   ревизия {gm.Nav.Revision}\n" +
             $"последняя пересборка {gm.Nav.LastBuildMs:0.00} мс";
 
+        _waves.Text = Waves(gm.System<WaveSystem>());
+
         var pathfinding = gm.System<PathfindingSystem>();
         var movement = gm.System<MovementSystem>();
 
@@ -345,6 +357,50 @@ public partial class DebugPanel : CanvasLayer
             $"узлов: последний {pathfinding.LastExpanded}, худший {pathfinding.WorstExpanded}\n" +
             $"движется {movement?.Tracked ?? 0}, разных целей {Destinations(gm, pathfinding)}";
     }
+
+    /// <summary>
+    /// Обратный отсчёт и история волн, от новых к старым.
+    ///
+    /// Порядок обратный порядку событий намеренно: панель узкая, длинную историю в ней
+    /// приходится прокручивать, а нужна прежде всего последняя волна — та, чьи следствия
+    /// сейчас на экране.
+    /// </summary>
+    private static string Waves(WaveSystem waves)
+    {
+        if (waves == null)
+            return "подсистема волн не в сцене";
+
+        var text = new System.Text.StringBuilder();
+        text.Append($"до ближайшей {waves.TimeLeft:0} с");
+
+        var history = waves.History;
+
+        if (history.Count == 0)
+        {
+            text.Append("\nволн ещё не было");
+            return text.ToString();
+        }
+
+        for (int i = history.Count - 1; i >= 0; i--)
+        {
+            var record = history[i];
+
+            text.Append($"\n\n{Clock(record.GameTime)} {record.WaveId}   террор {record.Terror:0.0}\n" +
+                        $"бюджет {record.Budget:0.0}, потрачено {record.Spent:0.0}\n" +
+                        $"{record.Composition}\n" +
+                        $"угол {record.CenterAngleDegrees:0}°, очагов {record.Groups}, " +
+                        $"отдых {record.ChillSeconds:0} с");
+
+            if (record.ExtraRows > 0)
+                text.Append($", +{record.ExtraRows} рядов");
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>Время партии как «минуты:секунды»: по секундам от начала считать неудобно.</summary>
+    private static string Clock(float seconds) =>
+        $"{Mathf.FloorToInt(seconds / 60f)}:{Mathf.FloorToInt(seconds % 60f):00}";
 
     /// <summary>
     /// Сколько различных пунктов назначения обслуживается сейчас.
