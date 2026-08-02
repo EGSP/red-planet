@@ -196,6 +196,9 @@ public partial class CommandSystem : GameSystem
         _selected.RemoveAll(actor => !Alive.Is(actor as Node));
         Groups.Sweep();
 
+        // Условия показа областей: Ctrl при выделении и покрытие турелей при стройке
+        GizmoGate.Refresh(_selected, Pending);
+
         if (Pending == null)
             return;
 

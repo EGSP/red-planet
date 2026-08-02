@@ -82,7 +82,15 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         Health = new Health(def.MaxHealth);
 
         QueueRedraw();
+        SetProcess(true);
     }
+
+    /// <summary>
+    /// Области инструментов включаются кадрами (Ctrl, покрытие турелей, вкладка giz),
+    /// поэтому постройка обязана перерисовываться, иначе круг появится только при
+    /// следующей смене состояния.
+    /// </summary>
+    public override void _Process(double delta) => QueueRedraw();
 
     /// <summary>
     /// Генератор заявляет выработку. Постройка с <see cref="ConversionDefinition"/> —
@@ -156,7 +164,9 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
 
-        VisionGizmo.Draw(this, VisionRadius);
+        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
+            selected: GizmoGate.IsSelected(this),
+            armedStructure: Definition.Weapon != null);
 
         // Корпус повёрнут на угол постановки. Правка трансформа канвы, а не поворот ноды:
         // ноду держит за собой турель, у которой в Rotation ось башни

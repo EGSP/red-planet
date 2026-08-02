@@ -15,7 +15,8 @@ using Godot;
 /// только кнопка паузы, и та ушла в правый нижний угол.
 ///
 /// Содержимое разложено по вертикальным вкладкам-доменам (<c>nav</c>, <c>boi</c>,
-/// <c>vis</c>, <c>wav</c>, <c>dia</c>), чтобы растущие блоки не сдвигали чужие секции.
+/// <c>vis</c>, <c>giz</c>, <c>wav</c>, <c>dia</c>), чтобы растущие блоки не сдвигали
+/// чужие секции.
 ///
 /// Панель показывается по F3 и на симуляцию не влияет: она читает состояние и правит
 /// только <see cref="DebugFlags"/>.
@@ -121,25 +122,28 @@ public partial class DebugPanel : CanvasLayer
         var stack = new VBoxContainer { CustomMinimumSize = new Vector2(PanelWidth, 0) };
         panel.AddChild(stack);
 
-        _pages = new Control[5];
+        _pages = new Control[6];
         _pages[0] = Page(stack);
         _pages[1] = Page(stack);
         _pages[2] = Page(stack);
         _pages[3] = Page(stack);
         _pages[4] = Page(stack);
+        _pages[5] = Page(stack);
 
         FillNav(_pages[0]);
         FillBoi(_pages[1]);
         FillVis(_pages[2]);
-        FillWav(_pages[3]);
-        FillDia(_pages[4]);
+        FillGiz(_pages[3]);
+        FillWav(_pages[4]);
+        FillDia(_pages[5]);
 
         var group = new ButtonGroup();
         Tab(tabs, group, 0, "nav", "Навигация", IconNav());
         Tab(tabs, group, 1, "boi", "Локальный обход", IconBoi());
         Tab(tabs, group, 2, "vis", "Зрение", IconVis());
-        Tab(tabs, group, 3, "wav", "Волны", IconWav());
-        Tab(tabs, group, 4, "dia", "Диагностика", IconDia());
+        Tab(tabs, group, 3, "giz", "Области юнитов", IconGiz());
+        Tab(tabs, group, 4, "wav", "Волны", IconWav());
+        Tab(tabs, group, 5, "dia", "Диагностика", IconDia());
 
         ShowPage(0);
     }
@@ -323,6 +327,63 @@ public partial class DebugPanel : CanvasLayer
             "«Пересборка» — во что обходится растр: она идёт по таймеру, а не каждый кадр.");
     }
 
+    private void FillGiz(Node box)
+    {
+        Section(box, "Области юнитов",
+            "Круги зрения, атаки и рабочей руки. По умолчанию выключены. " +
+            "Матрица ниже включает вид для всех / своих / врагов: «все» перекрывает " +
+            "остальные два. Помимо матрицы круги появляются у выделенных при зажатом Ctrl " +
+            "и радиусы атаки турелей — при постановке постройки со стволом.");
+
+        FilterMatrix(box, "зрение",
+            "Круг обзора сущности.",
+            GizmoFlags.Vision);
+
+        FilterMatrix(box, "атака",
+            "Дальность ствола и рёбра конуса прицеливания.",
+            GizmoFlags.Attack);
+
+        FilterMatrix(box, "работа",
+            "Радиус строительной руки / манипулятора.",
+            GizmoFlags.Work);
+
+        var hints = new Label
+        {
+            Text = "Ctrl + выделение — инструменты выбранных\n" +
+                   "стройка турели — покрытие стоящих стволов",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        hints.AddThemeFontSizeOverride("font_size", 11);
+        box.AddChild(hints);
+    }
+
+    /// <summary>
+    /// Три флажка одного вида: все / свои / враги. «Все» при включении делает остальные
+    /// неважными, но не сбрасывает их — сняв «все», прежний выбор восстанавливается.
+    /// </summary>
+    private static void FilterMatrix(Node parent, string title, string tooltip, GizmoFilter filter)
+    {
+        if (parent.GetChildCount() > 0)
+            parent.AddChild(new HSeparator());
+
+        var heading = new Label { Text = title };
+        heading.AddThemeFontSizeOverride("font_size", 12);
+        heading.AddThemeColorOverride("font_color", Heading);
+        parent.AddChild(heading);
+        Explain(heading, tooltip);
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+        parent.AddChild(row);
+
+        Check(row, "все", "Показать у всех сторон; «свои» и «враги» при этом не читаются.",
+            () => filter.All, on => filter.All = on);
+        Check(row, "свои", "Сторона игрока.",
+            () => filter.Ally, on => filter.Ally = on);
+        Check(row, "враги", "Сторона противника.",
+            () => filter.Enemy, on => filter.Enemy = on);
+    }
+
     private void FillWav(Node box)
     {
         Section(box, "Волны", "Что подсистема волн отобрала и что из этого вышло на карту.");
@@ -409,6 +470,35 @@ public partial class DebugPanel : CanvasLayer
         Dot(image, 8, 7);
         Dot(image, 7, 8);
         Dot(image, 8, 8);
+    });
+
+    /// <summary>Круг с крестом — области инструментов юнита.</summary>
+    private static Texture2D IconGiz() => Paint(image =>
+    {
+        int[] ring =
+        {
+            5, 2, 6, 2, 7, 2, 8, 2, 9, 2, 10, 2,
+            4, 3, 11, 3,
+            3, 4, 12, 4,
+            2, 5, 13, 5,
+            2, 6, 13, 6,
+            2, 9, 13, 9,
+            2, 10, 13, 10,
+            3, 11, 12, 11,
+            4, 12, 11, 12,
+            5, 13, 6, 13, 7, 13, 8, 13, 9, 13, 10, 13,
+        };
+
+        for (int i = 0; i < ring.Length; i += 2)
+            Dot(image, ring[i], ring[i + 1]);
+
+        for (int i = 4; i <= 11; i++)
+        {
+            Dot(image, i, 7);
+            Dot(image, i, 8);
+            Dot(image, 7, i);
+            Dot(image, 8, i);
+        }
     });
 
     /// <summary>Зигзаг — волна.</summary>

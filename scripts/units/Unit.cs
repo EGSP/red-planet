@@ -410,8 +410,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float radius = Definition.RadiusPx;
 
-        VisionGizmo.Draw(this, Definition.VisionRadiusPx);
-        WeaponGizmo.Draw(this, Weapon);
+        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
+            selected: GizmoGate.IsSelected(this));
 
         ShapeDraw.Circle(this, Vector2.Zero, radius,
             ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f, WidthMode.Screen),

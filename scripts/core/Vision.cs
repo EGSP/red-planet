@@ -28,7 +28,10 @@ public interface IVision
     Vector2 GlobalPosition { get; }
 }
 
-/// <summary>Отрисовка поля зрения — одинаковая у всех, кто его имеет.</summary>
+/// <summary>
+/// Примитив круга обзора. Когда его показывать, решает <see cref="GizmoGate"/> /
+/// <see cref="UnitGizmos"/> — сам круг про видимость ничего не знает.
+/// </summary>
 public static class VisionGizmo
 {
     /// <summary>

@@ -12,6 +12,10 @@ using Godot;
 /// У каждого места два контура. Сплошной — само место, которое займёт постройка. Пунктирный —
 /// обязательный зазор вокруг него: игрок должен видеть не только габарит, но и то,
 /// почему постановка вплотную к соседу отклоняется.
+///
+/// Если выбранная постройка со стволом, у каждого места рисуется ещё и круг атаки:
+/// иначе нельзя оценить перекрытие с уже стоящими турелями (их круги включает
+/// <see cref="GizmoGate.ShowArmedCoverage"/>).
 /// </summary>
 public partial class PlacementGhost : Node2D
 {
@@ -29,6 +33,8 @@ public partial class PlacementGhost : Node2D
         if (Definition == null)
             return;
 
+        var weapon = Definition.Weapon;
+
         foreach (var spot in Spots)
         {
             var kind = spot.Valid ? VizKind.PlacementValid : VizKind.PlacementInvalid;
@@ -38,6 +44,14 @@ public partial class PlacementGhost : Node2D
             ShapeDraw.Obb(this, area, DrawTheme.Outline(kind, 2f, WidthMode.Screen));
             ShapeDraw.Obb(this, area.Grow(Const.BuildMarginPx),
                 DrawTheme.Outline(kind, 1.5f, WidthMode.MinScreen, 0.35f));
+
+            if (weapon == null)
+                continue;
+
+            // Круг атаки будущего ствола: локально «вперёд» совпадает с углом постановки
+            DrawSetTransform(spot.Center, spot.Facing, Vector2.One);
+            WeaponGizmo.Draw(this, weapon);
+            DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
         }
     }
 }

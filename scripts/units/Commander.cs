@@ -26,10 +26,7 @@ public partial class Commander : Unit
         if (Definition == null)
             return;
 
-        // Радиус инструмента: слабая заливка + экранный контур
-        ShapeDraw.Circle(this, Vector2.Zero, Definition.WorkRangePx,
-            DrawTheme.Radius(VizKind.Work), 48);
-
+        // Круг руки рисует UnitGizmos в base._Draw — здесь только счётчик урона
         DrawDamageTaken();
     }
 
