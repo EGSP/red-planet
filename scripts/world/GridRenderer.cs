@@ -9,8 +9,8 @@ public partial class GridRenderer : Node2D
         float min = -r * Const.Unit;
         float max = (r + 1) * Const.Unit;
 
-        var line = ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.06f), 1f, WidthMode.Screen);
-        var axis = ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.16f), 1f, WidthMode.Screen);
+        var line = DrawTheme.Line(VizKind.GridLine);
+        var axis = DrawTheme.Line(VizKind.GridAxis);
 
         for (int i = -r; i <= r + 1; i++)
         {
@@ -22,6 +22,6 @@ public partial class GridRenderer : Node2D
         }
 
         ShapeDraw.Rect(this, new Rect2(min, min, max - min, max - min),
-            ShapeStyle.Outline(new Color(1f, 0.6f, 0.4f, 0.25f), 2f, WidthMode.Screen));
+            DrawTheme.Line(VizKind.WorldBorder));
     }
 }

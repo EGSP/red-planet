@@ -35,19 +35,13 @@ public static class VisionGizmo
     /// Круг обзора. Намеренно почти прозрачный: полей зрения на экране десятки,
     /// и заметными их делать нельзя — они превратят карту в паутину.
     /// </summary>
-    public static void Draw(CanvasItem canvas, float radius, Color tint)
+    public static void Draw(CanvasItem canvas, float radius)
     {
         if (radius <= 0f)
             return;
 
         // Слабая заливка + экранный контур: при zoom 0.25 дуга остаётся читаемой,
         // а десятки дисков не перекрывают карту
-        ShapeDraw.Circle(canvas, Vector2.Zero, radius,
-            ShapeStyle.Filled(
-                new Color(tint, 0.025f),
-                new Color(tint, 0.12f),
-                1f,
-                WidthMode.Screen),
-            48);
+        ShapeDraw.Circle(canvas, Vector2.Zero, radius, DrawTheme.Radius(VizKind.Vision), 48);
     }
 }

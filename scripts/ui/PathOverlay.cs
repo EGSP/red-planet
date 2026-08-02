@@ -10,11 +10,6 @@ using Godot;
 /// </summary>
 public partial class PathOverlay : Node2D
 {
-    private static readonly Color Ahead = new(0.45f, 0.95f, 1f, 0.85f);
-    private static readonly Color Behind = new(0.4f, 0.5f, 0.6f, 0.5f);
-    private static readonly Color Failed = new(1f, 0.45f, 0.35f, 0.9f);
-    private static readonly Color Visited = new(0.6f, 0.7f, 1f, 0.22f);
-
     private bool _shown;
 
     public override void _Process(double delta)
@@ -64,7 +59,7 @@ public partial class PathOverlay : Node2D
             return;
 
         float half = NavGrid.Cell * 0.5f;
-        var style = ShapeStyle.Solid(Visited);
+        var style = DrawTheme.Fill(VizKind.PathVisited, 0.22f);
 
         foreach (var point in pathfinding.Expanded)
             ShapeDraw.Rect(this, new Rect2(ToLocal(point) - new Vector2(half, half),
@@ -78,14 +73,14 @@ public partial class PathOverlay : Node2D
         if (handle == null || handle.Points.Count == 0)
             return;
 
-        var color = handle.Status == PathStatus.Unreachable || mobile.Movement.Blocked
-            ? Failed
-            : Ahead;
+        var kind = handle.Status == PathStatus.Unreachable || mobile.Movement.Blocked
+            ? VizKind.PathFailed
+            : VizKind.PathAhead;
 
-        var behind = ShapeStyle.Outline(Behind, 1.5f, WidthMode.MinScreen);
-        var ahead = ShapeStyle.Outline(color, 2f, WidthMode.Screen);
-        var waypoint = ShapeStyle.Filled(new Color(color, 0.55f), color, 1.5f, WidthMode.MinScreen);
-        var goal = ShapeStyle.Filled(new Color(color, 0.35f), new Color(color, 0.7f), 2f, WidthMode.Screen);
+        var behind = DrawTheme.Line(VizKind.PathBehind);
+        var ahead = DrawTheme.Line(kind);
+        var waypoint = DrawTheme.Filled(kind, 0.55f, 1f, 1.5f, WidthMode.MinScreen);
+        var goal = DrawTheme.Filled(kind, 0.35f, 0.7f, 2f, WidthMode.Screen);
 
         var from = mobile.GlobalPosition;
 

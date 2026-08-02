@@ -15,8 +15,6 @@ using Godot;
 /// </summary>
 public partial class OrderOverlay : Node2D
 {
-    private static readonly Color Ring = new(0.6f, 1f, 0.75f);
-
     public override void _Process(double delta) => QueueRedraw();
 
     public override void _Draw()
@@ -62,14 +60,9 @@ public partial class OrderOverlay : Node2D
     {
         float radius = ((actor as IDamageable)?.HitRadius ?? Const.Unit * 0.4f) + 6f;
         float band = 3f;
-        var style = ShapeStyle.Filled(
-            new Color(Ring, 0.12f),
-            new Color(Ring, 0.9f),
-            2f,
-            WidthMode.Screen);
 
         ShapeDraw.Ring(this, ToLocal(actor.GlobalPosition), radius - band * 0.5f, radius + band * 0.5f,
-            style, 32);
+            DrawTheme.Radius(VizKind.Selection), 32);
     }
 
     /// <summary>
@@ -89,24 +82,24 @@ public partial class OrderOverlay : Node2D
         {
             var order = orders[i];
             var to = ToLocal(order.Point);
-            var tint = Order.Tint(order.Kind);
+            var kind = Order.Viz(order.Kind);
 
             // Текущий шаг ярче остальных: очередь читается сверху вниз даже на пёстрой карте
             float alpha = i == 0 ? 0.75f : 0.4f;
-            var line = ShapeStyle.Outline(new Color(tint, alpha), i == 0 ? 2.5f : 1.5f,
+            var line = DrawTheme.Line(kind, alpha, i == 0 ? 2.5f : 1.5f,
                 i == 0 ? WidthMode.Screen : WidthMode.MinScreen);
 
             ShapeDraw.Line(this, from, to, line);
-            DrawMark(to, order.Kind, new Color(tint, alpha + 0.15f));
+            DrawMark(to, order.Kind, new Color(DrawTheme.Hue(kind), alpha + 0.15f));
 
             // Номер шага нужен только там, где шагов больше одного
             if (orders.Count > 1)
                 DrawString(font, to + new Vector2(9f, -9f), $"{i + 1}",
-                    HorizontalAlignment.Left, -1, 11, new Color(tint, 0.9f));
+                    HorizontalAlignment.Left, -1, 11, new Color(DrawTheme.Hue(kind), 0.9f));
 
             if (i == 0)
                 DrawString(font, to + new Vector2(9f, 18f), Order.Name(order.Kind),
-                    HorizontalAlignment.Left, -1, 11, new Color(tint, 0.8f));
+                    HorizontalAlignment.Left, -1, 11, new Color(DrawTheme.Hue(kind), 0.8f));
 
             from = to;
         }
@@ -149,9 +142,6 @@ public partial class OrderOverlay : Node2D
     private void DrawBand(Rect2 band)
     {
         var local = new Rect2(ToLocal(band.Position), band.Size);
-        var style = ShapeStyle.Filled(new Color(Ring, 0.08f), new Color(Ring, 0.7f), 1.5f,
-            WidthMode.MinScreen);
-
-        ShapeDraw.Rect(this, local, style);
+        ShapeDraw.Rect(this, local, DrawTheme.Radius(VizKind.Band));
     }
 }

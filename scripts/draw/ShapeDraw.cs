@@ -301,6 +301,79 @@ public static class ShapeDraw
         canvas.DrawArc(center, outer, 0f, Mathf.Tau, points, style.Stroke, width, style.Antialiased);
     }
 
+    /// <summary>
+    /// Заполненный кольцевой сектор с разными угловыми размахами ближней и дальней дуги
+    /// вокруг общего направления. Заливка занимает только кольцевую полосу и не доходит
+    /// до центра. Контур включает обе дуги и боковые рёбра.
+    /// <paramref name="nearArc"/> относится к внутреннему радиусу, <paramref name="farArc"/> —
+    /// к внешнему; углы в радианах. Переставленные радиусы меняются местами вместе с дугами.
+    /// </summary>
+    public static void RingSector(
+        CanvasItem canvas,
+        Vector2 center,
+        float innerRadius,
+        float outerRadius,
+        float direction,
+        float nearArc,
+        float farArc,
+        in ShapeStyle style,
+        int pointCount = 0)
+    {
+        float inner = innerRadius;
+        float outer = outerRadius;
+        float near = nearArc;
+        float far = farArc;
+
+        if (inner > outer)
+        {
+            (inner, outer) = (outer, inner);
+            (near, far) = (far, near);
+        }
+
+        if (outer <= 0f)
+            return;
+
+        inner = Mathf.Max(inner, 0f);
+        near = Mathf.Abs(near);
+        far = Mathf.Abs(far);
+
+        float maxSweep = Mathf.Max(near, far);
+        if (outer <= inner && maxSweep <= MinLength)
+            return;
+
+        int points = ResolvePointCount(pointCount, outer, maxSweep > MinLength ? maxSweep : Mathf.Tau * 0.05f);
+
+        if (style.HasFill && outer > inner && inner > 0f && maxSweep > MinLength)
+            DrawRingSectorFill(canvas, center, inner, outer, direction, near, far, style.Fill, points);
+
+        if (!style.HasStroke)
+            return;
+
+        TrackIfNeeded(canvas, style.WidthMode);
+        float width = WorldWidth(canvas, style.StrokeWidth, style.WidthMode);
+
+        float nearHalf = near * 0.5f;
+        float farHalf = far * 0.5f;
+        float nearStart = direction - nearHalf;
+        float nearEnd = direction + nearHalf;
+        float farStart = direction - farHalf;
+        float farEnd = direction + farHalf;
+
+        if (inner > 0f && near > MinLength)
+            canvas.DrawArc(center, inner, nearStart, nearEnd, points, style.Stroke, width, style.Antialiased);
+
+        if (far > MinLength)
+            canvas.DrawArc(center, outer, farStart, farEnd, points, style.Stroke, width, style.Antialiased);
+
+        var nearLeft = PointOnCircle(center, inner, nearStart);
+        var nearRight = PointOnCircle(center, inner, nearEnd);
+        var farLeft = PointOnCircle(center, outer, farStart);
+        var farRight = PointOnCircle(center, outer, farEnd);
+
+        canvas.DrawLine(nearLeft, farLeft, style.Stroke, width, style.Antialiased);
+        canvas.DrawLine(nearRight, farRight, style.Stroke, width, style.Antialiased);
+    }
+
     /// <summary>Осепараллельный прямоугольник в локальных координатах холста.</summary>
     public static void Rect(CanvasItem canvas, Rect2 rect, in ShapeStyle style)
     {
@@ -420,4 +493,42 @@ public static class ShapeDraw
 
         canvas.DrawColoredPolygon(points, fill);
     }
+
+    private static void DrawRingSectorFill(
+        CanvasItem canvas,
+        Vector2 center,
+        float inner,
+        float outer,
+        float direction,
+        float nearArc,
+        float farArc,
+        Color fill,
+        int pointCount)
+    {
+        int arcPoints = pointCount + 1;
+        var points = new Vector2[arcPoints * 2];
+
+        float farStart = direction - farArc * 0.5f;
+        float farEnd = direction + farArc * 0.5f;
+        float nearStart = direction - nearArc * 0.5f;
+        float nearEnd = direction + nearArc * 0.5f;
+
+        for (int i = 0; i < arcPoints; i++)
+        {
+            float t = i / (float)pointCount;
+            points[i] = PointOnCircle(center, outer, Mathf.Lerp(farStart, farEnd, t));
+        }
+
+        // Внутренняя дуга в обратном порядке, чтобы замкнуть кольцевой многоугольник.
+        for (int i = 0; i < arcPoints; i++)
+        {
+            float t = i / (float)pointCount;
+            points[arcPoints + i] = PointOnCircle(center, inner, Mathf.Lerp(nearEnd, nearStart, t));
+        }
+
+        canvas.DrawColoredPolygon(points, fill);
+    }
+
+    private static Vector2 PointOnCircle(Vector2 center, float radius, float angle) =>
+        center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
 }

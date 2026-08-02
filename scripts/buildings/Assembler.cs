@@ -120,10 +120,12 @@ public partial class Assembler : Building, IWorker
 
         if (Alive.Is(target))
             ShapeDraw.Line(this, Vector2.Zero, ToLocal(target.GlobalPosition),
-                ShapeStyle.Outline(new Color(0.6f, 1f, 0.7f, 0.55f), 2f, WidthMode.Screen));
+                DrawTheme.Line(VizKind.WorkBeamRepair));
 
         // Манипулятор: три коротких луча из центра — знак того, что башня рабочая
-        var arm = Working ? new Color(0.6f, 1f, 0.7f) : new Color(0.55f, 0.6f, 0.6f);
+        var arm = Working
+            ? DrawTheme.Hue(VizKind.WorkBeamRepair)
+            : new Color(0.55f, 0.6f, 0.6f);
         var armLine = ShapeStyle.Outline(arm, 3f, WidthMode.Screen);
 
         for (int i = 0; i < 3; i++)

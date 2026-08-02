@@ -31,13 +31,13 @@ public partial class PlacementGhost : Node2D
 
         foreach (var spot in Spots)
         {
-            var color = spot.Valid ? new Color(0.3f, 1f, 0.4f) : new Color(1f, 0.3f, 0.3f);
+            var kind = spot.Valid ? VizKind.PlacementValid : VizKind.PlacementInvalid;
             var area = Placement.Footprint(Definition, spot.Center, spot.Facing);
 
-            ShapeDraw.Obb(this, area, ShapeStyle.Solid(new Color(color, 0.22f)));
-            ShapeDraw.Obb(this, area, ShapeStyle.Outline(color, 2f, WidthMode.Screen));
+            ShapeDraw.Obb(this, area, DrawTheme.Fill(kind, 0.22f));
+            ShapeDraw.Obb(this, area, DrawTheme.Outline(kind, 2f, WidthMode.Screen));
             ShapeDraw.Obb(this, area.Grow(Const.BuildMarginPx),
-                ShapeStyle.Outline(new Color(color, 0.35f), 1.5f, WidthMode.MinScreen));
+                DrawTheme.Outline(kind, 1.5f, WidthMode.MinScreen, 0.35f));
         }
     }
 }

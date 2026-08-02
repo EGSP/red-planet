@@ -148,7 +148,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
 
-        VisionGizmo.Draw(this, VisionRadius, Definition.Color);
+        VisionGizmo.Draw(this, VisionRadius);
 
         // Каркас повёрнут так же, как встанет постройка: место он занимает уже сейчас,
         // и показывать его иначе, чем оно занято, нельзя

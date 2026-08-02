@@ -410,8 +410,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float radius = Definition.RadiusPx;
 
-        VisionGizmo.Draw(this, Definition.VisionRadiusPx, Definition.Color);
-        WeaponGizmo.Draw(this, Weapon, Definition.Color);
+        VisionGizmo.Draw(this, Definition.VisionRadiusPx);
+        WeaponGizmo.Draw(this, Weapon);
 
         ShapeDraw.Circle(this, Vector2.Zero, radius,
             ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f, WidthMode.Screen),
@@ -426,6 +426,6 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей
         if (Alive.Is(_attached))
             ShapeDraw.Line(this, Vector2.Zero, ToLocal(_attached.GlobalPosition),
-                ShapeStyle.Outline(new Color(1f, 1f, 0.5f, 0.6f), 2f, WidthMode.Screen));
+                DrawTheme.Line(VizKind.WorkBeamBuild));
     }
 }

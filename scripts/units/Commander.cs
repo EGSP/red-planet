@@ -28,12 +28,7 @@ public partial class Commander : Unit
 
         // Радиус инструмента: слабая заливка + экранный контур
         ShapeDraw.Circle(this, Vector2.Zero, Definition.WorkRangePx,
-            ShapeStyle.Filled(
-                new Color(0.5f, 0.8f, 1f, 0.04f),
-                new Color(0.5f, 0.8f, 1f, 0.18f),
-                1.5f,
-                WidthMode.Screen),
-            48);
+            DrawTheme.Radius(VizKind.Work), 48);
 
         DrawDamageTaken();
     }

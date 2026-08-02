@@ -2,15 +2,15 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Предпросмотр мира в редакторе: границы поля, кольца появления, раскладка точек метала
-/// и форма наступления выбранной волны.
+/// Предпросмотр мира в редакторе: границы поля, заполненные пояса размещения,
+/// раскладка точек метала и заполненная область наступления выбранной волны.
 ///
 /// ЗАЧЕМ ОН НУЖЕН. Числа, задающие геометрию партии, подбираются глазом по карте, а до сих
 /// пор проверялись запуском: правишь радиус — запускаешь — ждёшь две минуты первой волны —
 /// смотришь. Здесь то же самое видно сразу и, что важнее, видно ВМЕСТЕ: подвинув поле точек
-/// метала, вы двигаете и окружность появления противника, которая от него отсчитывается,
-/// и форму волны, которая отсчитывается уже от окружности. Такие зависимости между
-/// системами по отдельным полям инспектора не читаются.
+/// метала, вы двигаете и пояс появления противника, который от него отсчитывается,
+/// и кольцевой сектор волны, который отсчитывается уже от внешней границы пояса. Такие
+/// зависимости между системами по отдельным полям инспектора не читаются.
 ///
 /// ЧЕМ ОН НЕ ЯВЛЯЕТСЯ. Это не редактор карты и не отдельная модель мира: он ничего не хранит
 /// и ничего не создаёт. Геометрию считают те же <see cref="MetalSpotLayout"/>,
@@ -22,13 +22,6 @@ using Godot;
 [Tool]
 public partial class SessionPreview : Node2D
 {
-    private static readonly Color WorldColor = new(1f, 0.6f, 0.4f, 0.5f);
-    private static readonly Color GridColor = new(1f, 1f, 1f, 0.05f);
-    private static readonly Color SpotColor = new(0.6f, 0.85f, 1f, 0.9f);
-    private static readonly Color ClearanceColor = new(1f, 0.4f, 0.4f, 0.35f);
-    private static readonly Color FieldColor = new(0.6f, 0.85f, 1f, 0.35f);
-    private static readonly Color SpawnColor = new(1f, 0.35f, 0.3f, 0.5f);
-    private static readonly Color ShapeColor = new(1f, 0.8f, 0.3f, 0.5f);
     private static readonly Color TextColor = new(0.85f, 0.9f, 1f);
 
     // ── Что показывать ────────────────────────────────────────────────────────────
@@ -119,11 +112,31 @@ public partial class SessionPreview : Node2D
         if (ShowRings)
             DrawRings(settings);
 
+        // Заливка зон и волны — снизу; точки метала и силуэты юнитов — поверх неё,
+        // иначе полупрозрачный сектор закрывает маркеры в своей полосе.
+        WavePreview wave = default;
+        string waveNote = null;
+        bool haveWave = false;
+
+        if (ShowWave)
+        {
+            haveWave = TryBuildWavePreview(settings, out wave);
+            waveNote = haveWave ? wave.Note : _note;
+        }
+
+        if (haveWave)
+            DrawWaveShapes(in wave);
+
         if (ShowMetalSpots)
             DrawSpots(settings);
 
-        if (ShowWave)
-            DrawWave(settings);
+        if (haveWave)
+            DrawWaveUnits(in wave);
+
+        // Подпись волны важнее предупреждения о точках: при включённой волне она
+        // должна остаться и после DrawSpots.
+        if (waveNote != null)
+            _note = waveNote;
 
         if (ShowLegend)
             DrawLegend(settings);
@@ -136,7 +149,7 @@ public partial class SessionPreview : Node2D
         int r = World.RadiusCells;
         float min = -r * Const.Unit;
         float max = (r + 1) * Const.Unit;
-        var grid = ShapeStyle.Outline(GridColor, 1f, WidthMode.Screen);
+        var grid = DrawTheme.Line(VizKind.GridLine);
 
         for (int i = -r; i <= r + 1; i++)
         {
@@ -147,26 +160,53 @@ public partial class SessionPreview : Node2D
         }
 
         ShapeDraw.Rect(this, new Rect2(min, min, max - min, max - min),
-            ShapeStyle.Outline(WorldColor, 3f, WidthMode.Screen));
+            DrawTheme.Line(VizKind.WorldBorder, width: 3f));
     }
 
     /// <summary>
-    /// Три окружности, показывающие связь настроек друг с другом: зачистка у базы, край поля
-    /// точек метала и появление противника. Последняя выведена из второй множителем, поэтому
-    /// двигается вместе с ней — увидеть это иначе, чем рядом, нельзя.
+    /// Четыре непересекающихся пояса, показывающие связь настроек друг с другом: зачистка
+    /// у базы, стартовые точки, край поля точек метала и появление противника. Последний
+    /// выведен из поля точек множителем, поэтому двигается вместе с ним — увидеть это
+    /// иначе, чем рядом, нельзя. Пояса не накладываются, чтобы alpha в центре не складывалась.
     /// </summary>
     private void DrawRings(WorldSettings settings)
     {
         var center = Const.LandingPoint;
+        NormalizedRingBounds(settings, out float clearance, out float start, out float field,
+            out float spawn);
 
-        ShapeDraw.Circle(this, center, settings.BaseClearancePx,
-            ShapeStyle.Outline(ClearanceColor, 2f, WidthMode.Screen), 96);
-        ShapeDraw.Circle(this, center, settings.StartRadiusPx,
-            ShapeStyle.Outline(ClearanceColor, 1f, WidthMode.Screen), 96);
-        ShapeDraw.Circle(this, center, settings.FieldRadiusPx,
-            ShapeStyle.Outline(FieldColor, 2f, WidthMode.Screen), 128);
-        ShapeDraw.Circle(this, center, settings.SpawnRadiusPx,
-            ShapeStyle.Outline(SpawnColor, 2f, WidthMode.Screen), 160);
+        // Диск [0, clearance], затем кольца между соседними границами.
+        // Пояс нулевой толщины не рисуем: иначе при совпадении границ Ring даёт
+        // второй контур поверх уже нарисованного.
+        ShapeDraw.Circle(this, center, clearance,
+            DrawTheme.Radius(VizKind.PreviewClearance));
+        if (start > clearance)
+            ShapeDraw.Ring(this, center, clearance, start,
+                DrawTheme.Radius(VizKind.PreviewStart));
+        if (field > start)
+            ShapeDraw.Ring(this, center, start, field,
+                DrawTheme.Radius(VizKind.PreviewField));
+        if (spawn > field)
+            ShapeDraw.Ring(this, center, field, spawn,
+                DrawTheme.Radius(VizKind.PreviewSpawn));
+    }
+
+    /// <summary>
+    /// Монотонные границы поясов: каждый следующий радиус не меньше предыдущего.
+    /// При перепутанном порядке в настройках нулевая толщина пояса просто не рисуется,
+    /// а геометрия не инвертируется.
+    /// </summary>
+    private static void NormalizedRingBounds(
+        WorldSettings settings,
+        out float clearance,
+        out float start,
+        out float field,
+        out float spawn)
+    {
+        clearance = Mathf.Max(settings.BaseClearancePx, 0f);
+        start = Mathf.Max(settings.StartRadiusPx, clearance);
+        field = Mathf.Max(settings.FieldRadiusPx, start);
+        spawn = Mathf.Max(settings.SpawnRadiusPx, field);
     }
 
     private void DrawSpots(WorldSettings settings)
@@ -178,7 +218,7 @@ public partial class SessionPreview : Node2D
         // уменьшении, и линия в два пикселя на нём попросту пропадает
         foreach (var position in placed)
             ShapeDraw.Rect(this, new Rect2(position - new Vector2(half, half), half * 2f, half * 2f),
-                ShapeStyle.Solid(SpotColor));
+                DrawTheme.Fill(VizKind.Metal, 0.9f));
 
         if (placed.Count < settings.SpotCount)
             _note = $"точек размещено {placed.Count} из {settings.SpotCount}: " +
@@ -195,14 +235,38 @@ public partial class SessionPreview : Node2D
 
     // ── Волна ─────────────────────────────────────────────────────────────────────
 
-    private void DrawWave(WorldSettings settings)
+    private readonly struct WavePreview
     {
+        public readonly WaveShape Shape;
+        public readonly List<UnitDefinition> Ordered;
+        public readonly float Center;
+        public readonly int Groups;
+        public readonly string Note;
+
+        public WavePreview(
+            WaveShape shape,
+            List<UnitDefinition> ordered,
+            float center,
+            int groups,
+            string note)
+        {
+            Shape = shape;
+            Ordered = ordered;
+            Center = center;
+            Groups = groups;
+            Note = note;
+        }
+    }
+
+    private bool TryBuildWavePreview(WorldSettings settings, out WavePreview preview)
+    {
+        preview = default;
         var wave = Wave();
 
         if (wave == null)
         {
             _note = "волн в справочнике нет";
-            return;
+            return false;
         }
 
         var waveSettings = Waves ?? new WaveSettings();
@@ -219,51 +283,60 @@ public partial class SessionPreview : Node2D
         float center = Mathf.DegToRad(DirectionDegrees);
         int groups = Mathf.Max(Mathf.Min(shape.Groups, ordered.Count), 1);
 
-        for (int g = 0; g < groups; g++)
+        string note = $"{wave.Id}: бюджет {budget:0.0}, потрачено {_composer.Spent:0.0} — " +
+                      $"{_composer.Describe()}";
+
+        if (!wave.Fits(Terror))
+            note += $". При терроре {Terror:0} эта волна не выпадет";
+
+        preview = new WavePreview(shape, ordered, center, groups, note);
+        return true;
+    }
+
+    private void DrawWaveShapes(in WavePreview wave)
+    {
+        for (int g = 0; g < wave.Groups; g++)
         {
-            float angle = WaveFormation.GroupAngle(shape, center, g);
+            float angle = WaveFormation.GroupAngle(wave.Shape, wave.Center, g);
+            DrawWaveSector(wave.Shape, angle);
+        }
+    }
 
-            DrawOutline(shape, angle);
-
+    private void DrawWaveUnits(in WavePreview wave)
+    {
+        for (int g = 0; g < wave.Groups; g++)
+        {
+            float angle = WaveFormation.GroupAngle(wave.Shape, wave.Center, g);
             int index = 0;
 
-            for (int i = g; i < ordered.Count; i += groups)
+            for (int i = g; i < wave.Ordered.Count; i += wave.Groups)
             {
-                var (position, _) = WaveFormation.Slot(shape, angle, index++);
-                var definition = ordered[i];
+                var (position, _) = WaveFormation.Slot(wave.Shape, angle, index++);
+                var definition = wave.Ordered[i];
 
                 ShapeDraw.Circle(this, position, definition.RadiusPx,
                     ShapeStyle.Solid(definition.Color));
             }
         }
-
-        _note = $"{wave.Id}: бюджет {budget:0.0}, потрачено {_composer.Spent:0.0} — " +
-                $"{_composer.Describe()}";
-
-        if (!wave.Fits(Terror))
-            _note += $". При терроре {Terror:0} эта волна не выпадет";
     }
 
-    /// <summary>Обвод формы: две дуги и боковые стороны между ними.</summary>
-    private void DrawOutline(WaveShape shape, float center)
+    /// <summary>Заполненный кольцевой сектор формы волны.</summary>
+    private void DrawWaveSector(WaveShape shape, float center)
     {
         float near = shape.NearRadiusPx;
         float far = near + shape.DepthPx;
         float nearArc = shape.ArcAt(0f);
         float farArc = shape.ArcAt(1f);
-        var outline = ShapeStyle.Outline(ShapeColor, 2f, WidthMode.Screen);
 
-        ShapeDraw.Arc(this, Vector2.Zero, near, center - nearArc * 0.5f, center + nearArc * 0.5f,
-            outline, 48);
-
-        ShapeDraw.Arc(this, Vector2.Zero, far, center - farArc * 0.5f, center + farArc * 0.5f,
-            outline, 48);
-
-        for (int side = -1; side <= 1; side += 2)
-            ShapeDraw.Line(this,
-                Heading.Forward(center + side * nearArc * 0.5f) * near,
-                Heading.Forward(center + side * farArc * 0.5f) * far,
-                outline);
+        ShapeDraw.RingSector(
+            this,
+            Vector2.Zero,
+            near,
+            far,
+            center,
+            nearArc,
+            farArc,
+            DrawTheme.Radius(VizKind.PreviewWave));
     }
 
     private WaveDefinition Wave()

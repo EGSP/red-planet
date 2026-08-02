@@ -91,7 +91,7 @@ public partial class NavGridOverlay : Node2D
     private static Color Tint(GameManager gm, int index, int required)
     {
         if (DebugFlags.NavBlocked && gm.Nav.BlockedAt(index))
-            return new Color(1f, 0.25f, 0.2f, 0.55f);
+            return new Color(DrawTheme.Hue(VizKind.NavBlocked), 0.55f);
 
         if (DebugFlags.NavComponents)
         {
@@ -99,7 +99,7 @@ public partial class NavGridOverlay : Node2D
 
             if (label == 0)
                 return DebugFlags.NavBlocked
-                    ? new Color(0.6f, 0.15f, 0.15f, 0.35f)
+                    ? new Color(DrawTheme.Hue(VizKind.NavBlocked) * new Color(0.6f, 0.6f, 0.75f), 0.35f)
                     : new Color(0f, 0f, 0f, 0f);
 
             // Золотое сечение по кругу цветов: соседние области заведомо не сливаются
@@ -112,15 +112,18 @@ public partial class NavGridOverlay : Node2D
             int distance = gm.Nav.DistanceAt(index);
 
             if (distance <= 0)
-                return new Color(0.4f, 0f, 0f, 0.5f);
+                return new Color(DrawTheme.Hue(VizKind.NavBlocked) * new Color(0.4f, 0f, 0f), 0.5f);
 
             // Насыщаем на восьми ячейках: дальше от стен разница уже ничего не говорит
             float depth = Mathf.Clamp(distance / (8f * 3f), 0f, 1f);
             bool tight = distance < required;
 
-            return tight
-                ? new Color(1f, 0.55f, 0.1f, 0.4f)
-                : new Color(0.2f, 0.55f + depth * 0.4f, 1f, 0.08f + depth * 0.22f);
+            if (tight)
+                return new Color(DrawTheme.Hue(VizKind.NavTight), 0.4f);
+
+            // Компонента G и alpha зависят от глубины клиренса; RGB-база — NavOpen
+            var open = DrawTheme.Hue(VizKind.NavOpen);
+            return new Color(open.R, 0.55f + depth * 0.4f, open.B, 0.08f + depth * 0.22f);
         }
 
         return new Color(0f, 0f, 0f, 0f);
@@ -134,8 +137,8 @@ public partial class NavGridOverlay : Node2D
 
     private void DrawFootprints(GameManager gm)
     {
-        var body = ShapeStyle.Outline(new Color(0.4f, 0.85f, 1f, 0.85f), 2f, WidthMode.Screen);
-        var margin = ShapeStyle.Outline(new Color(1f, 0.85f, 0.3f, 0.5f), 1.5f, WidthMode.MinScreen);
+        var body = DrawTheme.Line(VizKind.Footprint);
+        var margin = DrawTheme.Line(VizKind.FootprintMargin);
 
         foreach (var obstacle in gm.Obstacles.All)
         {

@@ -76,7 +76,7 @@ public partial class Turret : Building, IArmed
 
         float half = Const.Unit * 0.5f;
 
-        WeaponGizmo.Draw(this, Weapon, Definition.Color);
+        WeaponGizmo.Draw(this, Weapon);
 
         // Башня — треугольник носом вперёд по оси. Рисуется в координатах самой ноды,
         // до всякой правки трансформа: нос обязан совпадать с конусом прицеливания
