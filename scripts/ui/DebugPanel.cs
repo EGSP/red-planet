@@ -33,6 +33,7 @@ public partial class DebugPanel : CanvasLayer
     private Label _navigation;
     private Label _paths;
     private Label _waves;
+    private Label _fog;
 
     public override void _Ready()
     {
@@ -189,6 +190,36 @@ public partial class DebugPanel : CanvasLayer
             "что раскладка не разъехалась с настоящими положениями.",
             () => DebugFlags.BoidCells, on => DebugFlags.BoidCells = on);
 
+        Section(box, "Туман войны",
+            "Поля зрения стороны игрока сведены в растр по ячейкам в 16 px, и по нему " +
+            "рисуются заливка закрытой части карты и обводка по общей границе видимого. " +
+            "На симуляцию это не влияет: цели выбираются и приказы отдаются по всей карте.");
+
+        Check(box, "заливка", "Закрашивать непросматриваемую часть карты.",
+            () => Fog()?.Fog ?? false, on => Set(settings => settings.Fog = on));
+
+        Check(box, "обводка",
+            "Линия по общей границе поля зрения. Толщина задана в пикселях экрана, " +
+            "поэтому при отдалении камеры линия не утолщается.",
+            () => Fog()?.Outline ?? false, on => Set(settings => settings.Outline = on));
+
+        Check(box, "скрывать противника",
+            "Юниты и снаряды противника вне поля зрения не рисуются. Стрелять по ним " +
+            "и выделять их по-прежнему можно: скрытие касается только отрисовки.",
+            () => Fog()?.HideEnemies ?? false, on => Set(settings => settings.HideEnemies = on));
+
+        Colour(box, "цвет заливки", "Цвет и плотность закрытой части карты.",
+            () => Fog()?.FogColor ?? Colors.Black, value => Set(settings => settings.FogColor = value));
+
+        Colour(box, "цвет обводки", "Цвет линии границы.",
+            () => Fog()?.OutlineColor ?? Colors.Yellow,
+            value => Set(settings => settings.OutlineColor = value));
+
+        _fog = Readout(box,
+            "«Источников» — сколько зрячих сущностей участвовало в последней пересборке. " +
+            "«Скрыто» — сколько сущностей противника сейчас не рисуется. " +
+            "«Пересборка» — во что обходится растр: она идёт по таймеру, а не каждый кадр.");
+
         Section(box, "Счёт боя", "То же, что раньше висело в левом верхнем углу.");
         _combat = Readout(box, "Пришло, уничтожено, потеряно, и сколько накопил коммандер.");
 
@@ -271,6 +302,45 @@ public partial class DebugPanel : CanvasLayer
         Explain(box, tooltip);
     }
 
+    /// <summary>Выбор цвета. Альфа правится вместе с цветом: ею задана плотность заливки.</summary>
+    private static void Colour(Node parent, string title, string tooltip,
+        Func<Color> read, Action<Color> write)
+    {
+        var row = new HBoxContainer();
+        parent.AddChild(row);
+
+        var label = new Label { Text = title, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        row.AddChild(label);
+
+        var picker = new ColorPickerButton
+        {
+            Color = read(),
+            EditAlpha = true,
+            CustomMinimumSize = new Vector2(64, 20),
+        };
+
+        picker.ColorChanged += value => write(value);
+        row.AddChild(picker);
+
+        Explain(label, tooltip);
+    }
+
+    /// <summary>
+    /// Настройки тумана берутся у системы зрения, а не хранятся снимком: ресурс живёт
+    /// столько же, сколько сессия, а панель переживает её пересборку.
+    /// </summary>
+    private static FogSettings Fog() => GameManager.I?.System<VisionSystem>()?.Settings;
+
+    /// <summary>Правка настроек тумана, безопасная к отсутствию системы в сцене.</summary>
+    private static void Set(Action<FogSettings> change)
+    {
+        var settings = Fog();
+
+        if (settings != null)
+            change(settings);
+    }
+
     /// <summary>
     /// Пояснение при наведении: что это за механизм, как он работает в игре и что должно
     /// быть видно на экране.
@@ -341,6 +411,7 @@ public partial class DebugPanel : CanvasLayer
             $"последняя пересборка {gm.Nav.LastBuildMs:0.00} мс";
 
         _waves.Text = Waves(gm.System<WaveSystem>());
+        _fog.Text = Vision(gm.System<VisionSystem>());
 
         var pathfinding = gm.System<PathfindingSystem>();
         var movement = gm.System<MovementSystem>();
@@ -396,6 +467,23 @@ public partial class DebugPanel : CanvasLayer
         }
 
         return text.ToString();
+    }
+
+    /// <summary>Состояние растра видимости: размер, источники и стоимость пересборки.</summary>
+    private static string Vision(VisionSystem vision)
+    {
+        if (vision == null)
+            return "система зрения не в сцене";
+
+        var field = vision.Field;
+
+        string rate = vision.Settings.EveryFrame
+            ? "каждый кадр"
+            : $"{vision.Settings.UpdateHz:0} раз в секунду";
+
+        return $"поле {field.Width}×{field.Width} по {field.Cell} px\n" +
+               $"источников {field.Sources}   скрыто {vision.Hidden}\n" +
+               $"последняя пересборка {field.LastBuildMs:0.00} мс, {rate}";
     }
 
     /// <summary>Время партии как «минуты:секунды»: по секундам от начала считать неудобно.</summary>

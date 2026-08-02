@@ -37,6 +37,8 @@
 [ext_resource type="Script" uid="uid://bwl8ipmuljqfq" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="40_worldsettings"]
+[ext_resource type="Script" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
+[ext_resource type="Resource" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
 
 [node name="Session" type="Node2D" unique_id=716196635]
 script = ExtResource("1_session")
@@ -109,6 +111,12 @@ StepOrder = 70
 script = ExtResource("14_projectile")
 StepOrder = 80
 
+[node name="VisionSystem" type="Node" parent="Systems" unique_id=1799323356]
+script = ExtResource("41_vision")
+Settings = ExtResource("42_fogsettings")
+StepOrder = 90
+UpdateCycle = 1
+
 [node name="DamageSystem" type="Node" parent="Systems" unique_id=1799323355]
 script = ExtResource("15_damage")
 Phase = 2
@@ -132,6 +140,7 @@ Deposits = NodePath("Deposits")
 Structures = NodePath("Structures")
 Actors = NodePath("Actors")
 Projectiles = NodePath("Projectiles")
+Fog = NodePath("Fog")
 Effects = NodePath("Effects")
 
 [node name="Terrain" type="Node2D" parent="Playground" unique_id=304019415]
@@ -146,6 +155,8 @@ script = ExtResource("4_grid")
 [node name="Actors" type="Node2D" parent="Playground" unique_id=1387971349]
 
 [node name="Projectiles" type="Node2D" parent="Playground" unique_id=2038464301]
+
+[node name="Fog" type="Node2D" parent="Playground" unique_id=1153521829]
 
 [node name="Effects" type="Node2D" parent="Playground" unique_id=1153521828]
 

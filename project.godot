@@ -19,6 +19,10 @@ config/icon="res://icon.svg"
 
 
 
+
+
+
+
 Content="*res://scripts/data/Content.cs"
 
 [display]

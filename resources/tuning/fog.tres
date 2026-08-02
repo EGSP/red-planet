@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="FogSettings" format=3 uid="uid://byklt06fheqwx"]
+
+[ext_resource type="Script" uid="uid://3454qi2vdvmh" path="res://scripts/vision/FogSettings.cs" id="1_fog"]
+
+[resource]
+script = ExtResource("1_fog")
+FogColor = Color(0.24959998, 0.24959998, 0.32, 0.72156864)
+OutlineColor = Color(0.4455, 0.835725, 0.99, 0.9019608)
+OutlineWidthPx = 0.5
