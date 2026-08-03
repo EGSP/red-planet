@@ -99,7 +99,10 @@ public sealed class Order
         Pos = target.GlobalPosition,
     };
 
-    /// <summary>Сопровождение: приказ не завершается сам, пока цель жива.</summary>
+    /// <summary>
+    /// Сопровождение: одиночный приказ живёт, пока цель жива; с хвостом очереди
+    /// снимается при рандеву или простое ведущего (см. <see cref="Unit.RunFollow"/>).
+    /// </summary>
     public static Order Follow(Node2D leader) => new()
     {
         Kind = OrderKind.Follow,

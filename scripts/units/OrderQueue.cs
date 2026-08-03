@@ -97,6 +97,36 @@ public sealed class OrderQueue : IOrderFollower
         }
     }
 
+    /// <summary>
+    /// Есть ли приказ после текущего. Нужен сопровождению: Follow с хвостом очереди
+    /// обязан когда-то уступить место следующему, а одиночный Follow — нет.
+    /// </summary>
+    public bool HasMore
+    {
+        get
+        {
+            Advance();
+
+            if (_current == null)
+                return false;
+
+            bool seen = false;
+
+            foreach (var _ in Remaining)
+            {
+                if (!seen)
+                {
+                    seen = true;
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+    }
+
     public bool Allows(OrderKind kind) => _owner.AllowedOrders.Allows(kind);
 
     // ── роль подписчика ветки ──────────────────────────────────────────────────

@@ -437,12 +437,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Сопровождение: держаться рядом, но не наступать на пятки. Приказ не завершается сам —
-    /// его вытесняет работа, как только она появится.
+    /// Сопровождение: держаться рядом, но не наступать на пятки.
     ///
     /// СОПРОВОЖДЕНИЕ ВКЛЮЧАЕТ ПОМОЩЬ. Строитель, приставленный к строителю, берётся
     /// за то же дело, что и ведущий, — в том числе когда ведущий сам сопровождает
     /// другого строителя: помощь идёт по цепочке Follow вглубь.
+    ///
+    /// ОЧЕРЕДЬ ПОСЛЕ FOLLOW. Пока помощь или прикрытие заняты делом, сопровождение
+    /// держится. Иначе, если за Follow уже стоит следующий приказ, сопровождение
+    /// снимается, как только исполнитель дошёл до ведущего или ведущий без дела:
+    /// иначе Shift-цепочка после Follow никогда бы не началась.
     /// </summary>
     private void RunFollow(Order order, double dt)
     {
@@ -451,10 +455,38 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         Detach();
 
-        var to = order.Entity.GlobalPosition;
+        if (Orders.HasMore && FollowDone(order))
+        {
+            Orders.DropCurrent();
+            return;
+        }
 
-        if (GlobalPosition.DistanceTo(to) > Const.FollowDistancePx)
-            Movement.Seek(to, Const.FollowDistancePx);
+        var to = order.Entity.GlobalPosition;
+        float range = FollowRange;
+
+        if (GlobalPosition.DistanceTo(to) > range)
+            Movement.Seek(to, range);
+    }
+
+    /// <summary>
+    /// Дистанция сопровождения: 2.5 собственных размера. Размер — диаметр корпуса
+    /// (два радиуса), поэтому стоп = <c>5 · HitRadius</c>.
+    /// </summary>
+    private float FollowRange => HitRadius * 5f;
+
+    /// <summary>
+    /// Сопровождение исчерпано для очереди с хвостом: либо уже рядом с ведущим,
+    /// либо ведущему нечего делать и ждать больше нечего.
+    /// </summary>
+    private bool FollowDone(Order order)
+    {
+        if (!Alive.Is(order.Entity))
+            return true;
+
+        if (GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= FollowRange)
+            return true;
+
+        return order.Entity is IOrderable { Orders.Idle: true };
     }
 
     /// <summary>
