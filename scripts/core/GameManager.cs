@@ -176,6 +176,8 @@ public partial class GameManager : Node
     /// </summary>
     public override void _ExitTree()
     {
+        Nav?.Dispose();
+
         if (I == this)
             I = null;
     }

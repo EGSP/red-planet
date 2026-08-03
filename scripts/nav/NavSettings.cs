@@ -24,4 +24,15 @@ public partial class NavSettings : Resource
     /// </summary>
     [Export(PropertyHint.Range, "0.1,2,0.01")]
     public float ClearanceFactor = 1f;
+
+    /// <summary>
+    /// Верхняя граница сохраняемого chamfer-расстояния, в третях ячейки.
+    ///
+    /// Благодаря насыщению изменение препятствия влияет только на конечную окрестность,
+    /// а не на весь растр. Значение должно быть не меньше <see cref="NavGrid.Required"/>
+    /// для самого крупного юнита при текущем <see cref="ClearanceFactor"/>; для радиуса
+    /// 0.48 клетки и фактора 1 достаточно 8, запас 12 закрывает более жёсткий тюнинг.
+    /// </summary>
+    [Export(PropertyHint.Range, "4,64,1")]
+    public int MaxClearance = 12;
 }

@@ -128,6 +128,8 @@ public partial class PathfindingSystem : GameSystem
 
     public override void Step(double dt)
     {
+        GM.Nav.Poll();
+
         _now += dt;
 
         Requests = _requests;

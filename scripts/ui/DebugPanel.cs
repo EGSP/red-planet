@@ -696,8 +696,10 @@ public partial class DebugPanel : CanvasLayer
 
         _navigation.Text =
             $"поле {NavGrid.Width}×{NavGrid.Width} по {NavGrid.Cell} px, зазор {Const.BuildMarginPx:0} px\n" +
-            $"препятствий {gm.Obstacles.Count}   ревизия {gm.Nav.Revision}\n" +
-            $"последняя пересборка {gm.Nav.LastBuildMs:0.00} мс";
+            $"препятствий {gm.Obstacles.Count}   ревизия {gm.Nav.Revision} " +
+            $"(снимок {gm.Nav.ActiveRevision}, ждут {gm.Nav.RequestedRevision})\n" +
+            $"пересчёт {gm.Nav.LastBuildMs:0.00} мс, тайлов {gm.Nav.LastRebuiltTiles}" +
+            (gm.Nav.BuildPending ? ", фон занят" : "");
 
         _waves.Text = Waves(gm.System<WaveSystem>());
         _fog.Text = Vision(gm.System<VisionSystem>());

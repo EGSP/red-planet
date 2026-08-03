@@ -1,7 +1,6 @@
-[gd_resource type="Resource" script_class="NavSettings" format=3]
+[gd_resource type="Resource" script_class="NavSettings" format=3 uid="uid://dj0jlvgwg4ip7"]
 
-[ext_resource type="Script" path="res://scripts/nav/NavSettings.cs" id="1_nav"]
+[ext_resource type="Script" uid="uid://cbgw5rf45trk2" path="res://scripts/nav/NavSettings.cs" id="1_nav"]
 
 [resource]
 script = ExtResource("1_nav")
-ClearanceFactor = 1.0

@@ -18,18 +18,29 @@ using Godot;
 /// из индекса. Своей подписки карта не держит — иначе постройка, поставленная и проверенная
 /// в одном кадре, попадала бы в карту только к концу кадра, и два каркаса встали бы на одно
 /// место.
+///
+/// ЖУРНАЛ ИЗМЕНЕНИЙ нужен фоновому пересчёту растра: он читает не живые ноды, а снимки
+/// прямоугольников и объединённую область правок с заданной ревизии.
 /// </summary>
 public sealed class ObstacleMap
 {
     /// <summary>Сторона ячейки широкой фазы. Клетка застройки: здания крупнее неё редки.</summary>
     private const int BucketPx = Const.Unit;
 
+    /// <summary>Сколько прошлых записей журнала держим, пока потребитель не догнал ревизию.</summary>
+    private const int JournalKeep = 256;
+
     private readonly List<IObstacle> _items = new();
 
     /// <summary>Снимки прямоугольников. Ключ сравнивается по ссылке — Equals ноды звать нельзя.</summary>
     private readonly Dictionary<object, Obb> _shapes = new(ByReference.Instance);
 
+    /// <summary>Ревизия, на которой препятствие появилось. Нужна временной маске добавлений.</summary>
+    private readonly Dictionary<object, int> _bornAt = new(ByReference.Instance);
+
     private readonly Dictionary<Vector2I, List<IObstacle>> _buckets = new();
+
+    private readonly List<ObstacleChange> _journal = new();
 
     /// <summary>Сколько раз менялся состав. По нему пересобирается растр навигации.</summary>
     public int Revision { get; private set; }
@@ -58,7 +69,8 @@ public sealed class ObstacleMap
         foreach (var cell in Cells(shape.Bounds))
             Bucket(cell).Add(obstacle);
 
-        Touch(shape.Bounds);
+        Touch(shape, added: true);
+        _bornAt[obstacle] = Revision;
     }
 
     /// <summary>
@@ -69,6 +81,8 @@ public sealed class ObstacleMap
     {
         if (obstacle == null || !_shapes.Remove(obstacle, out var shape))
             return;
+
+        _bornAt.Remove(obstacle);
 
         for (int i = _items.Count - 1; i >= 0; i--)
         {
@@ -85,7 +99,7 @@ public sealed class ObstacleMap
                 bucket.Remove(obstacle);
         }
 
-        Touch(shape.Bounds);
+        Touch(shape, added: false);
     }
 
     /// <summary>Пересекается ли область с чем-нибудь. Касание краями пересечением не считается.</summary>
@@ -186,8 +200,71 @@ public sealed class ObstacleMap
         return (local - closest).LengthSquared() < radius * radius;
     }
 
+    /// <summary>Копия всех запомненных прямоугольников — вход фонового пересчёта.</summary>
+    public Obb[] SnapshotShapes()
+    {
+        var shapes = new Obb[_items.Count];
+
+        for (int i = 0; i < _items.Count; i++)
+            shapes[i] = _shapes[_items[i]];
+
+        return shapes;
+    }
+
     /// <summary>
-    /// Выталкивание из одного прямоугольника. Считается в его собственных координатах:
+    /// Объединить области журнала строго после <paramref name="afterRevision"/>.
+    /// Пустой прямоугольник означает, что после указанной ревизии правок не было.
+    /// </summary>
+    public Rect2 ChangesSince(int afterRevision)
+    {
+        bool any = false;
+        float x0 = 0f, y0 = 0f, x1 = 0f, y1 = 0f;
+
+        foreach (var change in _journal)
+        {
+            if (change.Revision <= afterRevision)
+                continue;
+
+            var bounds = change.Bounds;
+
+            if (!any)
+            {
+                x0 = bounds.Position.X;
+                y0 = bounds.Position.Y;
+                x1 = bounds.End.X;
+                y1 = bounds.End.Y;
+                any = true;
+                continue;
+            }
+
+            x0 = Mathf.Min(x0, bounds.Position.X);
+            y0 = Mathf.Min(y0, bounds.Position.Y);
+            x1 = Mathf.Max(x1, bounds.End.X);
+            y1 = Mathf.Max(y1, bounds.End.Y);
+        }
+
+        return any ? new Rect2(x0, y0, x1 - x0, y1 - y0) : new Rect2();
+    }
+
+    /// <summary>
+    /// Прямоугольники, добавленные после указанной ревизии и ещё присутствующие в карте.
+    /// Нужны временной маске непроходимости, пока фоновый снимок не опубликован.
+    /// </summary>
+    public void CopyAddsSince(int afterRevision, List<Obb> destination)
+    {
+        destination.Clear();
+
+        foreach (var obstacle in _items)
+        {
+            if (!_bornAt.TryGetValue(obstacle, out int born) || born <= afterRevision)
+                continue;
+
+            destination.Add(_shapes[obstacle]);
+        }
+    }
+
+    /// <summary>
+    /// Вытолкнуть из одного прямоугольника. Считается в его собственных координатах:
     /// повёрнутый прямоугольник там снова осепараллелен, а окружность от поворота
     /// не меняется вовсе, поэтому весь разбор случаев остаётся прежним.
     ///
@@ -233,10 +310,14 @@ public sealed class ObstacleMap
         return shape.ToGlobal(closest + direction * radius);
     }
 
-    private void Touch(Rect2 rect)
+    private void Touch(in Obb shape, bool added)
     {
         Revision++;
-        LastChange = rect;
+        LastChange = shape.Bounds;
+        _journal.Add(new ObstacleChange(Revision, shape, added));
+
+        if (_journal.Count > JournalKeep)
+            _journal.RemoveRange(0, _journal.Count - JournalKeep);
     }
 
     private List<IObstacle> Bucket(Vector2I cell)
