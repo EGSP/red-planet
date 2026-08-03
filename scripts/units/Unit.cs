@@ -789,47 +789,35 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
                 DrawTheme.Line(VizKind.WorkBeamBuild));
     }
 
-    /// <summary>Корпус по силуэту из определения: круг, прямоугольник или шестиугольник.</summary>
+    /// <summary>
+    /// Корпус по силуэту из определения. Простые силуэты рисуются одной фигурой, составные
+    /// — набором выпуклых частей из <see cref="HullGeometry"/>.
+    /// </summary>
     private void DrawHull(float radius)
     {
         var fill = ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f,
             WidthMode.Screen);
 
-        switch (Definition.Hull)
-        {
-            case HullShape.Rect:
-                DrawRectHull(radius, fill);
-                break;
+        DrawHullShape(radius, fill);
 
-            case HullShape.Hex:
-                DrawPolygonHull(radius, 6, fill);
-                break;
+        // Дополнительные контуры брони. У составных силуэтов повтор самого силуэта дал бы
+        // обводку по каждой части, то есть ту же сетку по стыкам, ради снятия которой корпус
+        // и рисуется без обводки. Поэтому там броня выражена окружностью, а цвет ей берётся
+        // от корпуса затемнением: чёрная линия поверх крупной машины читается как грязь
+        bool composite = HullGeometry.Composite(Definition.Hull);
+        var armour = composite
+            ? Definition.Color.Darkened(0.45f) with { A = 0.7f }
+            : new Color(0f, 0f, 0f, 0.55f);
 
-            default:
-                ShapeDraw.Circle(this, Vector2.Zero, radius, fill, 24);
-                break;
-        }
-
-        // Дополнительные контуры брони
         for (int ring = 1; ring <= Definition.ArmorRings; ring++)
         {
             float gap = radius * 0.12f * ring;
-            var outline = ShapeStyle.Outline(new Color(0f, 0f, 0f, 0.55f), 1.5f, WidthMode.Screen);
+            var outline = ShapeStyle.Outline(armour, 1.5f, WidthMode.Screen);
 
-            switch (Definition.Hull)
-            {
-                case HullShape.Rect:
-                    DrawRectHull(radius + gap, outline);
-                    break;
-
-                case HullShape.Hex:
-                    DrawPolygonHull(radius + gap, 6, outline);
-                    break;
-
-                default:
-                    ShapeDraw.Circle(this, Vector2.Zero, radius + gap, outline, 24);
-                    break;
-            }
+            if (composite)
+                ShapeDraw.Circle(this, Vector2.Zero, radius + gap, outline, 28);
+            else
+                DrawHullShape(radius + gap, outline);
         }
 
         // Ближний бой: заливка передней трети поверх корпуса. Признак берётся из
@@ -839,6 +827,46 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             float tip = radius * 0.55f;
             ShapeDraw.Rect(this, new Rect2(radius * 0.15f, -tip * 0.7f, tip, tip * 1.4f),
                 ShapeStyle.Solid(Definition.Color.Lightened(0.15f)));
+        }
+    }
+
+    /// <summary>Один силуэт заданным стилем. Общее место для корпуса и контуров брони.</summary>
+    private void DrawHullShape(float radius, in ShapeStyle style)
+    {
+        if (HullGeometry.Composite(Definition.Hull))
+        {
+            var parts = HullGeometry.Parts(Definition.Hull, radius);
+            var accents = HullGeometry.Accents(Definition.Hull);
+
+            // Обводка снимается: она проходила бы по стыкам частей, а разложение
+            // на выпуклые куски продиктовано заливкой и показывать его незачем.
+            // Части различаются оттенком — см. HullGeometry.Accents
+            var accent = ShapeStyle.Solid(style.Fill.Lightened(0.22f));
+            var plain = ShapeStyle.Solid(style.Fill);
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                bool lighten = i < accents.Length && accents[i];
+
+                ShapeDraw.Polygon(this, parts[i], lighten ? accent : plain);
+            }
+
+            return;
+        }
+
+        switch (Definition.Hull)
+        {
+            case HullShape.Rect:
+                DrawRectHull(radius, style);
+                break;
+
+            case HullShape.Hex:
+                DrawPolygonHull(radius, 6, style);
+                break;
+
+            default:
+                ShapeDraw.Circle(this, Vector2.Zero, radius, style, 24);
+                break;
         }
     }
 

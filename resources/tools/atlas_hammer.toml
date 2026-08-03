@@ -1,0 +1,17 @@
+# Молоты Атласа: сейсмический титан бьёт в упор и очень тяжело.
+# Ствол закреплён на корпусе — наводится разворотом всей машины, как у Inferno.
+# Дальность 2.2 при уроне 90: подойти он обязан, и в этом вся его уязвимость.
+
+id   = "atlas_hammer"
+base = "/tools/base_weapon.toml"
+name = "Молоты Атласа"
+
+range             = 2.2
+damage            = 90.0
+fire_interval     = 0.55
+projectile_speed  = 11.0
+spread_degrees    = 9.0
+aim_cone_degrees  = 24.0
+projectile_radius = 0.2
+projectile_color  = [1.0, 0.7, 0.3]
+aim_while_moving  = false

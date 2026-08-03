@@ -1,0 +1,16 @@
+# Осадное орудие Тора: наибольшая дальность в игре — 10 клеток.
+# Тор бьёт по базе, не входя в зону турелей, поэтому встречать его придётся армией.
+# Снаряд медленный: у выстрела заметное время подлёта, и уйти с места успевает подвижное.
+
+id   = "thor_siege"
+base = "/tools/base_weapon.toml"
+name = "Осадное орудие Тора"
+
+range             = 10.0
+damage            = 70.0
+fire_interval     = 1.3
+projectile_speed  = 12.0
+spread_degrees    = 2.5
+aim_cone_degrees  = 8.0
+projectile_radius = 0.18
+projectile_color  = [1.0, 0.4, 0.5]
