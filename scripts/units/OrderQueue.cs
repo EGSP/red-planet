@@ -9,13 +9,15 @@ using Godot;
 /// то, что у каждого своё, — место в этом списке. Отсюда и поведение отряда: двое работают
 /// по одной ветке, но один уже взялся за второй приказ, пока другой заканчивает первый.
 ///
-/// ДВЕ ССЫЛКИ, А НЕ ОДНА. Своей исполнитель считает ветку, на которую подписан (<c>Home</c>);
-/// указатель же может уйти дальше — в ветку, пристёгнутую к ней продолжением. Так работает
-/// приказ, отданный по Shift тем, кто занят разным: каждый доделывает своё и переходит
-/// в общую ветку, не переставая быть подписчиком своей.
+/// ССЫЛКА ОДНА: КУРСОР ВСЕГДА ПОДПИСАН НА ТУ ВЕТКУ, В КОТОРОЙ СТОИТ. Доделав свою ветку,
+/// исполнитель переходит в пристёгнутую к ней, и подписка переезжает вместе с указателем.
+/// Отсюда правило сбора отряда: приказ движения ждёт только тех, кто уже здесь, а тот, кто
+/// ещё доделывает предыдущую ветку, никого не задерживает. Ждать его значило бы, что двое
+/// свободных, посланных с Shift вслед за третьим, простоят в первой точке до конца его
+/// стройки, — со стороны это неотличимо от зависшего приказа.
 ///
-/// УКАЗАТЕЛЬ — ССЫЛКА НА ПРИКАЗ, А НЕ НОМЕР В СПИСКЕ: в середину бывает вставка,
-/// и номер после неё означал бы уже другой приказ.
+/// УКАЗАТЕЛЬ — ССЫЛКА НА ПРИКАЗ, А НЕ НОМЕР В СПИСКЕ: список общий, из него убирают
+/// пройденное, и номер после уборки означал бы уже другой приказ.
 ///
 /// ФИЛЬТР ЖИВЁТ ЗДЕСЬ, и обойти его нельзя: очередь знает своего хозяина и спрашивает
 /// у него набор допустимых приказов на каждой постановке. Поэтому раздающей системе
@@ -25,14 +27,11 @@ using Godot;
 /// вовсе. Иначе «дойти и починить» превратилось бы в «дойти», и юнит молча встал бы
 /// посреди карты вместо того, чтобы не принять приказ.
 /// </summary>
-public sealed class OrderQueue
+public sealed class OrderQueue : IOrderFollower
 {
     private readonly IOrderable _owner;
 
-    /// <summary>Ветка, на которую исполнитель подписан. Ноль — приказов нет вовсе.</summary>
-    private OrderList _home;
-
-    /// <summary>Ветка, в которой указатель находится сейчас: своя либо пристёгнутая к ней.</summary>
+    /// <summary>Ветка, в которой стоит указатель и на которую подписан. Ноль — приказов нет.</summary>
     private OrderList _list;
 
     private Order _current;
@@ -44,15 +43,9 @@ public sealed class OrderQueue
     /// </summary>
     private Order _done;
 
-    /// <summary>Предел длины цепочки при обходе. Защита от вырожденных случаев.</summary>
-    private const int ChainLimit = 512;
-
     public OrderQueue(IOrderable owner) => _owner = owner;
 
-    /// <summary>Своя ветка исполнителя. Читают раздача приказов и отладка.</summary>
-    public OrderList Home => _home;
-
-    /// <summary>Ветка, в которой исполнитель работает прямо сейчас.</summary>
+    /// <summary>Ветка, в которой исполнитель работает прямо сейчас. Читают раздача и отладка.</summary>
     public OrderList List => _list;
 
     public Order Current
@@ -106,6 +99,28 @@ public sealed class OrderQueue
 
     public bool Allows(OrderKind kind) => _owner.AllowedOrders.Allows(kind);
 
+    // ── роль подписчика ветки ──────────────────────────────────────────────────
+
+    /// <summary>Курсор жив, пока жив его хозяин: работать по ветке больше некому.</summary>
+    public bool Live => Alive.Is(_owner as Node);
+
+    /// <summary>
+    /// Стоит ли указатель на этом приказе — или встанет на него, когда его спросят.
+    ///
+    /// СПРАШИВАЕТСЯ ИЗ УБОРКИ, ПОЭТОМУ НИЧЕГО НЕ ТРОГАЕТ. Обращение к <see cref="Current"/>
+    /// двигает указатель, а двигать чужие указатели уборка не вправе: она обходит подписчиков
+    /// ветки, среди которых наш — чужой. Поэтому смотрим наперёд, но состояние не меняем.
+    /// </summary>
+    public bool Awaits(Order order) => order != null && ReferenceEquals(Ahead, order);
+
+    public bool Within(List<IOrderable> allowed) => allowed.Contains(_owner);
+
+    public void Enlist(Order order) => order?.Enlist(_owner.EntityId);
+
+    public void Dismiss(Order order) => order?.Dismiss(_owner.EntityId);
+
+    // ── постановка приказов ────────────────────────────────────────────────────
+
     /// <summary>
     /// Заменить очередь целиком собственными приказами. Пользуются этим системы выдачи
     /// задач и завод: их приказы личные и общими быть не должны. Приказ игрока раздаётся
@@ -120,36 +135,34 @@ public sealed class OrderQueue
         // самостоятельно выбранную цель значило бы сорить ими каждые полторы секунды
         if (Personal)
         {
-            _home.Clear();
+            _list.Clear();
         }
         else
         {
             Leave();
-            _home = OrderList.Open();
-            _home.Subscribe(_owner);
+            _list = OrderList.Open();
+            _list.Subscribe(this);
         }
 
         foreach (var order in orders)
-            _home.Add(order);
+            _list.Add(order);
 
-        _list = _home;
         _done = null;
-        _current = _home.At(0);
+        _current = _list.At(0);
         return true;
     }
 
     /// <summary>Подписаться на ветку и встать в её начало, отпустив прежнюю.</summary>
     public void Adopt(OrderList list)
     {
-        if (list == null || list == _home)
+        if (list == null || list == _list)
             return;
 
         Leave();
 
-        _home = list;
         _list = list;
         _done = null;
-        list.Subscribe(_owner);
+        list.Subscribe(this);
         _current = list.At(0);
     }
 
@@ -165,22 +178,21 @@ public sealed class OrderQueue
     /// </summary>
     public void Fork()
     {
-        if (_home == null || Personal)
+        if (_list == null || Personal)
             return;
 
         var carried = new List<Order>(Remaining);
 
         Leave();
 
-        _home = OrderList.Open();
-        _home.Subscribe(_owner);
+        _list = OrderList.Open();
+        _list.Subscribe(this);
 
         foreach (var order in carried)
-            _home.Add(order);
+            _list.Add(order);
 
-        _list = _home;
         _done = null;
-        _current = _home.At(0);
+        _current = _list.At(0);
     }
 
     public void Clear() => Leave();
@@ -229,18 +241,31 @@ public sealed class OrderQueue
     /// </summary>
     public void DropAllFor(Node2D target)
     {
-        if (_home == null)
+        if (_list == null)
             return;
 
         var resume = Survivor(target);
 
-        _home.DropAllFor(target);
+        _list.DropAllFor(target);
 
-        if (_current != null && _list.IndexOf(_current) < 0)
+        if (_current != null && _list.IndexOf(_current) >= 0)
+            return;
+
+        if (resume == null)
         {
-            _current = resume;
-            _list = ListOf(resume) ?? _list;
+            // Остатка не осталось вовсе. Встаём в конец своей ветки, а не в начало:
+            // дописанное в неё будет замечено, а пройденное не повторится
+            _current = null;
+            _done = _list.At(_list.Count - 1);
+            return;
         }
+
+        var where = ListOf(resume);
+
+        if (where != null && where != _list)
+            Move(where);
+
+        _current = resume;
     }
 
     /// <summary>Первый начиная с текущего приказ, который уборка не тронет.</summary>
@@ -259,7 +284,7 @@ public sealed class OrderQueue
         if (order == null)
             return null;
 
-        for (var list = _home; list != null; list = list.Next)
+        for (var list = _list; list != null; list = list.Next)
             if (list.IndexOf(order) >= 0)
                 return list;
 
@@ -267,37 +292,82 @@ public sealed class OrderQueue
     }
 
     /// <summary>
-    /// Найти себе текущий приказ, если его нет: сперва в своей ветке за последним сделанным,
-    /// затем в пристёгнутой к ней. Проверяется при каждом обращении к текущему приказу,
-    /// а не только при шаге, — и ветку пристёгивают, и приказ в неё дописывают уже после
-    /// того, как исполнитель со всем управился и встал.
+    /// Найти себе текущий приказ, если его нет, и перейти в пристёгнутую ветку, если своя
+    /// закончилась. Проверяется при каждом обращении к текущему приказу, а не только при
+    /// шаге, — и ветку пристёгивают, и приказ в неё дописывают уже после того, как
+    /// исполнитель со всем управился и встал.
+    /// </summary>
+    private void Advance()
+    {
+        if (_current != null || _list == null)
+            return;
+
+        var found = Seek(out var where);
+
+        if (found == null)
+            return;
+
+        if (where != _list)
+            Move(where);
+
+        _current = found;
+    }
+
+    /// <summary>
+    /// Куда указатель встанет: тот же обход, что и в <see cref="Advance"/>, но ничего
+    /// не меняющий. Отсюда же берёт ответ <see cref="Awaits"/>.
+    /// </summary>
+    private Order Ahead => _current ?? Seek(out _);
+
+    /// <summary>
+    /// Первый приказ, до которого указателю есть дело: сперва в своей ветке за последним
+    /// сделанным, затем в пристёгнутой к ней.
     ///
     /// Сделанного в ветке может уже не быть: приказ, мимо которого прошли все, из неё
     /// убирают. Тогда убрано и всё, что было до него, а значит следующий по порядку —
     /// это первый оставшийся.
     /// </summary>
-    private void Advance()
+    private Order Seek(out OrderList where)
     {
-        for (int step = 0; step < ChainLimit && _current == null && _list != null; step++)
+        where = _list;
+        var done = _done;
+
+        for (int step = 0; step < OrderList.ChainLimit && where != null; step++)
         {
-            _current = _list.At(_done == null ? 0 : _list.IndexOf(_done) + 1);
+            var found = where.At(done == null ? 0 : where.IndexOf(done) + 1);
 
-            if (_current != null || _list.Next == null)
-                return;
+            if (found != null)
+                return found;
 
-            _list = _list.Next;
-            _done = null;
+            where = where.Next;
+            done = null;
         }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Перейти в пристёгнутую ветку. ПОДПИСКА ПЕРЕЕЗЖАЕТ ВМЕСТЕ С УКАЗАТЕЛЕМ: исполнитель
+    /// выходит из состава приказов прежней ветки и входит в состав приказов новой. Это и есть
+    /// правило сбора — ждут друг друга те, кто уже здесь.
+    ///
+    /// Прежняя ветка от этого может остаться без подписчиков вовсе и уйти из индекса.
+    /// Так и задумано: работать по ней больше некому.
+    /// </summary>
+    private void Move(OrderList target)
+    {
+        _list?.Unsubscribe(this);
+        _list = target;
+        _done = null;
+        target.Subscribe(this);
     }
 
     /// <summary>Ветка принадлежит одному этому исполнителю и никуда не ведёт.</summary>
-    private bool Personal =>
-        _home is { Subscribers.Count: 1, Next: null } && _home.Subscribers[0] == _owner;
+    private bool Personal => _list != null && _list.Only(this);
 
     private void Leave()
     {
-        _home?.Unsubscribe(_owner);
-        _home = null;
+        _list?.Unsubscribe(this);
         _list = null;
         _current = null;
         _done = null;

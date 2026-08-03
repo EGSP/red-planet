@@ -362,12 +362,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         }
 
         // План неосязаем и мощности не принимает: его нужно превратить в каркас.
-        // Приказ на каркас план впишет в очередь сам, следом за собой
+        //
+        // Раннего выхода здесь нет намеренно: воплотившись, план объявляет о смене, и цель
+        // приказа к следующей строке — уже каркас, к которому можно подключиться тем же
+        // кадром. Если же место оказалось занято и план тихо отменился, целью остался он сам,
+        // и подключаться не к чему — проверка ниже отработает вхолостую
         if (order.Target is BuildPlan plan)
         {
             Detach();
             plan.Realize();
-            return;
         }
 
         if (order.Target is WorkNode node && _attached != node)
@@ -438,7 +441,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// его вытесняет работа, как только она появится.
     ///
     /// СОПРОВОЖДЕНИЕ ВКЛЮЧАЕТ ПОМОЩЬ. Строитель, приставленный к строителю, берётся
-    /// за то же дело, что и ведущий, а не смотрит, как тот работает один.
+    /// за то же дело, что и ведущий, — в том числе когда ведущий сам сопровождает
+    /// другого строителя: помощь идёт по цепочке Follow вглубь.
     /// </summary>
     private void RunFollow(Order order, double dt)
     {
@@ -495,20 +499,22 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// не отменяя. Попади приказ в очередь — его пришлось бы оттуда вынимать, а до тех пор
     /// помощник считался бы занятым и сопровождение бы потерял.
     ///
-    /// Предел внимания отсчитывается от ведущего: помощник ходит за ним, а не за его
-    /// работой, и уходить от него дальше, чем видит, не должен.
+    /// ЦЕПОЧКА СОПРОВОЖДЕНИЯ. Ведущий, который сам идёт по <see cref="OrderKind.Follow"/>,
+    /// считается занятым тем же делом, что и его ведущий: иначе помощник смотрел бы
+    /// только на приказ сопровождения и к стройке не подключался. Искать «исходного»
+    /// строителя снаружи не нужно — разбор идёт по ссылкам Follow вглубь.
+    ///
+    /// Предел внимания отсчитывается от непосредственного ведущего: помощник ходит за
+    /// ним, а не за его работой, и уходить от него дальше, чем видит, не должен.
     /// </summary>
     private bool Assist(Order order, double dt)
     {
         if (Definition.BuildTool == null || order.Entity is not IOrderable leader)
             return false;
 
-        var work = leader.Orders.Current;
+        var work = AssistedWork(leader);
 
         if (work == null || !Orders.Allows(work.Kind))
-            return false;
-
-        if (work.Kind is not (OrderKind.Build or OrderKind.Repair))
             return false;
 
         var point = work.Point;
@@ -543,6 +549,37 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Стройка или ремонт, которым занят ведущий, в том числе через цепочку Follow.
+    /// Предел глубины отсекает циклы A→B→A без выделения списка на каждый кадр.
+    /// </summary>
+    private Order AssistedWork(IOrderable leader)
+    {
+        const int depthLimit = 16;
+
+        for (int i = 0; i < depthLimit; i++)
+        {
+            var work = leader.Orders.Current;
+
+            if (work == null)
+                return null;
+
+            if (work.Kind is OrderKind.Build or OrderKind.Repair)
+                return work;
+
+            if (work.Kind != OrderKind.Follow || work.Entity is not IOrderable next)
+                return null;
+
+            // Цикл, вернувшийся к помощнику, или сопровождение самого себя
+            if (ReferenceEquals(next, this) || ReferenceEquals(next, leader))
+                return null;
+
+            leader = next;
+        }
+
+        return null;
     }
 
     /// <summary>

@@ -34,7 +34,31 @@ public sealed class Order
 {
     public OrderKind Kind;
     public Vector2 Pos;
-    public IWorkSite Target;
+
+    private IWorkSite _target;
+
+    /// <summary>
+    /// Место работы. Свойство, а не поле, потому что приказ подписывается на объявление
+    /// цели о собственной смене: план становится каркасом, и цель переезжает на преемника
+    /// (см. <see cref="OnSuperseded"/>).
+    /// </summary>
+    public IWorkSite Target
+    {
+        get => _target;
+        set
+        {
+            if (ReferenceEquals(_target, value))
+                return;
+
+            if (_target != null)
+                _target.Superseded -= OnSuperseded;
+
+            _target = value;
+
+            if (_target != null)
+                _target.Superseded += OnSuperseded;
+        }
+    }
 
     /// <summary>Кого бьём, кого чиним или за кем идём — смотря какой приказ.</summary>
     public Node2D Entity;
@@ -82,6 +106,27 @@ public sealed class Order
         Entity = leader,
         Pos = leader.GlobalPosition,
     };
+
+    /// <summary>
+    /// Место работы сменилось преемником: план поставил на себе каркас и уходит из мира.
+    ///
+    /// ПРИКАЗ НЕ ЗАМЕНЯЕТСЯ И НЕ ДОПИСЫВАЕТСЯ — у него переезжает цель. План и каркас суть
+    /// две стадии одной постройки, а не две разные задачи, поэтому в очереди им положен
+    /// один шаг, и шаг этот живёт от разметки до готового строения. Приказ остаётся тем же
+    /// объектом на том же месте во всех ветках, где он значится, поэтому ни искать эти
+    /// ветки, ни вставлять в них что-либо не требуется.
+    ///
+    /// Состав и прибывшие сохраняются: исполнитель, стоящий у плана, стоит и у каркаса,
+    /// и подходить ему заново некуда.
+    /// </summary>
+    private void OnSuperseded(IWorkSite successor)
+    {
+        if (successor == null)
+            return;
+
+        Target = successor;
+        Pos = successor.GlobalPosition;
+    }
 
     /// <summary>Приказ роздан ещё одному исполнителю. Зовёт очередь при постановке.</summary>
     public void Enlist(int actorId) => _party.Add(actorId);

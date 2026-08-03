@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Ветка приказов: список приказов, те, кто по нему работает, и продолжение — ветка,
-/// в которую исполнители переходят, закончив эту.
+/// Ветка приказов: список приказов, подписчики, работающие по нему, и продолжение — ветка,
+/// в которую подписчики переходят, закончив эту.
 ///
 /// ЗАЧЕМ ОТДЕЛЬНОЙ СУЩНОСТЬЮ, А НЕ ПОЛЕМ ЮНИТА. Пока список принадлежал юниту, владельцем
 /// времени жизни очереди оказывался последний живой её участник, а взять на неё ссылку
@@ -13,9 +13,15 @@ using Godot;
 ///
 /// ЗАЧЕМ ВЕТКИ СЦЕПЛЯЮТСЯ. Приказ по Shift достаётся тем, кто занят разным: у одного своя
 /// очередь, у второго своя, третий свободен. Дописать его каждому по отдельности значит
-/// размножить одно намерение по спискам — а оно одно, и вставка в него потом должна быть
-/// одна. Поэтому дописанное заводится отдельной веткой, а к ней ПРИСТЁГИВАЮТСЯ хвосты
-/// тех очередей, что её получили: каждый доделывает своё и переходит в общую.
+/// размножить одно намерение по спискам — а оно одно. Поэтому дописанное заводится отдельной
+/// веткой, а к ней ПРИСТЁГИВАЮТСЯ хвосты тех очередей, что её получили: каждый доделывает
+/// своё и переходит в общую.
+///
+/// ПОДПИСЧИК — ЛИБО КУРСОР ИСПОЛНИТЕЛЯ, ЛИБО ДРУГАЯ ВЕТКА (<see cref="IOrderFollower"/>).
+/// Список подписчиков поэтому один, а не два: ветка отвечает за своих участников ровно так же,
+/// как курсор отвечает за себя, и различать их снаружи незачем. Пристегнуть ветку значит
+/// подписать её — ссылка вперёд и подписка назад суть одно и то же отношение, записанное
+/// с двух сторон.
 ///
 /// ССЫЛКА СТАВИТСЯ ТОЛЬКО В ХВОСТ И ТОЛЬКО ВПЕРЁД. Кольцо здесь означало бы очередь,
 /// которая держит саму себя и потому не умрёт никогда, — <see cref="LinkNext"/> его
@@ -24,18 +30,22 @@ using Godot;
 /// СПИСОК ОБЩИЙ, УКАЗАТЕЛЬ ЛИЧНЫЙ. Двое работают по одной ветке, но каждый держит свой
 /// указатель (см. <see cref="OrderQueue"/>): один уже взялся за второй приказ, пока другой
 /// заканчивает первый. Поэтому приказ снимается из списка не тогда, когда его исполнил
-/// первый, а когда мимо него прошли все.
+/// первый, а когда мимо него прошли все — и когда сверху не осталось никого, кто до него
+/// ещё дойдёт.
 /// </summary>
-public sealed class OrderList
+public sealed class OrderList : IOrderFollower
 {
-    /// <summary>Предел длины цепочки при обходах. Защита от вырожденных случаев.</summary>
-    private const int ChainLimit = 64;
+    /// <summary>
+    /// Предел длины цепочки при обходах. Защита от вырожденных случаев: кольца запрещены
+    /// при пристёгивании, поэтому рабочим ограничением это число не является. Объявлено
+    /// здесь одно на всю систему приказов — курсор считает по нему же.
+    /// </summary>
+    public const int ChainLimit = 64;
 
     private readonly List<Order> _items = new();
-    private readonly List<IOrderable> _subscribers = new();
 
-    /// <summary>Ветки, пристёгнутые к этой: их исполнители придут сюда, доделав своё.</summary>
-    private readonly List<OrderList> _referrers = new();
+    /// <summary>Кто работает по ветке: курсоры исполнителей и ветки, ведущие сюда.</summary>
+    private readonly List<IOrderFollower> _followers = new();
 
     private OrderList _next;
 
@@ -51,8 +61,6 @@ public sealed class OrderList
     }
 
     public IReadOnlyList<Order> Items => _items;
-
-    public IReadOnlyList<IOrderable> Subscribers => _subscribers;
 
     public int Count => _items.Count;
 
@@ -74,9 +82,10 @@ public sealed class OrderList
     }
 
     /// <summary>
-    /// Есть ли кому работать по ветке. Считается по всем, кто способен до неё дойти:
-    /// пристёгнутая ветка живёт, пока живы исполнители тех очередей, что в неё ведут,
-    /// даже если своих подписчиков у неё пока нет ни одного.
+    /// Есть ли кому работать по ветке. Считается по всем подписчикам, а поскольку ветка,
+    /// ведущая сюда, тоже подписчик, счёт получается по всей достижимости: пристёгнутая
+    /// ветка живёт, пока живы исполнители тех очередей, что в неё ведут, даже если своих
+    /// курсоров у неё пока нет ни одного.
     ///
     /// Условие живости для индекса, поэтому оно только отвечает и ничего не трогает:
     /// побочных действий предикат иметь не вправе.
@@ -85,12 +94,8 @@ public sealed class OrderList
     {
         get
         {
-            foreach (var actor in _subscribers)
-                if (Alive.Is(actor as Node))
-                    return true;
-
-            foreach (var referrer in _referrers)
-                if (referrer.Live)
+            foreach (var follower in _followers)
+                if (follower.Live)
                     return true;
 
             return false;
@@ -98,12 +103,52 @@ public sealed class OrderList
     }
 
     /// <summary>
-    /// Пристегнуть ветку продолжением. Ставится только в хвост и только вперёд: ссылка
-    /// на ветку, из которой эта достижима, замкнула бы цепочку в кольцо.
-    ///
-    /// Пристёгнутая ветка получает в состав своих приказов всех, кто теперь способен
-    /// до неё дойти: состав нужен приказу движения, чтобы дождаться отставших, а отставшие
-    /// здесь — как раз те, кто ещё доделывает предыдущую ветку.
+    /// Ответ ветки в роли подписчика: ждут ли здесь приказ ведомой ветки. Приказ этот лежит
+    /// не у нас, а ниже по цепочке, и спрашивают о нём ровно затем, чтобы решить, можно ли
+    /// его убрать. Пока здесь остаётся хоть один живой, убирать нельзя: перейдя, он встанет
+    /// в начало ведомой ветки и до приказа дойдёт.
+    /// </summary>
+    public bool Awaits(Order order) => Live;
+
+    /// <summary>
+    /// Все ли участники — из числа перечисленных. Спрашивается по подписчикам, а значит
+    /// и вверх по ссылкам: у общей ветки собственных курсоров может не быть вовсе — в неё
+    /// приходят из пристёгнутых очередей, — и судить по пустому составу значило бы счесть
+    /// своей ту ветку, куда придут посторонние.
+    /// </summary>
+    public bool Within(List<IOrderable> allowed)
+    {
+        foreach (var follower in _followers)
+            if (!follower.Within(allowed))
+                return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Ветка, ведущая в другую, участников в состав её приказов не даёт: ждут друг друга
+    /// только те, кто уже пришёл (см. <see cref="OrderQueue"/>). Войдут они в состав сами,
+    /// когда подпишутся, — то есть когда действительно перейдут.
+    /// </summary>
+    public void Enlist(Order order)
+    {
+    }
+
+    public void Dismiss(Order order)
+    {
+    }
+
+    /// <summary>Ветка принадлежит одному этому подписчику и никуда не ведёт.</summary>
+    public bool Only(IOrderFollower follower)
+    {
+        Prune();
+        return _next == null && _followers.Count == 1 && _followers[0] == follower;
+    }
+
+    /// <summary>
+    /// Пристегнуть ветку продолжением: поставить ссылку вперёд и подписаться на ту ветку,
+    /// в которую она ведёт. Ставится только в хвост и только вперёд — ссылка на ветку,
+    /// из которой эта достижима, замкнула бы цепочку в кольцо.
     /// </summary>
     public bool LinkNext(OrderList next)
     {
@@ -111,34 +156,7 @@ public sealed class OrderList
             return false;
 
         _next = next;
-        next._referrers.Add(this);
-
-        foreach (var actor in _subscribers)
-            next.EnlistDownstream(actor);
-
-        foreach (var referrer in _referrers)
-            referrer.EnlistForward(next);
-
-        return true;
-    }
-
-    /// <summary>
-    /// Все ли, кто способен дойти до этой ветки, — из числа перечисленных.
-    ///
-    /// Спрашивается ВВЕРХ ПО ССЫЛКАМ, а не по своим подписчикам: у общей ветки прямых
-    /// подписчиков может не быть вовсе — в неё приходят из пристёгнутых очередей, — и судить
-    /// по пустому составу значило бы счесть своей ту ветку, куда придут посторонние.
-    /// </summary>
-    public bool AudienceWithin(List<IOrderable> allowed)
-    {
-        foreach (var actor in _subscribers)
-            if (!allowed.Contains(actor))
-                return false;
-
-        foreach (var referrer in _referrers)
-            if (!referrer.AudienceWithin(allowed))
-                return false;
-
+        next.Subscribe(this);
         return true;
     }
 
@@ -159,60 +177,40 @@ public sealed class OrderList
     }
 
     /// <summary>
-    /// Подписать исполнителя. Он записывается в состав приказов не только этой ветки,
-    /// но и всех, что за ней: дойдёт он и до них.
+    /// Подписать. Подписка и есть присутствие в ветке, поэтому подписавшийся сразу входит
+    /// в состав всех её приказов — и только её: то, что стоит ниже по цепочке, достанется
+    /// ему тогда, когда он туда перейдёт.
     /// </summary>
-    public void Subscribe(IOrderable actor)
+    public void Subscribe(IOrderFollower follower)
     {
-        if (actor == null || _subscribers.Contains(actor))
+        if (follower == null || _followers.Contains(follower))
             return;
 
-        _subscribers.Add(actor);
-        EnlistDownstream(actor);
+        _followers.Add(follower);
+
+        foreach (var order in _items)
+            follower.Enlist(order);
     }
 
-    public void Unsubscribe(IOrderable actor)
+    public void Unsubscribe(IOrderFollower follower)
     {
-        if (actor == null || !_subscribers.Remove(actor))
+        if (follower == null || !_followers.Remove(follower))
             return;
 
-        DismissDownstream(actor);
+        foreach (var order in _items)
+            follower.Dismiss(order);
     }
 
-    /// <summary>Дописать приказ в хвост ветки — всем, кто по ней работает или придёт.</summary>
+    /// <summary>Дописать приказ в хвост ветки — всем, кто по ней сейчас работает.</summary>
     public void Add(Order order)
     {
         if (order == null)
             return;
 
         _items.Add(order);
-        Enlist(order);
-    }
 
-    /// <summary>
-    /// Вставить приказ следом за тем, что нацелен на указанное место работы. Зовёт план,
-    /// когда превращается в каркас: приказ на каркас обязан оказаться сразу после приказа
-    /// на план, а не в конце очереди, где его отделили бы от него чужие дела.
-    ///
-    /// Замены нет намеренно — игрок должен видеть оба шага, а не обнаруживать подмену
-    /// уже отданного приказа.
-    /// </summary>
-    public bool InsertAfter(IWorkSite site, Order order)
-    {
-        if (site == null || order == null)
-            return false;
-
-        for (int i = 0; i < _items.Count; i++)
-        {
-            if (!ReferenceEquals(_items[i].Target, site))
-                continue;
-
-            _items.Insert(i + 1, order);
-            Enlist(order);
-            return true;
-        }
-
-        return false;
+        foreach (var follower in _followers)
+            follower.Enlist(order);
     }
 
     public int IndexOf(Order order) => order == null ? -1 : _items.IndexOf(order);
@@ -248,7 +246,8 @@ public sealed class OrderList
     /// <summary>
     /// Убрать с головы то, мимо чего прошли все. Приказ, исполненный одним подписчиком,
     /// остаётся в списке, пока на него смотрит хоть один другой: список общий, а указатели
-    /// личные, и вынимать приказ из-под ещё работающего нельзя.
+    /// личные, и вынимать приказ из-под ещё работающего нельзя. Ветка, ведущая сюда, отвечает
+    /// «ждут» на любой приказ, пока жива, — иначе пришедший позже нашёл бы список пустым.
     /// </summary>
     public void Compact()
     {
@@ -275,84 +274,63 @@ public sealed class OrderList
         }
     }
 
-    /// <summary>Смотрит ли на приказ хоть кто-то из способных до него дойти.</summary>
+    /// <summary>Смотрит ли на приказ хоть кто-то из подписчиков — или ещё дойдёт до него.</summary>
     private bool Awaited(Order order)
     {
-        foreach (var actor in _subscribers)
-            if (actor.Orders.Current == order)
-                return true;
-
-        foreach (var referrer in _referrers)
-            if (referrer.Awaited(order))
+        foreach (var follower in _followers)
+            if (follower.Awaits(order))
                 return true;
 
         return false;
     }
 
-    /// <summary>Записать в состав приказа всех, кто способен до этой ветки дойти.</summary>
-    private void Enlist(Order order)
-    {
-        foreach (var actor in _subscribers)
-            order.Enlist(actor.EntityId);
-
-        foreach (var referrer in _referrers)
-            referrer.Enlist(order);
-    }
-
     private void Retire(Order order)
     {
-        foreach (var actor in _subscribers)
-            order.Dismiss(actor.EntityId);
-
-        foreach (var referrer in _referrers)
-            referrer.Retire(order);
-    }
-
-    /// <summary>Записать исполнителя в состав приказов этой ветки и всех, что за ней.</summary>
-    private void EnlistDownstream(IOrderable actor)
-    {
-        var list = this;
-
-        for (int step = 0; step < ChainLimit && list != null; step++)
-        {
-            foreach (var order in list._items)
-                order.Enlist(actor.EntityId);
-
-            list = list._next;
-        }
-    }
-
-    private void DismissDownstream(IOrderable actor)
-    {
-        var list = this;
-
-        for (int step = 0; step < ChainLimit && list != null; step++)
-        {
-            foreach (var order in list._items)
-                order.Dismiss(actor.EntityId);
-
-            list = list._next;
-        }
-    }
-
-    /// <summary>Записать своих подписчиков в состав приказов новой ветки — вверх по ссылкам.</summary>
-    private void EnlistForward(OrderList target)
-    {
-        foreach (var actor in _subscribers)
-            target.EnlistDownstream(actor);
-
-        foreach (var referrer in _referrers)
-            referrer.EnlistForward(target);
+        foreach (var follower in _followers)
+            follower.Dismiss(order);
     }
 
     /// <summary>
-    /// Убрать из состава тех, кого больше нет. Обычно подписчик снимается сам — очередь
-    /// он отпускает при гибели, — но сущность может уйти из мира и помимо этого пути.
+    /// Убрать подписчиков, которых больше нет: погибшего исполнителя и опустевшую ветку,
+    /// все участники которой уже перешли сюда. Обычно курсор отписывается сам, но сущность
+    /// может уйти из мира и помимо этого пути.
     /// </summary>
     private void Prune()
     {
-        for (int i = _subscribers.Count - 1; i >= 0; i--)
-            if (!Alive.Is(_subscribers[i] as Node))
-                _subscribers.RemoveAt(i);
+        for (int i = _followers.Count - 1; i >= 0; i--)
+            if (!_followers[i].Live)
+                _followers.RemoveAt(i);
     }
+}
+
+/// <summary>
+/// Тот, кто работает по ветке приказов: курсор исполнителя (<see cref="OrderQueue"/>) либо
+/// другая ветка, пристёгнутая к ней (<see cref="OrderList"/>).
+///
+/// ЗАЧЕМ ОДИН ПРИЗНАК НА ДВОИХ. У ветки было два раздельных списка — исполнители и ветки,
+/// ведущие в неё, — и каждый вопрос приходилось задавать обоим: живость, состав, ожидание,
+/// уборка, принадлежность выделению. Пять обходов, и все выписаны по два раза, хотя различие
+/// между списками мнимое: ветка отвечает за своих участников ровно так же, как курсор
+/// отвечает за себя. Курсор отвечает за одного, ветка — обходом собственных подписчиков,
+/// то есть вверх по цепочке.
+///
+/// ПОДПИСЧИК — КУРСОР, А НЕ САМА СУЩНОСТЬ. Все три вопроса суть свойства указателя, а юнит
+/// был бы в них лишь посредником, через которого ветка ходила бы к его очереди. Поэтому
+/// <see cref="OrderList"/> о юнитах не знает вовсе.
+/// </summary>
+public interface IOrderFollower
+{
+    /// <summary>Есть ли ещё кому работать по этой подписке.</summary>
+    bool Live { get; }
+
+    /// <summary>Смотрит ли кто-то на этот приказ прямо сейчас или ещё дойдёт до него.</summary>
+    bool Awaits(Order order);
+
+    /// <summary>Все ли участники подписки — из числа перечисленных.</summary>
+    bool Within(List<IOrderable> allowed);
+
+    /// <summary>Войти в состав приказа ветки, на которую подписан, либо выйти из него.</summary>
+    void Enlist(Order order);
+
+    void Dismiss(Order order);
 }

@@ -11,8 +11,8 @@ using Godot;
 /// Мировые координаты мыши считаются только в <see cref="CursorSystem"/>.
 ///
 /// ЧТО ПРИКАЗАТЬ, РЕШАЕТ ЦЕЛЬ ПОД КУРСОРОМ, а не заранее выбранный режим: щёлкнули по врагу —
-/// атака, по каркасу — стройка, по повреждённому — ремонт, по месторождению — копка, по земле —
-/// движение. Одна кнопка на всё, как в PA.
+/// атака, по каркасу или плану — стройка, по повреждённому своему — ремонт, по здоровому
+/// своему — сопровождение с помощью, по земле — движение. Одна кнопка на всё, как в PA.
 ///
 /// КОМУ приказ уйдёт, решает выделение, а вид приказа отсеет набор самой сущности: копателю
 /// не уйдёт атака, турели — движение. Поэтому здесь не нужно разбираться, кто выделен, —
@@ -483,6 +483,13 @@ public partial class CommandSystem : GameSystem
     /// в начатое, а приказ движения дожидается отставших. Видов при одном щелчке бывает
     /// несколько: вооружённые атакуют, строитель идёт строить, безоружный просто идёт, —
     /// поэтому очередей заводится ровно столько, сколько видов нашло себе получателя.
+    ///
+    /// ПОРЯДОК РАЗБОРА — ОТ САМОГО ОПРЕДЕЛЁННОГО К САМОМУ ОБЩЕМУ, и сопровождение стоит
+    /// предпоследним, перед движением. Щелчок по подбитому своему означает «почини», а не
+    /// «иди за ним», поэтому ремонт разбирается раньше; тот, кто чинить не умеет, ветку
+    /// ремонта не примет и дойдёт до сопровождения сам — фильтр набора приказов устроен
+    /// именно так. Сопровождение включает помощь: строитель, приставленный к строителю,
+    /// берётся за то же дело — этим занят сам юнит, а не раздача приказов.
     /// </summary>
     private void IssueOrder(Vector2 point)
     {
@@ -499,10 +506,12 @@ public partial class CommandSystem : GameSystem
             ? frame
             : PlanAt(point);
         var damaged = Repairable(occupant as Node2D) ?? DamagedUnitAt(point);
+        var leader = Leader(point, recipients);
 
         var attack = new Assignment(recipients, queue);
         var build = new Assignment(recipients, queue);
         var repair = new Assignment(recipients, queue);
+        var follow = new Assignment(recipients, queue);
         var move = new Assignment(recipients, queue);
 
         foreach (var actor in recipients)
@@ -514,6 +523,9 @@ public partial class CommandSystem : GameSystem
                 continue;
 
             if (damaged != null && repair.Give(actor, () => Order.Repair(damaged)))
+                continue;
+
+            if (leader != null && follow.Give(actor, () => Order.Follow(leader)))
                 continue;
 
             move.Give(actor, () => Order.MoveTo(point));
@@ -588,13 +600,13 @@ public partial class CommandSystem : GameSystem
         /// </summary>
         private bool Enqueue(IOrderable actor)
         {
-            if (actor.Orders.Home == null)
+            if (actor.Orders.List == null)
                 return Adopt(actor);
 
-            if (!Within(actor.Orders.Home.Tail))
+            if (!Within(actor.Orders.List.Tail))
                 actor.Orders.Fork();
 
-            var tail = actor.Orders.Home.Tail;
+            var tail = actor.Orders.List.Tail;
 
             // Хвост уже ведёт в эту ветку — второй раз его пристёгивать нечем и незачем
             if (tail == Branch() || !_linked.Add(tail))
@@ -623,8 +635,20 @@ public partial class CommandSystem : GameSystem
         }
 
         /// <summary>Все ли, кто способен дойти до ветки, — из числа получателей приказа.</summary>
-        private bool Within(OrderList list) => list.AudienceWithin(_recipients);
+        private bool Within(OrderList list) => list.Within(_recipients);
     }
+
+    /// <summary>
+    /// За кем идти: своя сущность под курсором, не входящая в само выделение.
+    ///
+    /// ВЫДЕЛЕННЫЙ ВЕДУЩИМ НЕ БЫВАЕТ. Щелчок по своему же отряду — обычное указание идти
+    /// туда, где он стоит, и превращать его в сопровождение нельзя: отряд принялся бы ходить
+    /// сам за собой, а половина его при этом получила бы приказ, которого игрок не отдавал.
+    /// Поэтому проверка стоит здесь, у разбора цели, а не у раздачи: приказ сопровождения
+    /// либо есть у всех получателей, либо его нет вовсе.
+    /// </summary>
+    private Node2D Leader(Vector2 point, List<IOrderable> recipients) =>
+        ActorAt(point) is { } found && !recipients.Contains(found) ? found as Node2D : null;
 
     /// <summary>
     /// План под курсором. Спрашивается отдельно от карты препятствий, потому что план
