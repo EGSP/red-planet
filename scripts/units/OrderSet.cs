@@ -19,7 +19,7 @@ public readonly struct OrderSet
 
     private OrderSet(int mask) => _mask = mask;
 
-    /// <summary>Приказов не имеет: месторождение, склад, стена.</summary>
+    /// <summary>Приказов не имеет: месторождение. У склада и стены в наборе есть снос.</summary>
     public static readonly OrderSet None = new(0);
 
     public OrderSet With(OrderKind kind) => new(_mask | Bit(kind));

@@ -43,17 +43,41 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     public string DisplayName => Definition?.DisplayName ?? "постройка";
 
     /// <summary>
-    /// Обычной постройке приказать нечего: склад, стена и генератор стоят и работают сами.
-    /// Пустой набор и есть способ это сказать — очередь у них общая со всеми, но пополнить
-    /// её невозможно. Турель и башня-сборщик свой набор переопределяют.
+    /// Обычной постройке можно только снести себя: склад, стена и генератор стоят и
+    /// работают сами, иных приказов у них нет. Турель и башня-сборщик набор расширяют.
+    /// Пустой набор означал бы «не выделяется» — снос тогда было бы не на что навесить.
     /// </summary>
-    public virtual OrderSet AllowedOrders => OrderSet.None;
+    public virtual OrderSet AllowedOrders => OrderSet.None.With(OrderKind.Delete);
 
     public SelectionGroup SelectionGroup => SelectionGroup.Structures;
 
-    public virtual void RunOrder(Order order, double dt) { }
+    public virtual void RunOrder(Order order, double dt)
+    {
+        if (order.Kind == OrderKind.Delete)
+            Demolish();
+    }
 
     public virtual void OnIdle(double dt) { }
+
+    /// <summary>
+    /// Снос через тот же канал, что и гибель от урона: документ DamageDealt разбирает
+    /// DamageSystem в React, и проекции видят EntityDestroyed. Прямой QueueFree из
+    /// Simulate оставил бы журнал без следа гибели.
+    /// </summary>
+    protected void Demolish()
+    {
+        if (Health == null || Health.IsDead || IsQueuedForDeletion())
+            return;
+
+        float amount = Mathf.Max(Health.Current, 1f);
+        GameManager.I.Events.Append(new DamageDealt
+        {
+            TargetId = Id,
+            SourceId = Id,
+            Amount = amount,
+            Pos = GlobalPosition,
+        });
+    }
 
     public Faction Faction => Faction.Player;
 

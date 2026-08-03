@@ -77,14 +77,16 @@ public partial class Plant : Building
     }
 
     /// <summary>
-    /// Заводу можно отдать rally: движение, сопровождение, атака. Он сам их не исполняет —
-    /// <see cref="Building.RunOrder"/> пуст, — а копирует на каждого выпущенного юнита.
+    /// Заводу можно отдать rally и снос: движение, сопровождение, атака копируются на
+    /// выпущенных юнитов (<see cref="Building.RunOrder"/> для них пуст у предка, кроме
+    /// сноса); снос завод исполняет сам.
     /// </summary>
     public override OrderSet AllowedOrders =>
         OrderSet.None
             .With(OrderKind.Move)
             .With(OrderKind.Follow)
-            .With(OrderKind.Attack);
+            .With(OrderKind.Attack)
+            .With(OrderKind.Delete);
 
     public int CountOf(string unitId)
     {
@@ -292,13 +294,19 @@ public partial class Plant : Building
         if (Orders.Count == 0)
             return;
 
-        var copy = new Order[Orders.Count];
-        int i = 0;
+        var copy = new List<Order>(Orders.Count);
 
         foreach (var order in Orders.Remaining)
-            copy[i++] = CloneOrder(order);
+        {
+            var cloned = CloneOrder(order);
+            if (cloned != null)
+                copy.Add(cloned);
+        }
 
-        if (unit.Orders.TrySet(copy))
+        if (copy.Count == 0)
+            return;
+
+        if (unit.Orders.TrySet(copy.ToArray()))
             unit.SetAnchor(copy[^1].Point);
     }
 
@@ -315,6 +323,8 @@ public partial class Plant : Building
             OrderKind.Repair when Alive.Is(source.Entity) => Order.Repair(source.Entity),
             OrderKind.Build when Alive.Is(source.Target as Node2D) =>
                 Order.Work(OrderKind.Build, source.Target),
+            // Снос завода новорождённому не копируем: он относится к самой постройке
+            OrderKind.Delete => null,
             _ => Order.MoveTo(source.Point),
         };
     }

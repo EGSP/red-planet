@@ -17,6 +17,7 @@ public enum VizKind
     OrderAttack,
     OrderRepair,
     OrderFollow,
+    OrderDelete,
 
     WorkBeamBuild,
     WorkBeamRepair,
@@ -76,7 +77,7 @@ public static class DrawTheme
     public static Color Hue(VizKind kind) => kind switch
     {
         VizKind.Vision => VisionHue,
-        VizKind.Attack or VizKind.OrderAttack => AttackHue,
+        VizKind.Attack or VizKind.OrderAttack or VizKind.OrderDelete => AttackHue,
         VizKind.Work or VizKind.OrderBuild or VizKind.WorkBeamBuild
             or VizKind.PlacementValid => ConstructionHue,
         VizKind.Selection or VizKind.Band => SelectionHue,

@@ -8,6 +8,7 @@ public enum OrderKind
     Attack,
     Repair,
     Follow,
+    Delete,
 }
 
 /// <summary>
@@ -111,6 +112,12 @@ public sealed class Order
     };
 
     /// <summary>
+    /// Снос: исполнитель уничтожает себя. Цели нет — приказ держит только вид.
+    /// Урон уходит документом <c>DamageDealt</c>, гибель разбирает DamageSystem в React.
+    /// </summary>
+    public static Order Delete() => new() { Kind = OrderKind.Delete };
+
+    /// <summary>
     /// Место работы сменилось преемником: план поставил на себе каркас и уходит из мира.
     ///
     /// ПРИКАЗ НЕ ЗАМЕНЯЕТСЯ И НЕ ДОПИСЫВАЕТСЯ — у него переезжает цель. План и каркас суть
@@ -211,6 +218,7 @@ public sealed class Order
         switch (Kind)
         {
             case OrderKind.Move:
+            case OrderKind.Delete:
                 return true;
 
             // Цель пала — приказ исчерпан, исполнитель возвращается к обычному поведению
@@ -239,6 +247,7 @@ public sealed class Order
         OrderKind.Attack => "атаковать",
         OrderKind.Repair => "чинить",
         OrderKind.Follow => "следовать",
+        OrderKind.Delete => "снос",
         _ => kind.ToString(),
     };
 
@@ -250,6 +259,7 @@ public sealed class Order
         OrderKind.Attack => VizKind.OrderAttack,
         OrderKind.Repair => VizKind.OrderRepair,
         OrderKind.Follow => VizKind.OrderFollow,
+        OrderKind.Delete => VizKind.OrderDelete,
         _ => VizKind.OrderMove,
     };
 

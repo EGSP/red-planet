@@ -262,6 +262,13 @@ public partial class CommandSystem : GameSystem
                 return;
             }
 
+            if (key.Keycode == Key.Delete)
+            {
+                IssueDelete();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
             if (ControlGroups.SlotOf(key.Keycode) is var slot and >= 0)
             {
                 if (key.CtrlPressed)
@@ -441,8 +448,8 @@ public partial class CommandSystem : GameSystem
     }
 
     /// <summary>
-    /// Выделяем только то, чем можно управлять: свой и с непустым набором приказов.
-    /// Месторождение и склад в рамку не попадут — приказать им всё равно нечего.
+    /// Выделяем только то, чем можно управлять: своё и с непустым набором приказов.
+    /// У обычной постройки в наборе только снос — она попадает в рамку, и Del её сносит.
     /// Юнит, ещё выезжающий из корпуса завода, некликабелен.
     /// </summary>
     private static bool Commandable(IOrderable actor) =>
@@ -530,6 +537,25 @@ public partial class CommandSystem : GameSystem
 
             move.Give(actor, () => Order.MoveTo(point));
         }
+    }
+
+    /// <summary>
+    /// Снос выделенных: приказ Delete вместо прежней цепочки.
+    ///
+    /// Shift здесь не читается намеренно — снос всегда заменяет очередь, а не дописывается
+    /// в хвост. Иначе Del после цепочки движения оставил бы снос на потом, и постройка
+    /// ещё успела бы отработать шаги, которые игрок уже отменил намерением снести.
+    /// </summary>
+    private void IssueDelete()
+    {
+        var recipients = Recipients();
+        if (recipients.Count == 0)
+            return;
+
+        var demolish = new Assignment(recipients, queue: false);
+
+        foreach (var actor in recipients)
+            demolish.Give(actor, Order.Delete);
     }
 
     /// <summary>

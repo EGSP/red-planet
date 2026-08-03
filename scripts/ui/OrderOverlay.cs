@@ -146,6 +146,12 @@ public partial class OrderOverlay : Node2D
                 ShapeDraw.Rect(this, new Rect2(at - Vector2.One * size, Vector2.One * size * 2f), stroke);
                 break;
 
+            case OrderKind.Delete:
+                ShapeDraw.Line(this, at + new Vector2(-size, -size), at + new Vector2(size, size), stroke);
+                ShapeDraw.Line(this, at + new Vector2(-size, size), at + new Vector2(size, -size), stroke);
+                ShapeDraw.Circle(this, at, size * 0.85f, stroke, 16);
+                break;
+
             default:
                 ShapeDraw.Circle(this, at, size,
                     ShapeStyle.Filled(new Color(tint, 0.2f), tint, 1.5f, WidthMode.MinScreen), 20);
