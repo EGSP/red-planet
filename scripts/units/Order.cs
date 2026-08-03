@@ -116,14 +116,17 @@ public sealed class Order
         _ => kind.ToString(),
     };
 
-    /// <summary>Цвет линии приказа на карте — один и тот же в очереди и в подсказках.</summary>
-    public static Color Tint(OrderKind kind) => kind switch
+    /// <summary>Смысл отрисовки приказа — один и тот же в очереди и в подсказках.</summary>
+    public static VizKind Viz(OrderKind kind) => kind switch
     {
-        OrderKind.Move => new Color(0.85f, 0.9f, 1f),
-        OrderKind.Build => new Color(0.55f, 0.85f, 1f),
-        OrderKind.Attack => new Color(1f, 0.4f, 0.35f),
-        OrderKind.Repair => new Color(0.6f, 1f, 0.7f),
-        OrderKind.Follow => new Color(0.7f, 0.75f, 0.85f),
-        _ => Colors.White,
+        OrderKind.Move => VizKind.OrderMove,
+        OrderKind.Build => VizKind.OrderBuild,
+        OrderKind.Attack => VizKind.OrderAttack,
+        OrderKind.Repair => VizKind.OrderRepair,
+        OrderKind.Follow => VizKind.OrderFollow,
+        _ => VizKind.OrderMove,
     };
+
+    /// <summary>Цвет линии приказа на карте — один и тот же в очереди и в подсказках.</summary>
+    public static Color Tint(OrderKind kind) => DrawTheme.Hue(Viz(kind));
 }

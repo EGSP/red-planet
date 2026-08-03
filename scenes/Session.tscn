@@ -1,173 +1,199 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bqvvlwhycmvut"]
 
-[ext_resource type="Script" path="res://scripts/core/Session.cs" id="1_session"]
-[ext_resource type="Script" path="res://scripts/core/GameManager.cs" id="2_manager"]
-[ext_resource type="Script" path="res://scripts/world/Playground.cs" id="3_playground"]
-[ext_resource type="Script" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
-[ext_resource type="Script" path="res://scripts/units/CommandSystem.cs" id="5_command"]
-[ext_resource type="Script" path="res://scripts/units/BotAiSystem.cs" id="6_botai"]
-[ext_resource type="Script" path="res://scripts/units/OrderSystem.cs" id="7_order"]
-[ext_resource type="Script" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
-[ext_resource type="Script" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
-[ext_resource type="Script" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
-[ext_resource type="Script" path="res://scripts/economy/EconomySystem.cs" id="8_economy"]
-[ext_resource type="Script" path="res://scripts/world/MetalSpotSystem.cs" id="9_metalspots"]
-[ext_resource type="Script" path="res://scripts/buildings/AssemblerSystem.cs" id="10_assembler"]
-[ext_resource type="Script" path="res://scripts/enemies/EnemySpawnSystem.cs" id="11_enemyspawn"]
-[ext_resource type="Script" path="res://scripts/enemies/EnemyAiSystem.cs" id="12_enemyai"]
-[ext_resource type="Script" path="res://scripts/combat/WeaponSystem.cs" id="13_weapon"]
-[ext_resource type="Script" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
-[ext_resource type="Script" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
-[ext_resource type="Script" path="res://scripts/world/CameraRig.cs" id="16_camera"]
-[ext_resource type="Script" path="res://scripts/ui/Hud.cs" id="17_hud"]
-[ext_resource type="Script" path="res://scripts/ui/PauseMenu.cs" id="22_pause"]
-[ext_resource type="Script" path="res://scripts/ui/Buildbar.cs" id="23_buildbar"]
-[ext_resource type="Script" path="res://scripts/ui/ResourceBar.cs" id="24_resources"]
-[ext_resource type="Script" path="res://scripts/ui/SelectionPanel.cs" id="25_selection"]
-[ext_resource type="Script" path="res://scripts/ui/CommandPanel.cs" id="26_commands"]
-[ext_resource type="Script" path="res://scripts/ui/ControlGroupBar.cs" id="27_groups"]
-[ext_resource type="Script" path="res://scripts/pressure/TerrorSystem.cs" id="28_terror"]
-[ext_resource type="Script" path="res://scripts/ui/TerrorBar.cs" id="29_terrorbar"]
-[ext_resource type="Resource" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
-[ext_resource type="Script" path="res://scripts/core/VictorySystem.cs" id="31_victory"]
-[ext_resource type="Script" path="res://scripts/ui/PortalCountdownBar.cs" id="32_portalbar"]
-[ext_resource type="Script" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
+[ext_resource type="Script" uid="uid://ngu44hvaylf5" path="res://scripts/core/Session.cs" id="1_session"]
+[ext_resource type="Script" uid="uid://rvo2ifgmct4" path="res://scripts/core/GameManager.cs" id="2_manager"]
+[ext_resource type="Script" uid="uid://ck2wua7snt8x7" path="res://scripts/world/Playground.cs" id="3_playground"]
+[ext_resource type="Script" uid="uid://cc1rudyjv07xp" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
+[ext_resource type="Script" uid="uid://djhm5atkp2jws" path="res://scripts/units/CommandSystem.cs" id="5_command"]
+[ext_resource type="Script" uid="uid://dxjsijgee6d2e" path="res://scripts/units/CursorSystem.cs" id="5_cursor"]
+[ext_resource type="Script" uid="uid://tuanjuqquucf" path="res://scripts/units/PlayerAiSystem.cs" id="6_playerai"]
+[ext_resource type="Script" uid="uid://pcwrq37i4108" path="res://scripts/units/OrderSystem.cs" id="7_order"]
+[ext_resource type="Script" uid="uid://bxjws4p4x5u" path="res://scripts/economy/EconomySystem.cs" id="8_economy"]
+[ext_resource type="Script" uid="uid://cc4rd12oqli1b" path="res://scripts/world/MetalSpotSystem.cs" id="9_metalspots"]
+[ext_resource type="Script" uid="uid://kcnnnrsbqpsl" path="res://scripts/pressure/PressureSystem.cs" id="11_pressure"]
+[ext_resource type="Script" uid="uid://bs5pwbd0lbqxa" path="res://scripts/enemies/EnemyAiSystem.cs" id="12_enemyai"]
+[ext_resource type="Script" uid="uid://dotcigshtufxu" path="res://scripts/combat/WeaponSystem.cs" id="13_weapon"]
+[ext_resource type="Script" uid="uid://dhkbabtkukh50" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
+[ext_resource type="Script" uid="uid://dhy78rf5woxf3" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
+[ext_resource type="Script" uid="uid://b0ki5uv7akvii" path="res://scripts/world/CameraRig.cs" id="16_camera"]
+[ext_resource type="Script" uid="uid://byltoatikqvmc" path="res://scripts/ui/Hud.cs" id="17_hud"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
+[ext_resource type="Script" uid="uid://d0y7y0cjdiohh" path="res://scripts/ui/PauseMenu.cs" id="22_pause"]
+[ext_resource type="Script" uid="uid://dy6ix483hdqha" path="res://scripts/ui/Buildbar.cs" id="23_buildbar"]
+[ext_resource type="Script" uid="uid://dpntxc3g5mgsd" path="res://scripts/ui/ResourceBar.cs" id="24_resources"]
+[ext_resource type="Script" uid="uid://lo6dkso2pxtu" path="res://scripts/ui/SelectionPanel.cs" id="25_selection"]
+[ext_resource type="Script" uid="uid://ubj1ta1lkhpq" path="res://scripts/ui/CommandPanel.cs" id="26_commands"]
+[ext_resource type="Script" uid="uid://bpfnhioymwehh" path="res://scripts/ui/ControlGroupBar.cs" id="27_groups"]
+[ext_resource type="Script" uid="uid://cxpykyovcdly4" path="res://scripts/pressure/TerrorSystem.cs" id="28_terror"]
+[ext_resource type="Script" uid="uid://mts7dtmhqpbw" path="res://scripts/ui/TerrorBar.cs" id="29_terrorbar"]
+[ext_resource type="Resource" uid="uid://bspmw6d4xtobp" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
+[ext_resource type="Script" uid="uid://cidxcw5t8b2mv" path="res://scripts/core/VictorySystem.cs" id="31_victory"]
+[ext_resource type="Script" uid="uid://c65huttvnvpun" path="res://scripts/ui/PortalCountdownBar.cs" id="32_portalbar"]
+[ext_resource type="Script" uid="uid://bsqkp3ps8tl01" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
+[ext_resource type="Script" uid="uid://bnkead8a2t11f" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
+[ext_resource type="Script" uid="uid://3fhl61arlssd" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
+[ext_resource type="Script" uid="uid://bpyei10ejuqti" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
+[ext_resource type="Resource" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
+[ext_resource type="Script" uid="uid://bwl8ipmuljqfq" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
+[ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
+[ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="40_worldsettings"]
+[ext_resource type="Script" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
+[ext_resource type="Resource" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
 
-[node name="Session" type="Node2D"]
+[node name="Session" type="Node2D" unique_id=716196635]
 script = ExtResource("1_session")
 Systems = NodePath("Systems")
 Playground = NodePath("Playground")
 StartingMetal = 250.0
 
-[node name="Systems" type="Node" parent="."]
+[node name="Systems" type="Node" parent="." unique_id=1100053120]
 script = ExtResource("2_manager")
 Playground = NodePath("../Playground")
+WorldTuning = ExtResource("40_worldsettings")
 
-[node name="CommandSystem" type="Node" parent="Systems"]
+[node name="CursorSystem" type="Node" parent="Systems" unique_id=926610412]
+script = ExtResource("5_cursor")
+Phase = 0
+UpdateCycle = 1
+
+[node name="CommandSystem" type="Node" parent="Systems" unique_id=845374345]
 script = ExtResource("5_command")
 BlueprintScene = ExtResource("19_blueprint")
-DoubleTapInterval = 0.35
 Phase = 0
+StepOrder = 1
+UpdateCycle = 1
 
-[node name="BotAiSystem" type="Node" parent="Systems"]
-script = ExtResource("6_botai")
+[node name="PlayerAiSystem" type="Node" parent="Systems" unique_id=1578640243]
+script = ExtResource("6_playerai")
 StepOrder = 10
 
-[node name="EnemyAiSystem" type="Node" parent="Systems"]
+[node name="EnemyAiSystem" type="Node" parent="Systems" unique_id=1295316388]
 script = ExtResource("12_enemyai")
 StepOrder = 12
 
-[node name="AssemblerSystem" type="Node" parent="Systems"]
-script = ExtResource("10_assembler")
-StepOrder = 15
-
-[node name="OrderSystem" type="Node" parent="Systems"]
+[node name="OrderSystem" type="Node" parent="Systems" unique_id=134137026]
 script = ExtResource("7_order")
 StepOrder = 20
 
-[node name="PathfindingSystem" type="Node" parent="Systems"]
+[node name="PathfindingSystem" type="Node" parent="Systems" unique_id=32615281]
 script = ExtResource("34_pathfinding")
 StepOrder = 24
 
-[node name="MovementSystem" type="Node" parent="Systems"]
+[node name="MovementSystem" type="Node" parent="Systems" unique_id=1439556239]
 script = ExtResource("35_movement")
 StepOrder = 26
 
-[node name="EconomySystem" type="Node" parent="Systems"]
+[node name="EconomySystem" type="Node" parent="Systems" unique_id=1316531252]
 script = ExtResource("8_economy")
 StepOrder = 30
 
-[node name="MetalSpotSystem" type="Node" parent="Systems"]
+[node name="MetalSpotSystem" type="Node" parent="Systems" unique_id=1398333960]
 script = ExtResource("9_metalspots")
+Settings = ExtResource("40_worldsettings")
 StepOrder = 50
 
-[node name="EnemySpawnSystem" type="Node" parent="Systems"]
-script = ExtResource("11_enemyspawn")
+[node name="PressureSystem" type="Node" parent="Systems" unique_id=1377043806]
+script = ExtResource("11_pressure")
+Settings = ExtResource("37_pressuresettings")
 StepOrder = 55
 
-[node name="WeaponSystem" type="Node" parent="Systems"]
+[node name="WaveSystem" type="Node" parent="Systems" unique_id=780112016]
+script = ExtResource("38_waves")
+Settings = ExtResource("39_wavesettings")
+WorldTuning = ExtResource("40_worldsettings")
+StepOrder = 56
+
+[node name="WeaponSystem" type="Node" parent="Systems" unique_id=1391895595]
 script = ExtResource("13_weapon")
 StepOrder = 70
 
-[node name="ProjectileSystem" type="Node" parent="Systems"]
+[node name="ProjectileSystem" type="Node" parent="Systems" unique_id=1335204124]
 script = ExtResource("14_projectile")
 StepOrder = 80
 
-[node name="DamageSystem" type="Node" parent="Systems"]
+[node name="VisionSystem" type="Node" parent="Systems" unique_id=1799323356]
+script = ExtResource("41_vision")
+Settings = ExtResource("42_fogsettings")
+StepOrder = 90
+UpdateCycle = 1
+
+[node name="DamageSystem" type="Node" parent="Systems" unique_id=1799323355]
 script = ExtResource("15_damage")
 Phase = 2
 StepOrder = 10
 
-[node name="TerrorSystem" type="Node" parent="Systems"]
+[node name="TerrorSystem" type="Node" parent="Systems" unique_id=322128403]
 script = ExtResource("28_terror")
 Settings = ExtResource("30_terrorsettings")
 Phase = 2
 StepOrder = 20
 
-[node name="VictorySystem" type="Node" parent="Systems"]
+[node name="VictorySystem" type="Node" parent="Systems" unique_id=1772864361]
 script = ExtResource("31_victory")
 Phase = 2
 StepOrder = 30
 
-[node name="Playground" type="Node2D" parent="."]
+[node name="Playground" type="Node2D" parent="." unique_id=438516043]
 script = ExtResource("3_playground")
 Terrain = NodePath("Terrain")
 Deposits = NodePath("Deposits")
 Structures = NodePath("Structures")
 Actors = NodePath("Actors")
 Projectiles = NodePath("Projectiles")
+Fog = NodePath("Fog")
 Effects = NodePath("Effects")
 
-[node name="Terrain" type="Node2D" parent="Playground"]
+[node name="Terrain" type="Node2D" parent="Playground" unique_id=304019415]
 
-[node name="Grid" type="Node2D" parent="Playground/Terrain"]
+[node name="Grid" type="Node2D" parent="Playground/Terrain" unique_id=1875590808]
 script = ExtResource("4_grid")
 
-[node name="Deposits" type="Node2D" parent="Playground"]
+[node name="Deposits" type="Node2D" parent="Playground" unique_id=1266339897]
 
-[node name="Structures" type="Node2D" parent="Playground"]
+[node name="Structures" type="Node2D" parent="Playground" unique_id=539201372]
 
-[node name="Actors" type="Node2D" parent="Playground"]
+[node name="Actors" type="Node2D" parent="Playground" unique_id=1387971349]
 
-[node name="Projectiles" type="Node2D" parent="Playground"]
+[node name="Projectiles" type="Node2D" parent="Playground" unique_id=2038464301]
 
-[node name="Effects" type="Node2D" parent="Playground"]
+[node name="Fog" type="Node2D" parent="Playground" unique_id=1153521829]
 
-[node name="View" type="Node2D" parent="."]
+[node name="Effects" type="Node2D" parent="Playground" unique_id=1153521828]
 
-[node name="Camera" type="Camera2D" parent="View"]
+[node name="View" type="Node2D" parent="." unique_id=1034017929]
+
+[node name="Camera" type="Camera2D" parent="View" unique_id=1310955628]
 script = ExtResource("16_camera")
 
-[node name="Hud" type="CanvasLayer" parent="View"]
+[node name="Hud" type="CanvasLayer" parent="View" unique_id=1862778630]
 script = ExtResource("17_hud")
 
-[node name="ResourceBar" type="CanvasLayer" parent="View"]
+[node name="ResourceBar" type="CanvasLayer" parent="View" unique_id=730705346]
 script = ExtResource("24_resources")
 
-[node name="TerrorBar" type="CanvasLayer" parent="View"]
+[node name="TerrorBar" type="CanvasLayer" parent="View" unique_id=230482997]
 script = ExtResource("29_terrorbar")
 
-[node name="PortalCountdownBar" type="CanvasLayer" parent="View"]
+[node name="PortalCountdownBar" type="CanvasLayer" parent="View" unique_id=1769482466]
 script = ExtResource("32_portalbar")
 
-[node name="SelectionPanel" type="CanvasLayer" parent="View"]
+[node name="SelectionPanel" type="CanvasLayer" parent="View" unique_id=1208466352]
 script = ExtResource("25_selection")
 
-[node name="CommandPanel" type="CanvasLayer" parent="View"]
+[node name="CommandPanel" type="CanvasLayer" parent="View" unique_id=387086853]
 script = ExtResource("26_commands")
 
-[node name="Buildbar" type="CanvasLayer" parent="View"]
+[node name="Buildbar" type="CanvasLayer" parent="View" unique_id=1522848575]
 script = ExtResource("23_buildbar")
 
-[node name="ControlGroupBar" type="CanvasLayer" parent="View"]
+[node name="ControlGroupBar" type="CanvasLayer" parent="View" unique_id=1521387779]
 script = ExtResource("27_groups")
 
-[node name="DebugPanel" type="CanvasLayer" parent="View"]
+[node name="DebugPanel" type="CanvasLayer" parent="View" unique_id=579722715]
 script = ExtResource("36_debugpanel")
 
-[node name="PauseMenu" type="CanvasLayer" parent="View"]
+[node name="PauseMenu" type="CanvasLayer" parent="View" unique_id=764445159]
 script = ExtResource("22_pause")
 
-[node name="OutcomeMenu" type="CanvasLayer" parent="View"]
+[node name="OutcomeMenu" type="CanvasLayer" parent="View" unique_id=2055515651]
 script = ExtResource("33_outcomemenu")

@@ -4,15 +4,22 @@ using Godot;
 /// Юнит с очередью приказов. Движется к цели, а войдя в радиус инструмента —
 /// подключается к узлу работы. Сам ресурсы не двигает: только сообщает свою мощность.
 ///
-/// Он же цель для врага и он же носитель ствола, если ствол задан справочником.
+/// Он же цель для чужой стороны и он же носитель ствола, если ствол задан справочником.
 /// Стрелять юнит начинает только без приказов: работа важнее, а огонь по площадям
 /// вместо стройки — не то, чего ждёшь от отданного приказа.
 ///
 /// Приказы юнит только ИСПОЛНЯЕТ. Кто их раздаёт — игрок через CommandSystem или мозговая
 /// система — его не касается, а чего ему отдать нельзя, отсекает набор AllowedOrders.
+///
+/// ОДИН КЛАСС НА ОБЕ СТОРОНЫ. Отдельного класса Enemy больше нет: противник — такой же юнит,
+/// и различие сторон выражается полем Faction, а не типом узла. Раньше два класса повторяли
+/// друг за другом подход к цели, доворот, дистанцию остановки, гибель и отрисовку, причём
+/// с расхождениями в мелочах, — а расходились они именно потому, что правку вносили в один
+/// файл из двух. Из этого следует и правило для систем: сторону надо спрашивать у сущности,
+/// а не выводить из того, в каком разрезе она нашлась.
 /// </summary>
 public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
-    IRepairable, IOrderable, IMobile
+    IRepairable, IOrderable, IWorker, IMobile
 {
     /// <summary>
     /// Определение. Ставит Spawner при создании: узел юнита собственной сцены не имеет,
@@ -32,7 +39,23 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     private WorkNode _attached;
 
+    /// <summary>Сколько осталось до переигровки цели. Ведёт мозговая система, она же и решает.</summary>
+    private float _retarget;
+
     public Unit() => Orders = new OrderQueue(this);
+
+    /// <summary>
+    /// Пора ли искать цель заново. Прежняя может быть и жива — просто рядом выросло что-то
+    /// ближе, поэтому выбор переигрывается по таймеру, а не только по гибели цели.
+    ///
+    /// Свойство общее для обеих сторон: юнит игрока без работы выбирает цель по тем же
+    /// правилам, что и юнит противника.
+    /// </summary>
+    public bool NeedsTarget => Orders.Idle || _retarget <= 0f;
+
+    public void TickRetarget(double dt) => _retarget -= (float)dt;
+
+    public void NoteTargeted() => _retarget = Const.RetargetDelay;
 
     public bool Idle => Orders.Idle;
 
@@ -48,7 +71,22 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public string DisplayName => Definition?.DisplayName ?? "юнит";
 
-    public virtual Faction Faction => Faction.Player;
+    /// <summary>
+    /// Чья сторона. Ставит Spawner при создании, и после этого значение постоянно: разрезы
+    /// индекса по стороне пересобираются раз в кадр и смены ключа посреди партии не терпят.
+    ///
+    /// Сторона не берётся из определения намеренно. Определение описывает, что сущность
+    /// собой представляет, а кому она принадлежит — обстоятельство создания: один и тот же
+    /// вид должна иметь возможность выставить любая сторона.
+    /// </summary>
+    public Faction Faction { get; set; } = Faction.Player;
+
+    /// <summary>
+    /// Откуда юнит взялся. Смысл имеет только у стороны противника: по этому признаку
+    /// система давления отличает постоянный фон, который занимает место в бюджете,
+    /// от волны, которая приходит поверх него. У стороны игрока значение не читается.
+    /// </summary>
+    public PressureOrigin Origin { get; set; } = PressureOrigin.Ambient;
 
     /// <summary>
     /// Что юниту можно приказать. Выводится из того, чем он снабжён, а не задаётся списком:
@@ -105,9 +143,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         QueueRedraw();
     }
 
+    /// <summary>
+    /// Заявка в экономику. Чужая сторона своей экономики не ведёт, поэтому её юниты выходят
+    /// сразу: ведомость в игре одна, и складывать в неё производство противника значило бы
+    /// приписывать игроку чужой доход.
+    /// </summary>
     public void Declare(EconomyLedger ledger)
     {
-        if (Definition == null)
+        if (Definition == null || Faction != Faction.Player)
             return;
 
         ledger.AddIncome(ResourceKind.Energy, Definition.EnergyProduction);
@@ -122,7 +165,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>Своё производство идёт всегда, просадка производительности его не касается.</summary>
     public void Run(double dt, EconomyRates rates)
     {
-        if (Definition == null)
+        if (Definition == null || Faction != Faction.Player)
             return;
 
         var events = GameManager.I.Events;
@@ -367,20 +410,113 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float radius = Definition.RadiusPx;
 
-        VisionGizmo.Draw(this, Definition.VisionRadiusPx, Definition.Color);
-        WeaponGizmo.Draw(this, Weapon, Definition.Color);
+        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
+            selected: GizmoGate.IsSelected(this));
 
-        DrawCircle(Vector2.Zero, radius, Definition.Color);
-        DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 24, new Color(0f, 0f, 0f, 0.4f), 2f);
-
-        // Ось «вперёд»: нода уже повёрнута, поэтому в локальных координатах это просто вправо
-        DrawLine(Vector2.Zero, new Vector2(radius * 1.5f, 0f), new Color(1f, 1f, 1f, 0.8f), 2.5f);
+        DrawHull(radius);
+        DrawForwardMark(radius);
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
 
         // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей
         if (Alive.Is(_attached))
-            DrawLine(Vector2.Zero, ToLocal(_attached.GlobalPosition),
-                new Color(1f, 1f, 0.5f, 0.6f), 2f);
+            ShapeDraw.Line(this, Vector2.Zero, ToLocal(_attached.GlobalPosition),
+                DrawTheme.Line(VizKind.WorkBeamBuild));
+    }
+
+    /// <summary>Корпус по силуэту из определения: круг, прямоугольник или шестиугольник.</summary>
+    private void DrawHull(float radius)
+    {
+        var fill = ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f,
+            WidthMode.Screen);
+
+        switch (Definition.Hull)
+        {
+            case HullShape.Rect:
+                DrawRectHull(radius, fill);
+                break;
+
+            case HullShape.Hex:
+                DrawPolygonHull(radius, 6, fill);
+                break;
+
+            default:
+                ShapeDraw.Circle(this, Vector2.Zero, radius, fill, 24);
+                break;
+        }
+
+        // Дополнительные контуры брони
+        for (int ring = 1; ring <= Definition.ArmorRings; ring++)
+        {
+            float gap = radius * 0.12f * ring;
+            var outline = ShapeStyle.Outline(new Color(0f, 0f, 0f, 0.55f), 1.5f, WidthMode.Screen);
+
+            switch (Definition.Hull)
+            {
+                case HullShape.Rect:
+                    DrawRectHull(radius + gap, outline);
+                    break;
+
+                case HullShape.Hex:
+                    DrawPolygonHull(radius + gap, 6, outline);
+                    break;
+
+                default:
+                    ShapeDraw.Circle(this, Vector2.Zero, radius + gap, outline, 24);
+                    break;
+            }
+        }
+
+        // Ближний бой: заливка передней трети поверх корпуса. Признак берётся из
+        // определения, а не выводится из дальности оружия, — см. UnitDefinition.FrontPlate
+        if (Definition.FrontPlate)
+        {
+            float tip = radius * 0.55f;
+            ShapeDraw.Rect(this, new Rect2(radius * 0.15f, -tip * 0.7f, tip, tip * 1.4f),
+                ShapeStyle.Solid(Definition.Color.Lightened(0.15f)));
+        }
+    }
+
+    private void DrawRectHull(float radius, ShapeStyle style)
+    {
+        float aspect = Mathf.Max(Definition.HullAspect, 0.5f);
+        float length = radius * 2f * Mathf.Sqrt(aspect);
+        float width = radius * 2f / Mathf.Sqrt(aspect);
+        ShapeDraw.Rect(this, new Rect2(-length * 0.5f, -width * 0.5f, length, width), style);
+    }
+
+    private void DrawPolygonHull(float radius, int sides, ShapeStyle style)
+    {
+        var points = new Vector2[sides];
+
+        for (int i = 0; i < sides; i++)
+        {
+            float angle = Mathf.Tau * i / sides;
+            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+        }
+
+        ShapeDraw.Polygon(this, points, style);
+    }
+
+    /// <summary>
+    /// Ствол или манипулятор. Длина ствола растёт с дальностью оружия;
+    /// у ремонтника без ствола — дуга спереди.
+    /// </summary>
+    private void DrawForwardMark(float radius)
+    {
+        if (Definition.CanRepair && Definition.Weapon == null)
+        {
+            ShapeDraw.Arc(this, Vector2.Zero, radius * 1.15f, -0.7f, 0.7f,
+                ShapeStyle.Outline(new Color(0.45f, 0.85f, 1f, 0.85f), 2.5f, WidthMode.Screen));
+            return;
+        }
+
+        float barrel = radius * 1.2f;
+        if (Definition.Weapon != null)
+            barrel = radius + Mathf.Clamp(Definition.Weapon.RangePx * 0.12f, radius * 0.4f,
+                radius * 2.2f);
+
+        ShapeDraw.Line(this, Vector2.Zero, new Vector2(barrel, 0f),
+            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
     }
 }

@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Препятствия мира в непрерывных координатах: множество прямоугольников и раскладка их
-/// по ячейкам для широкой фазы.
+/// Препятствия мира в непрерывных координатах: множество ориентированных прямоугольников
+/// и раскладка их по ячейкам для широкой фазы.
 ///
 /// ЗАЧЕМ ОТДЕЛЬНО ОТ РАСТРА. Задачи разные и точность нужна разная. Здесь решаются вопросы
 /// геометрии — можно ли поставить, что под курсором, куда вытолкнуть юнита, — и решаются
@@ -27,14 +27,14 @@ public sealed class ObstacleMap
     private readonly List<IObstacle> _items = new();
 
     /// <summary>Снимки прямоугольников. Ключ сравнивается по ссылке — Equals ноды звать нельзя.</summary>
-    private readonly Dictionary<object, Rect2> _rects = new(ByReference.Instance);
+    private readonly Dictionary<object, Obb> _shapes = new(ByReference.Instance);
 
     private readonly Dictionary<Vector2I, List<IObstacle>> _buckets = new();
 
     /// <summary>Сколько раз менялся состав. По нему пересобирается растр навигации.</summary>
     public int Revision { get; private set; }
 
-    /// <summary>Прямоугольник последнего изменения — по нему выборочно устаревают пути.</summary>
+    /// <summary>Область последнего изменения — по ней выборочно устаревают пути.</summary>
     public Rect2 LastChange { get; private set; }
 
     public IReadOnlyList<IObstacle> All => _items;
@@ -42,23 +42,23 @@ public sealed class ObstacleMap
     public int Count => _items.Count;
 
     /// <summary>Запомненный прямоугольник. У живой ноды совпадает с её Footprint.</summary>
-    public Rect2 RectOf(IObstacle obstacle) =>
-        _rects.TryGetValue(obstacle, out var rect) ? rect : new Rect2();
+    public Obb ShapeOf(IObstacle obstacle) =>
+        _shapes.TryGetValue(obstacle, out var shape) ? shape : new Obb();
 
     public void Add(IObstacle obstacle)
     {
-        if (obstacle == null || _rects.ContainsKey(obstacle))
+        if (obstacle == null || _shapes.ContainsKey(obstacle))
             return;
 
-        var rect = obstacle.Footprint;
+        var shape = obstacle.Footprint;
 
         _items.Add(obstacle);
-        _rects[obstacle] = rect;
+        _shapes[obstacle] = shape;
 
-        foreach (var cell in Cells(rect))
+        foreach (var cell in Cells(shape.Bounds))
             Bucket(cell).Add(obstacle);
 
-        Touch(rect);
+        Touch(shape.Bounds);
     }
 
     /// <summary>
@@ -67,7 +67,7 @@ public sealed class ObstacleMap
     /// </summary>
     public void Remove(IObstacle obstacle)
     {
-        if (obstacle == null || !_rects.Remove(obstacle, out var rect))
+        if (obstacle == null || !_shapes.Remove(obstacle, out var shape))
             return;
 
         for (int i = _items.Count - 1; i >= 0; i--)
@@ -79,19 +79,25 @@ public sealed class ObstacleMap
             break;
         }
 
-        foreach (var cell in Cells(rect))
+        foreach (var cell in Cells(shape.Bounds))
         {
             if (_buckets.TryGetValue(cell, out var bucket))
                 bucket.Remove(obstacle);
         }
 
-        Touch(rect);
+        Touch(shape.Bounds);
     }
 
     /// <summary>Пересекается ли область с чем-нибудь. Касание краями пересечением не считается.</summary>
-    public bool Overlaps(Rect2 area, IObstacle except = null)
+    public bool Overlaps(in Obb area, IObstacle except = null) => Blocker(area, except) != null;
+
+    /// <summary>
+    /// Кто именно мешает области. Постановке нужен не сам ответ «занято», а сосед, от которого
+    /// придётся отодвинуться: прилипание стартовой точки считает выход из его прямоугольника.
+    /// </summary>
+    public IObstacle Blocker(in Obb area, IObstacle except = null)
     {
-        foreach (var cell in Cells(area))
+        foreach (var cell in Cells(area.Bounds))
         {
             if (!_buckets.TryGetValue(cell, out var bucket))
                 continue;
@@ -101,12 +107,12 @@ public sealed class ObstacleMap
                 if (ReferenceEquals(obstacle, except))
                     continue;
 
-                if (_rects.TryGetValue(obstacle, out var rect) && rect.Intersects(area))
-                    return true;
+                if (_shapes.TryGetValue(obstacle, out var shape) && shape.Intersects(area))
+                    return obstacle;
             }
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>Что накрывает точку. Нужен выбору цели под курсором.</summary>
@@ -118,7 +124,7 @@ public sealed class ObstacleMap
             return null;
 
         foreach (var obstacle in bucket)
-            if (_rects.TryGetValue(obstacle, out var rect) && rect.HasPoint(point))
+            if (_shapes.TryGetValue(obstacle, out var shape) && shape.HasPoint(point))
                 return obstacle;
 
         return null;
@@ -130,8 +136,12 @@ public sealed class ObstacleMap
     /// Это ЖЁСТКОЕ ОГРАНИЧЕНИЕ, а не сила: применяется после интегрирования движения
     /// и решает задачу достоверно. Силой её решать нельзя — любая комбинация управляющих
     /// сил рано или поздно загонит юнита внутрь здания, и сила лишь уменьшает вероятность.
+    ///
+    /// <paramref name="except"/> — препятствие, из которого выталкивать не нужно:
+    /// юнит, выезжающий из завода, ещё внутри его корпуса и не должен выскакивать
+    /// к ближайшей грани вместо точки rolloff.
     /// </summary>
-    public Vector2 PushOut(Vector2 position, float radius)
+    public Vector2 PushOut(Vector2 position, float radius, IObstacle except = null)
     {
         var probe = new Rect2(position - new Vector2(radius, radius),
             new Vector2(radius * 2f, radius * 2f));
@@ -143,53 +153,84 @@ public sealed class ObstacleMap
 
             foreach (var obstacle in bucket)
             {
-                if (_rects.TryGetValue(obstacle, out var rect))
-                    position = Eject(position, radius, rect);
+                if (ReferenceEquals(obstacle, except))
+                    continue;
+
+                if (_shapes.TryGetValue(obstacle, out var shape))
+                    position = Eject(position, radius, shape);
             }
         }
 
         return position;
     }
 
+    /// <summary>Есть ли препятствие ещё в карте. Нужно выезду: завод могли снести.</summary>
+    public bool Contains(IObstacle obstacle) =>
+        obstacle != null && _shapes.ContainsKey(obstacle);
+
     /// <summary>
-    /// Выталкивание из одного прямоугольника. Два случая разные: снаружи двигаем по нормали
-    /// от ближайшей точки, внутри — к ближайшей грани, иначе центр внутри здания не имеет
-    /// направления выхода вовсе.
+    /// Пересекается ли окружность с запомненным прямоугольником препятствия.
+    /// Считается так же, как касание в Eject: ближайшая точка на OBB и расстояние до неё.
     /// </summary>
-    private static Vector2 Eject(Vector2 position, float radius, Rect2 rect)
+    public bool CircleHits(IObstacle obstacle, Vector2 position, float radius)
     {
-        if (rect.HasPoint(position))
+        if (!_shapes.TryGetValue(obstacle, out var shape))
+            return false;
+
+        var local = shape.ToLocal(position);
+        var half = shape.Half;
+        var closest = new Vector2(
+            Mathf.Clamp(local.X, -half.X, half.X),
+            Mathf.Clamp(local.Y, -half.Y, half.Y));
+
+        return (local - closest).LengthSquared() < radius * radius;
+    }
+
+    /// <summary>
+    /// Выталкивание из одного прямоугольника. Считается в его собственных координатах:
+    /// повёрнутый прямоугольник там снова осепараллелен, а окружность от поворота
+    /// не меняется вовсе, поэтому весь разбор случаев остаётся прежним.
+    ///
+    /// Случая два, и они разные: снаружи двигаем по нормали от ближайшей точки, внутри —
+    /// к ближайшей грани, иначе центр внутри здания не имеет направления выхода вовсе.
+    /// </summary>
+    private static Vector2 Eject(Vector2 position, float radius, in Obb shape)
+    {
+        var local = shape.ToLocal(position);
+        var half = shape.Half;
+
+        if (Mathf.Abs(local.X) <= half.X && Mathf.Abs(local.Y) <= half.Y)
         {
-            float left = position.X - rect.Position.X;
-            float right = rect.End.X - position.X;
-            float top = position.Y - rect.Position.Y;
-            float bottom = rect.End.Y - position.Y;
+            float left = local.X + half.X;
+            float right = half.X - local.X;
+            float top = local.Y + half.Y;
+            float bottom = half.Y - local.Y;
 
             float least = Mathf.Min(Mathf.Min(left, right), Mathf.Min(top, bottom));
 
-            if (Mathf.IsEqualApprox(least, left))
-                return new Vector2(rect.Position.X - radius, position.Y);
+            var pushed = least switch
+            {
+                _ when Mathf.IsEqualApprox(least, left) => new Vector2(-half.X - radius, local.Y),
+                _ when Mathf.IsEqualApprox(least, right) => new Vector2(half.X + radius, local.Y),
+                _ when Mathf.IsEqualApprox(least, top) => new Vector2(local.X, -half.Y - radius),
+                _ => new Vector2(local.X, half.Y + radius),
+            };
 
-            if (Mathf.IsEqualApprox(least, right))
-                return new Vector2(rect.End.X + radius, position.Y);
-
-            return Mathf.IsEqualApprox(least, top)
-                ? new Vector2(position.X, rect.Position.Y - radius)
-                : new Vector2(position.X, rect.End.Y + radius);
+            return shape.ToGlobal(pushed);
         }
 
         var closest = new Vector2(
-            Mathf.Clamp(position.X, rect.Position.X, rect.End.X),
-            Mathf.Clamp(position.Y, rect.Position.Y, rect.End.Y));
+            Mathf.Clamp(local.X, -half.X, half.X),
+            Mathf.Clamp(local.Y, -half.Y, half.Y));
 
-        var delta = position - closest;
+        var delta = local - closest;
         float distance = delta.Length();
 
         if (distance >= radius)
             return position;
 
         var direction = distance > 0.001f ? delta / distance : Vector2.Up;
-        return closest + direction * radius;
+        return shape.ToGlobal(closest + direction * radius);
     }
 
     private void Touch(Rect2 rect)

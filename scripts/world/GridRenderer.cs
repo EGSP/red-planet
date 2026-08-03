@@ -5,23 +5,23 @@ public partial class GridRenderer : Node2D
 {
     public override void _Draw()
     {
-        int r = Const.WorldRadiusCells;
+        int r = World.RadiusCells;
         float min = -r * Const.Unit;
         float max = (r + 1) * Const.Unit;
 
-        var line = new Color(1f, 1f, 1f, 0.06f);
-        var axis = new Color(1f, 1f, 1f, 0.16f);
+        var line = DrawTheme.Line(VizKind.GridLine);
+        var axis = DrawTheme.Line(VizKind.GridAxis);
 
         for (int i = -r; i <= r + 1; i++)
         {
             float p = i * Const.Unit;
-            var color = i == 0 ? axis : line;
+            var style = i == 0 ? axis : line;
 
-            DrawLine(new Vector2(p, min), new Vector2(p, max), color);
-            DrawLine(new Vector2(min, p), new Vector2(max, p), color);
+            ShapeDraw.Line(this, new Vector2(p, min), new Vector2(p, max), style);
+            ShapeDraw.Line(this, new Vector2(min, p), new Vector2(max, p), style);
         }
 
-        DrawRect(new Rect2(min, min, max - min, max - min),
-            new Color(1f, 0.6f, 0.4f, 0.25f), false, 2f);
+        ShapeDraw.Rect(this, new Rect2(min, min, max - min, max - min),
+            DrawTheme.Line(VizKind.WorldBorder));
     }
 }

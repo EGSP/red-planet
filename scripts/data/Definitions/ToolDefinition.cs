@@ -79,6 +79,7 @@ public enum WorkKinds
 {
     None = 0,
     Build = 1,
+    Repair = 2,
 }
 
 /// <summary>
@@ -112,8 +113,16 @@ public sealed class WorkToolDefinition : ToolDefinition
 
     public bool CanBuild => Kinds.HasFlag(WorkKinds.Build);
 
-    /// <summary>Чинит тот, кто строит: инструмент один и тот же.</summary>
-    public bool CanRepair => CanBuild;
+    /// <summary>
+    /// Ремонт может быть отдельным умением: у боевого ремонтника стройки нет,
+    /// а чинить он обязан. Если в файле указана только стройка — ремонт следует из неё,
+    /// как в PA (одна мощность на оба занятия).
+    /// </summary>
+    public bool CanRepair =>
+        Kinds.HasFlag(WorkKinds.Repair) || Kinds.HasFlag(WorkKinds.Build);
+
+    /// <summary>Годен ли инструмент хоть на какую-то работу. По нему юнит получает руку.</summary>
+    public bool CanWork => Kinds != WorkKinds.None;
 
     /// <summary>Расход энергии в секунду при работе на полную мощность.</summary>
     public float EnergyDrain => Power * EnergyPerPower;

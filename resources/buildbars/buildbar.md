@@ -24,7 +24,9 @@ cells = [
 	{ x = 0, y = 1, build = "generator_t2" },
 	{ x = 1, y = 1, build = "assembler" },
 	{ x = 0, y = 0, build = "generator" },
-	{ x = 1, y = 0, build = "factory" },
+	{ x = 1, y = 0, build = "metal_maker" },
+	{ x = 2, y = 0, build = "extractor" },
+	{ x = 3, y = 0, build = "bot_factory" },
 ]
 ```
 

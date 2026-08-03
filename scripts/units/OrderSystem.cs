@@ -13,21 +13,27 @@
 /// </summary>
 public partial class OrderSystem : GameSystem
 {
-    public override void Step(double dt)
-    {
-        foreach (var actor in GM.Index.All<IOrderable>())
-        {
-            var orders = actor.Orders;
+	public override void Step(double dt)
+	{
+		foreach (var actor in GM.Index.All<IOrderable>())
+		{
+			// Выезд из корпуса — жёсткое ограничение, не приказ: пока юнит Leaving,
+			// очередь не исполняется и не завершается (иначе скопированный rally
+			// с завода счёл бы себя исполненным ещё внутри корпуса)
+			if (actor is IMobile { Movement.Leaving: true })
+				continue;
 
-            // Цель пала, каркас достроен, месторождение выработано — приказ исчерпан
-            orders.DropInvalid();
+			var orders = actor.Orders;
 
-            var current = orders.Current;
+			// Цель пала, каркас достроен, месторождение выработано — приказ исчерпан
+			orders.DropInvalid();
 
-            if (current == null)
-                actor.OnIdle(dt);
-            else
-                actor.RunOrder(current, dt);
-        }
-    }
+			var current = orders.Current;
+
+			if (current == null)
+				actor.OnIdle(dt);
+			else
+				actor.RunOrder(current, dt);
+		}
+	}
 }

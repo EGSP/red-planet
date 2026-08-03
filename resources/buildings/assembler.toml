@@ -9,7 +9,11 @@ tags  = ["structure", "builder", "basic"]
 tools = ["assembler_arm"]
 
 [footprint]
-rows = ["#"]
+rows         = ["#"]
+pattern      = "line"
+pattern_alt  = "square"
+# Рабочая зона у сборщиков широкая, и плотный ряд им ни к чему
+pattern_step = "margin"
 
 [body]
 max_health   = 260.0

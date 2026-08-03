@@ -9,7 +9,12 @@ tags  = ["structure", "defense", "basic"]
 tools = ["turret_gun"]
 
 [footprint]
-rows = ["#"]
+rows         = ["#"]
+pattern      = "line"
+# Ромб расходится кольцами от первой турели: перекрытие секторов важнее плотности,
+# а сплошной стеной турели не ставят
+pattern_alt  = "diamond"
+pattern_step = "margin"
 
 [body]
 max_health   = 250.0

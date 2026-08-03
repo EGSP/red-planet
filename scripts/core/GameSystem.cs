@@ -22,6 +22,13 @@ public partial class GameSystem : Node
     /// <summary>Порядок внутри фазы — чем меньше, тем раньше.</summary>
     [Export] public int StepOrder;
 
+    /// <summary>
+    /// В каком цикле обновления Godot планировщик вызывает эту систему.
+    /// По умолчанию — физический: симуляция остаётся на фиксированном шаге.
+    /// Графический цикл нужен представлению, которое должно совпадать с отрисовкой.
+    /// </summary>
+    [Export] public UpdateCycle UpdateCycle = UpdateCycle.PhysicsProcess;
+
     protected GameManager GM { get; private set; }
 
     private bool _linked;

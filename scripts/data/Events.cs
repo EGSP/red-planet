@@ -43,6 +43,9 @@ public struct BlueprintPlaced : IEventRecord
 
     /// <summary>Центр занятого места. Клеток больше нет: постановка свободная.</summary>
     public Vector2 Pos;
+
+    /// <summary>Угол, под которым каркас поставили, в радианах.</summary>
+    public float Facing;
 }
 
 /// <summary>
@@ -60,6 +63,9 @@ public struct BuildingSpawned : IEventRecord
     public int EntityId;
     public string DefinitionId;
     public Vector2 Pos;
+
+    /// <summary>Угол корпуса в радианах: постройка, восстановленная по документам, стоит так же.</summary>
+    public float Facing;
 }
 
 /// <summary>Каркас достроен и превратился в готовую сущность.</summary>
@@ -127,6 +133,44 @@ public struct MetricSampled : IEventRecord
     public int Tick;
 }
 
+/// <summary>
+/// Волна отобрана и набрана. Записывается НАМЕРЕНИЕ: чем подсистема руководствовалась
+/// и что решила выставить.
+///
+/// Факт отдельным событием не пишется: каждая созданная сущность и без того попадает
+/// в <see cref="EnemySpawned"/> с признаком <see cref="PressureOrigin.Wave"/>, откуда
+/// видны и вид, и точка появления. Разделение всё равно сохраняется — намерение и факт
+/// расходятся, когда набор не потратил бюджет целиком.
+/// </summary>
+[TransientEvent]
+public struct WaveStarted : IEventRecord
+{
+    public int SequenceId { get; set; }
+
+    /// <summary>Ключ справочника волн.</summary>
+    public string WaveId;
+
+    /// <summary>Сглаженный террор, по которому шёл отбор и считался бюджет.</summary>
+    public float Terror;
+
+    /// <summary>Бюджет волны в единицах боевой мощи.</summary>
+    public float Budget;
+
+    /// <summary>Сколько мощи набор израсходовал. Меньше бюджета — остаток некому было занять.</summary>
+    public float Spent;
+
+    /// <summary>Состав перечислением видов с количествами.</summary>
+    public string Composition;
+
+    /// <summary>Направление первого очага от точки высадки, градусов.</summary>
+    public float CenterAngleDegrees;
+
+    public int Groups;
+
+    /// <summary>Назначенный отдых до следующей волны, секунд. С множителем и разбросом.</summary>
+    public float ChillSeconds;
+}
+
 /// <summary>Враг вышел на карту.</summary>
 [TransientEvent]
 public struct EnemySpawned : IEventRecord
@@ -138,4 +182,7 @@ public struct EnemySpawned : IEventRecord
     public string DefinitionId;
 
     public Vector2 Pos;
+
+    /// <summary>Фон или волна. По разбору партии видно, чем именно было создано напряжение.</summary>
+    public PressureOrigin Origin;
 }

@@ -15,8 +15,12 @@ public static class Targeting
     public static IDamageable Nearest(Vector2 from, Faction side,
         float maxDistance = float.MaxValue) =>
         GameManager.I.Targets[side]
-            .Where(target => !target.Health.IsDead)
+            .Where(target => !target.Health.IsDead && !Leaving(target))
             .Nearest(from, target => target.GlobalPosition, maxDistance);
+
+    /// <summary>Юнит ещё внутри корпуса завода — ни цель, ни стрелок.</summary>
+    public static bool Leaving(object obj) =>
+        obj is IMobile { Movement.Leaving: true };
 
     /// <summary>
     /// Наименьший запас между дистанцией подхода и границей огня, пикселей.
@@ -78,6 +82,9 @@ public static class Targeting
     public static bool IsValid(GodotObject obj)
     {
         if (!Alive.Is(obj) || obj is not Node node || node.IsQueuedForDeletion())
+            return false;
+
+        if (Leaving(obj))
             return false;
 
         return node is not IDamageable damageable || !damageable.Health.IsDead;

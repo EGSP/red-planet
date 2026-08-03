@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://7vq7pnmjerua" path="res://scripts/core/Root.cs" id="1_root"]
 [ext_resource type="PackedScene" path="res://scenes/MainMenu.tscn" id="2_menu"]
-[ext_resource type="PackedScene" path="res://scenes/Session.tscn" id="3_session"]
+[ext_resource type="PackedScene" uid="uid://bqvvlwhycmvut" path="res://scenes/Session.tscn" id="3_session"]
 
 [node name="Root" type="Node" unique_id=1841448420]
 script = ExtResource("1_root")

@@ -68,13 +68,17 @@ public sealed class Spawner
         gm.Index.Watch<Node>(null, OnRetired);
     }
 
-    /// <summary>Готовая постройка: занимает место по форме справочника.</summary>
-    public Building SpawnBuilding(UnitDefinition def, Vector2 center)
+    /// <summary>
+    /// Готовая постройка: занимает место по форме справочника, повёрнутое на заданный угол.
+    /// Угол не задан — берётся из справочника: так появляются постройки, которых никто
+    /// не ставил, вроде стартовой базы.
+    /// </summary>
+    public Building SpawnBuilding(UnitDefinition def, Vector2 center, float? facing = null)
     {
         var building = NewBuilding(def.Class);
 
         int id = _gm.NewId();
-        building.Init(id, def, center);
+        building.Init(id, def, center, facing ?? Mathf.DegToRad(def.FacingDegrees));
 
         _gm.Playground.Add(WorldLayer.Structures, building);
         Occupy(building, def);
@@ -89,13 +93,19 @@ public sealed class Spawner
             EntityId = id,
             DefinitionId = def.Id,
             Pos = center,
+            Facing = building.BodyFacing,
         });
 
         return building;
     }
 
-    /// <summary>Юнит ходит по миру и места не занимает.</summary>
-    public Unit SpawnUnit(UnitDefinition def, Vector2 position)
+    /// <summary>
+    /// Юнит ходит по миру и места не занимает. Сторона задаётся здесь, а не определением:
+    /// один и тот же вид должна иметь возможность выставить любая сторона, и класс узла
+    /// у них общий. Выставляется до входа в индекс — по стороне строится разрез.
+    /// </summary>
+    public Unit SpawnUnit(UnitDefinition def, Vector2 position,
+        Faction faction = Faction.Player)
     {
         var unit = NewUnit(def.Class);
 
@@ -103,6 +113,7 @@ public sealed class Spawner
         unit.Id = id;
         unit.Definition = def;
         unit.Position = position;
+        unit.Faction = faction;
 
         _gm.Playground.Add(WorldLayer.Actors, unit);
         _gm.Entities.Add(id, unit);
@@ -113,12 +124,13 @@ public sealed class Spawner
     }
 
     /// <summary>Каркас занимает место на время стройки — его нельзя перекрыть.</summary>
-    public Blueprint SpawnBlueprint(PackedScene scene, UnitDefinition def, Vector2 center)
+    public Blueprint SpawnBlueprint(PackedScene scene, UnitDefinition def, Vector2 center,
+        float facing)
     {
         var blueprint = scene.Instantiate<Blueprint>();
 
         int id = _gm.NewId();
-        blueprint.Init(id, def, center);
+        blueprint.Init(id, def, center, facing);
 
         _gm.Playground.Add(WorldLayer.Structures, blueprint);
         Occupy(blueprint, def);
@@ -127,22 +139,6 @@ public sealed class Spawner
         Enroll(blueprint, id, def.Occupies ? blueprint : null);
 
         return blueprint;
-    }
-
-    /// <summary>Враг ходит по миру и места не занимает — как и юнит игрока.</summary>
-    public Enemy SpawnEnemy(UnitDefinition def, Vector2 position)
-    {
-        var enemy = new Enemy();
-
-        int id = _gm.NewId();
-        enemy.Init(id, def, position);
-
-        _gm.Playground.Add(WorldLayer.Actors, enemy);
-        _gm.Entities.Add(id, enemy);
-        _gm.Index.Add(enemy);
-        Enroll(enemy, id, null);
-
-        return enemy;
     }
 
     /// <summary>
@@ -238,12 +234,17 @@ public sealed class Spawner
         UnitClass.Factory => new Factory(),
         UnitClass.Turret => new Turret(),
         UnitClass.Assembler => new Assembler(),
+        UnitClass.Plant => new Plant(),
         _ => new Building(),
     };
 
+    /// <summary>
+    /// Какой узел поднять. Отдельный класс есть только у коммандера — из-за неуязвимости
+    /// и собственной отрисовки; всё прочее подвижное, включая противника, это Unit.
+    /// </summary>
     private static Unit NewUnit(UnitClass kind) => kind switch
     {
         UnitClass.Commander => new Commander(),
-        _ => new Bot(),
+        _ => new Unit(),
     };
 }

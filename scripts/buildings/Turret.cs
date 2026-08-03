@@ -43,12 +43,19 @@ public partial class Turret : Building, IArmed
 
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 
-    public override void Init(int id, UnitDefinition def, Vector2 center)
+    public override void Init(int id, UnitDefinition def, Vector2 center, float facing)
     {
-        base.Init(id, def, center);
+        base.Init(id, def, center, facing);
 
-        // Смотрит наружу от базы: первый разворот не тратится на полкруга
-        Rotation = Position.IsZeroApprox() ? 0f : Position.Angle();
+        // Башня начинает с угла, под которым турель поставили: игрок, разворачивая её
+        // при постановке, показывает, откуда ждёт противника.
+        //
+        // Угол из справочника означает, что игрок его не задавал — постановка была щелчком
+        // без протаскивания. Тогда остаётся прежнее правило: смотреть наружу от базы,
+        // чтобы первый разворот не тратился на полкруга
+        bool own = Mathf.IsEqualApprox(facing, Mathf.DegToRad(def.FacingDegrees));
+
+        Rotation = own && !Position.IsZeroApprox() ? Position.Angle() : facing;
     }
 
     public override void _Process(double delta) => QueueRedraw();
@@ -69,7 +76,9 @@ public partial class Turret : Building, IArmed
 
         float half = Const.Unit * 0.5f;
 
-        WeaponGizmo.Draw(this, Weapon, Definition.Color);
+        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
+            selected: GizmoGate.IsSelected(this),
+            armedStructure: true);
 
         // Башня — треугольник носом вперёд по оси. Рисуется в координатах самой ноды,
         // до всякой правки трансформа: нос обязан совпадать с конусом прицеливания
@@ -82,15 +91,15 @@ public partial class Turret : Building, IArmed
             new Vector2(-back, back * 0.85f),
         };
 
-        DrawColoredPolygon(body, Definition.Color);
-        DrawPolyline(new[] { body[0], body[1], body[2], body[0] },
-            new Color(0f, 0f, 0f, 0.45f), 2f);
+        ShapeDraw.Polygon(this, body,
+            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.45f), 2f, WidthMode.Screen));
 
-        // Основание стоит по клетке и не крутится — компенсируем поворот башни
-        DrawSetTransform(Vector2.Zero, -Rotation, Vector2.One);
-        DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(Definition.Color, 0.3f));
-        DrawRect(new Rect2(-half, -half, Const.Unit, Const.Unit), new Color(0f, 0f, 0f, 0.35f),
-            false, 2f);
+        // Основание стоит под углом постановки и вслед за башней не крутится — снимаем
+        // поворот ноды и ставим вместо него угол корпуса
+        DrawSetTransform(Vector2.Zero, BodyFacing - Rotation, Vector2.One);
+        ShapeDraw.Rect(this, new Rect2(-half, -half, Const.Unit, Const.Unit),
+            ShapeStyle.Filled(new Color(Definition.Color, 0.3f), new Color(0f, 0f, 0f, 0.35f), 2f,
+                WidthMode.Screen));
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
         HealthBar.Draw(this, Health, Const.Unit * 0.9f, -half - 10f, Rotation);

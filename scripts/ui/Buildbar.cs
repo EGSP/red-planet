@@ -10,8 +10,8 @@ using Godot;
 /// целиком. Держи их в одном дереве — и перестройка сетки дёргала бы разметку остальных
 /// показаний, а место панели зависело бы от длины строки с ресурсами.
 ///
-/// Что откуда берётся: набор панелей — от выделенных строителей, раскладка —
-/// от BuildbarLayout, содержимое ячеек — из справочника построек.
+/// Что откуда берётся: набор панелей — от выделенных строителей и заводов, раскладка —
+/// от BuildbarLayout, содержимое ячеек — из справочника.
 /// </summary>
 public partial class Buildbar : CanvasLayer
 {
@@ -34,11 +34,31 @@ public partial class Buildbar : CanvasLayer
     private Button _tipOwner;
 
     /// <summary>
-    /// Отпечаток выделения: идентификаторы панелей выделенных строителей. Сетку
-    /// пересобираем только когда он сменился — иначе кнопки перестраивались бы каждый
-    /// кадр, теряя наведение и нажатие.
+    /// Отпечаток выделения и очередей заводов. Сетку пересобираем только когда он
+    /// сменился — иначе кнопки перестраивались бы каждый кадр, теряя наведение.
     /// </summary>
     private string _key = "";
+
+    /// <summary>Режим последней собранной панели: постановка или очередь завода.</summary>
+    private BuildbarKind _kind = BuildbarKind.Placement;
+
+    /// <summary>Заводы, чью очередь показывают счётчики (при kind = Plant).</summary>
+    private readonly List<Plant> _plants = new();
+
+    /// <summary>
+    /// Кнопки с счётчиками очереди, собранные при постройке сетки. Держим список,
+    /// чтобы обновление счётчиков не обходило дерево интерфейса заново.
+    /// </summary>
+    private readonly List<(Button Button, UnitDefinition Def)> _counted = new();
+
+    /// <summary>Кнопка переключения режима производства. Есть только у plant-панели.</summary>
+    private Button _modeButton;
+
+    /// <summary>
+    /// Сумма ревизий очередей на прошлом обновлении счётчиков. Пересчитываем подписи
+    /// только когда сумма сменилась: перебирать состав очередей каждый кадр незачем.
+    /// </summary>
+    private int _queueRevision = -1;
 
     public override void _Ready()
     {
@@ -93,31 +113,60 @@ public partial class Buildbar : CanvasLayer
 
     public override void _Process(double delta)
     {
-        var bars = BarsOf(GameManager.I?.Command);
-        string key = string.Join('|', bars.Select(bar => bar.Id).OrderBy(id => id));
+        var bars = BarsOf(GameManager.I?.Command, out var plants, out var kind);
+        string key = Fingerprint(bars, plants, kind);
 
         if (key != _key)
         {
             _key = key;
+            _kind = kind;
+            _plants.Clear();
+            _plants.AddRange(plants);
+            _queueRevision = -1;
             HideTip();
             Rebuild(bars);
         }
+
+        if (_kind == BuildbarKind.Plant)
+            RefreshPlantCounts();
 
         if (_tip.Visible && _tipOwner != null && Alive.Is(_tipOwner))
             PlaceTip(_tipOwner);
     }
 
     /// <summary>
-    /// Панели выделенных строителей. Тот, кто строить не умеет, панели не имеет вовсе,
-    /// поэтому отдельной проверки «есть ли среди выделенных строитель» не нужно:
-    /// пустой список и есть ответ.
+    /// Панели выделенных строителей и заводов. Приоритет у завода: если среди выделенных
+    /// есть Plant, показывается только его plant-панель (очередь), а не постановка.
     /// </summary>
-    private static List<BuildbarDefinition> BarsOf(CommandSystem command)
+    private static List<BuildbarDefinition> BarsOf(CommandSystem command,
+        out List<Plant> plants, out BuildbarKind kind)
     {
         var bars = new List<BuildbarDefinition>();
+        plants = new List<Plant>();
+        kind = BuildbarKind.Placement;
 
         if (command == null)
             return bars;
+
+        foreach (var actor in command.Selected)
+        {
+            // Живость проверяем здесь: выделение чистится своей системой, а панель может
+            // прийти раньше неё в том же кадре, и обращение к снесённому заводу упало бы
+            if (actor is Plant plant && Alive.Is(plant)
+                                     && plant.Definition?.Buildbar is { } plantBarId)
+            {
+                plants.Add(plant);
+                var bar = Content.Catalog.Buildbar(plantBarId);
+                if (bar != null && !bars.Contains(bar))
+                    bars.Add(bar);
+            }
+        }
+
+        if (plants.Count > 0)
+        {
+            kind = BuildbarKind.Plant;
+            return bars;
+        }
 
         foreach (var actor in command.Selected)
         {
@@ -133,10 +182,21 @@ public partial class Buildbar : CanvasLayer
         return bars;
     }
 
+    private static string Fingerprint(List<BuildbarDefinition> bars, List<Plant> plants,
+        BuildbarKind kind)
+    {
+        string ids = string.Join('|', bars.Select(bar => bar.Id).OrderBy(id => id));
+        string plantIds = string.Join(',', plants.Select(plant => plant.Id));
+        return $"{kind}:{ids}:{plantIds}";
+    }
+
     private void Rebuild(List<BuildbarDefinition> bars)
     {
         foreach (var child in _sections.GetChildren())
             child.QueueFree();
+
+        _counted.Clear();
+        _modeButton = null;
 
         if (bars.Count == 0)
         {
@@ -148,6 +208,11 @@ public partial class Buildbar : CanvasLayer
 
         foreach (var section in BuildbarLayout.Merge(bars).Sections)
             _sections.AddChild(BuildSection(section));
+
+        // Режим производства принадлежит заводу, а не разделу справочника, поэтому кнопка
+        // стоит отдельной секцией справа, а не внутри сетки юнитов
+        if (_kind == BuildbarKind.Plant)
+            _sections.AddChild(BuildModeSection());
     }
 
     /// <summary>Секция: сетка ячеек, под нею подпись — как в строительной панели PA.</summary>
@@ -178,6 +243,75 @@ public partial class Buildbar : CanvasLayer
         column.AddChild(title);
 
         return frame;
+    }
+
+    /// <summary>
+    /// Секция с единственной кнопкой — переключателем режима производства. Отдельная
+    /// секция, а не ячейка сетки: ячейки заняты определениями из справочника, и вставить
+    /// среди них кнопку, у которой нет определения, значило бы сломать раскладку.
+    /// </summary>
+    private Control BuildModeSection()
+    {
+        var frame = new PanelContainer { SizeFlagsVertical = Control.SizeFlags.ShrinkEnd };
+
+        var column = new VBoxContainer();
+        column.AddThemeConstantOverride("separation", 6);
+        frame.AddChild(column);
+
+        _modeButton = new Button
+        {
+            // Половина ячейки: кнопка служебная и не должна спорить с составом очереди
+            CustomMinimumSize = new Vector2(CellSize.X * 0.6f, CellSize.Y),
+            ClipText = true,
+        };
+        _modeButton.AddThemeFontSizeOverride("font_size", 12);
+        _modeButton.Pressed += ToggleInfinite;
+        column.AddChild(_modeButton);
+
+        string tip = "Режим производства\nПовтор — очередь идёт по кругу\n" +
+                     "Один проход — слот снимается после выпуска";
+        _modeButton.MouseEntered += () => ShowTip(_modeButton, tip);
+        _modeButton.MouseExited += () =>
+        {
+            if (_tipOwner == _modeButton)
+                HideTip();
+        };
+
+        var title = new Label
+        {
+            Text = "РЕЖИМ",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        title.AddThemeFontSizeOverride("font_size", 12);
+        title.AddThemeColorOverride("font_color", TitleColor);
+        column.AddChild(title);
+
+        UpdateModeButton();
+        return frame;
+    }
+
+    /// <summary>
+    /// Переключить режим у всех выделенных заводов разом. Состояние берётся по «все
+    /// повторяют»: пока хоть один идёт в один проход, нажатие включает повтор у всех,
+    /// и разнобой при групповом выделении сходится за одно нажатие.
+    /// </summary>
+    private void ToggleInfinite()
+    {
+        bool infinite = _plants.Count > 0 && _plants.All(plant => plant.Infinite);
+
+        foreach (var plant in _plants)
+            plant.Infinite = !infinite;
+
+        UpdateModeButton();
+    }
+
+    private void UpdateModeButton()
+    {
+        if (_modeButton == null)
+            return;
+
+        bool infinite = _plants.Count > 0 && _plants.All(plant => plant.Infinite);
+        _modeButton.Text = infinite ? "↻ повтор" : "→ один";
     }
 
     private Control BuildRow(BuildbarLayout.Row row)
@@ -214,13 +348,24 @@ public partial class Buildbar : CanvasLayer
     {
         var button = new Button
         {
-            Text = def.DisplayName,
+            Text = ButtonCaption(def),
             CustomMinimumSize = CellSize,
             ClipText = true,
         };
 
         button.AddThemeFontSizeOverride("font_size", 12);
-        button.Pressed += () => GameManager.I?.Command?.BeginBuild(def);
+
+        if (_kind == BuildbarKind.Plant)
+        {
+            // Не Pressed, а GuiInput: сигнал нажатия приходит только от левой кнопки,
+            // а очередь правится обеими — левой в хвост, правой из хвоста
+            button.GuiInput += @event => OnPlantButtonInput(button, def, @event);
+            _counted.Add((button, def));
+        }
+        else
+        {
+            button.Pressed += () => GameManager.I?.Command?.BeginBuild(def);
+        }
 
         string tip = TipText(def);
         button.MouseEntered += () => ShowTip(button, tip);
@@ -233,7 +378,87 @@ public partial class Buildbar : CanvasLayer
         return button;
     }
 
-    private static string TipText(UnitDefinition def)
+    private void OnPlantButtonInput(Button button, UnitDefinition def, InputEvent @event)
+    {
+        if (@event is not InputEventMouseButton { Pressed: true } mouse)
+            return;
+
+        int count = ModifierCount();
+
+        if (mouse.ButtonIndex == MouseButton.Left)
+        {
+            foreach (var plant in _plants)
+                plant.Enqueue(def.Id, count);
+
+            button.AcceptEvent();
+            RefreshPlantCounts();
+            return;
+        }
+
+        if (mouse.ButtonIndex == MouseButton.Right)
+        {
+            foreach (var plant in _plants)
+                plant.Dequeue(def.Id, count);
+
+            button.AcceptEvent();
+            RefreshPlantCounts();
+        }
+    }
+
+    /// <summary>Shift ×5, Ctrl ×10, Shift+Ctrl ×50; без модификаторов — 1.</summary>
+    private static int ModifierCount()
+    {
+        bool shift = Input.IsKeyPressed(Key.Shift);
+        bool ctrl = Input.IsKeyPressed(Key.Ctrl);
+
+        if (shift && ctrl)
+            return 50;
+
+        if (ctrl)
+            return 10;
+
+        if (shift)
+            return 5;
+
+        return 1;
+    }
+
+    /// <summary>
+    /// Обновить счётчики на кнопках. Зовётся каждый кадр, пока показана plant-панель,
+    /// поэтому работа делается только по смене суммарной ревизии очередей: подписи
+    /// меняются от щелчков и выпусков, то есть несколько раз в секунду в лучшем случае.
+    /// </summary>
+    private void RefreshPlantCounts()
+    {
+        int revision = 0;
+
+        foreach (var plant in _plants)
+            revision += plant.Revision;
+
+        if (revision == _queueRevision)
+            return;
+
+        _queueRevision = revision;
+
+        foreach (var (button, def) in _counted)
+            button.Text = ButtonCaption(def);
+
+        UpdateModeButton();
+    }
+
+    private string ButtonCaption(UnitDefinition def)
+    {
+        if (_kind != BuildbarKind.Plant || _plants.Count == 0)
+            return def.DisplayName;
+
+        int total = 0;
+        foreach (var plant in _plants)
+            total += plant.CountOf(def.Id);
+
+        return total > 0 ? $"{def.DisplayName} ×{total}" : def.DisplayName;
+    }
+
+    private string TipText(UnitDefinition def)
     {
         // Энергоцена инструмента строителя в подсказку не входит: она зависит от того,
         // кто строит. Постоянный расход готовой постройки (портал) показываем отдельно.
@@ -242,6 +467,9 @@ public partial class Buildbar : CanvasLayer
         float drain = def.Conversion?.EnergyDrain ?? 0f;
         if (drain > 0f)
             text += $"\n{drain:0.#} энергии/с";
+
+        if (_kind == BuildbarKind.Plant)
+            text += "\nЛКМ — в очередь, ПКМ — убрать\nShift ×5, Ctrl ×10, Shift+Ctrl ×50";
 
         return text;
     }

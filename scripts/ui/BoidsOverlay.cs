@@ -10,15 +10,6 @@ using Godot;
 /// </summary>
 public partial class BoidsOverlay : Node2D
 {
-    private static readonly Color Seek = new(0.5f, 1f, 0.6f);
-    private static readonly Color Avoid = new(1f, 0.7f, 0.3f);
-    private static readonly Color Align = new(0.6f, 0.75f, 1f);
-    private static readonly Color Speed = new(1f, 1f, 1f, 0.8f);
-    private static readonly Color Sense = new(0.5f, 0.8f, 1f, 0.18f);
-    private static readonly Color Body = new(1f, 0.9f, 0.4f, 0.5f);
-    private static readonly Color Link = new(1f, 0.6f, 0.4f, 0.35f);
-    private static readonly Color Cells = new(1f, 1f, 1f, 0.08f);
-
     /// <summary>Во что превращается единичная сила на экране, пикселей.</summary>
     private const float ForceScale = 48f;
 
@@ -72,8 +63,9 @@ public partial class BoidsOverlay : Node2D
 
         if (DebugFlags.BoidRadii)
         {
-            DrawArc(at, radius, 0f, Mathf.Tau, 20, Body, 1.5f);
-            DrawArc(at, radius * (movement?.SenseFactor ?? 3.5f), 0f, Mathf.Tau, 40, Sense, 1f);
+            ShapeDraw.Circle(this, at, radius, DrawTheme.Radius(VizKind.BoidBody), 20);
+            ShapeDraw.Circle(this, at, radius * (movement?.SenseFactor ?? 3.5f),
+                DrawTheme.Radius(VizKind.BoidSense), 40);
         }
 
         if (DebugFlags.BoidNeighbours)
@@ -82,19 +74,20 @@ public partial class BoidsOverlay : Node2D
         if (!DebugFlags.BoidForces)
             return;
 
-        Arrow(at, state.SeekForce * state.SeekScale, Seek);
-        Arrow(at, state.AvoidForce, Avoid);
-        Arrow(at, state.AlignForce, Align);
+        Arrow(at, state.SeekForce * state.SeekScale, VizKind.BoidSeek);
+        Arrow(at, state.AvoidForce, VizKind.BoidAvoid);
+        Arrow(at, state.AlignForce, VizKind.BoidAlign);
 
         // Скорость рисуется в тех же единицах, что и силы: иначе не видно,
         // насколько результат разошёлся со стремлением к цели
         if (mobile.Definition is { SpeedPx: > 0f })
-            Arrow(at, state.Velocity / mobile.Definition.SpeedPx, Speed);
+            Arrow(at, state.Velocity / mobile.Definition.SpeedPx, VizKind.BoidSpeed);
     }
 
     private void DrawNeighbours(IMobile mobile, Vector2 at, float sense)
     {
         var gm = GameManager.I;
+        var style = DrawTheme.Line(VizKind.BoidLink);
 
         foreach (var other in gm.Index.All<IMobile>())
         {
@@ -104,13 +97,14 @@ public partial class BoidsOverlay : Node2D
             if (mobile.GlobalPosition.DistanceTo(other.GlobalPosition) > sense)
                 continue;
 
-            DrawLine(at, ToLocal(other.GlobalPosition), Link, 1f);
+            ShapeDraw.Line(this, at, ToLocal(other.GlobalPosition), style);
         }
     }
 
     private void DrawCells(MovementSystem movement)
     {
         float side = movement.BucketSize;
+        var style = DrawTheme.Line(VizKind.BoidCells);
 
         foreach (var pair in movement.Buckets)
         {
@@ -118,21 +112,16 @@ public partial class BoidsOverlay : Node2D
                 continue;
 
             var corner = new Vector2(pair.Key.X * side, pair.Key.Y * side);
-            DrawRect(new Rect2(ToLocal(corner), side, side), Cells, false, 1f);
+            ShapeDraw.Rect(this, new Rect2(ToLocal(corner), side, side), style);
         }
     }
 
     /// <summary>Стрелка силы: длина по величине, наконечник двумя штрихами.</summary>
-    private void Arrow(Vector2 from, Vector2 force, Color color)
+    private void Arrow(Vector2 from, Vector2 force, VizKind kind)
     {
         if (force.LengthSquared() < 0.0004f)
             return;
 
-        var to = from + force * ForceScale;
-        var direction = (to - from).Normalized();
-
-        DrawLine(from, to, color, 2f);
-        DrawLine(to, to - direction.Rotated(0.4f) * 8f, color, 2f);
-        DrawLine(to, to - direction.Rotated(-0.4f) * 8f, color, 2f);
+        ShapeDraw.Arrow(this, from, from + force * ForceScale, DrawTheme.Line(kind));
     }
 }

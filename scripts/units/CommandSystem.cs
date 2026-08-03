@@ -5,6 +5,11 @@ using Godot;
 /// Приказы игрока, выделение и режим строительства.
 /// Клиент отдаёт намерения, применяет их симуляция — привычка на будущее.
 ///
+/// Исполняется в графическом цикле (<see cref="UpdateCycle.Process"/>) после
+/// <see cref="CursorSystem"/>: курсор, рамка и призрак застройки должны совпадать
+/// с отрисовкой и движением камеры, а не с шагом физики. Симуляция от этого не учащается.
+/// Мировые координаты мыши считаются только в <see cref="CursorSystem"/>.
+///
 /// ЧТО ПРИКАЗАТЬ, РЕШАЕТ ЦЕЛЬ ПОД КУРСОРОМ, а не заранее выбранный режим: щёлкнули по врагу —
 /// атака, по каркасу — стройка, по повреждённому — ремонт, по месторождению — копка, по земле —
 /// движение. Одна кнопка на всё, как в PA.
@@ -30,6 +35,7 @@ public partial class CommandSystem : GameSystem
     /// <summary>Дальше этого протаскивания клик считается рамкой, а не выбором одного.</summary>
     private const float BandThreshold = 8f;
 
+    private CursorSystem _cursor;
     private PlacementGhost _ghost;
     private OrderOverlay _overlay;
 
@@ -38,9 +44,7 @@ public partial class CommandSystem : GameSystem
     private NavGridOverlay _navigation;
     private PathOverlay _paths;
     private BoidsOverlay _boids;
-
-    /// <summary>Курсор в мировых координатах — берём из событий, а не опросом.</summary>
-    private Vector2 _cursor;
+    private DebugDraw _debugDraw;
 
     private readonly List<IOrderable> _selected = new();
 
@@ -61,6 +65,17 @@ public partial class CommandSystem : GameSystem
 
     /// <summary>Поставлен ли хоть один каркас с нынешнего выбора.</summary>
     private bool _placed;
+
+    /// <summary>
+    /// Точка, где нажали кнопку, пока её держат. Она задаёт и место первой постройки,
+    /// и начало вектора, по которому считаются угол и раскладка.
+    /// </summary>
+    private Vector2 _buildAnchor;
+
+    private bool _dragging;
+
+    /// <summary>План застройки: то, что нарисовано призраком, и то, что встанет по отпусканию.</summary>
+    private readonly List<BuildSpot> _plan = new();
 
     /// <summary>
     /// Ставит ли щелчок каркас прямо сейчас. Выбор в панели и готовность строить —
@@ -86,7 +101,14 @@ public partial class CommandSystem : GameSystem
     /// <summary>Рамка выделения, пока её тянут.</summary>
     public bool Banding => _banding;
 
-    public Rect2 Band => new Rect2(_bandStart, _cursor - _bandStart).Abs();
+    /// <summary>
+    /// Рамка для отрисовки: конец берётся из визуальной позиции курсора, чтобы при
+    /// включённом прогнозе рамка совпадала с призраком, а не с запаздывающей фактической
+    /// точкой. Игровое завершение рамки передаёт точную позицию события отдельно.
+    /// </summary>
+    public Rect2 Band => _cursor == null
+        ? default
+        : new Rect2(_bandStart, _cursor.VisualWorldPosition - _bandStart).Abs();
 
     /// <summary>
     /// Вторая фаза: площадка мира к этому мигу собрана, поэтому служебную графику
@@ -95,6 +117,11 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     protected override void OnLink()
     {
+        _cursor = GM.System<CursorSystem>();
+
+        if (_cursor == null)
+            GD.PushError("[CommandSystem] CursorSystem не найдена: мировые координаты мыши недоступны");
+
         _doubleTap.Interval = DoubleTapInterval;
 
         if (GM.Playground != null)
@@ -114,9 +141,14 @@ public partial class CommandSystem : GameSystem
     {
         Pending = null;
         _placed = false;
+        _dragging = false;
+        _plan.Clear();
 
         if (_ghost != null)
+        {
             _ghost.Visible = false;
+            _ghost.StretchRadius = 0f;
+        }
     }
 
     /// <summary>
@@ -158,7 +190,7 @@ public partial class CommandSystem : GameSystem
 
     public override void Step(double dt)
     {
-        if (GM.Playground == null)
+        if (GM.Playground == null || _cursor == null)
             return;
 
         EnsureNodes();
@@ -167,29 +199,59 @@ public partial class CommandSystem : GameSystem
         _selected.RemoveAll(actor => !Alive.Is(actor as Node));
         Groups.Sweep();
 
+        // Условия показа областей: Ctrl при выделении и покрытие турелей при стройке
+        GizmoGate.Refresh(_selected, Pending);
+
         if (Pending == null)
             return;
 
         // Призрак показывает не выбор, а готовность поставить: пока режим спит,
         // место под курсором не подсвечивается, и щелчок обещает обычное выделение
-        _ghost.Visible = Building;
+        _ghost.Visible = Building || _dragging;
 
         if (!_ghost.Visible)
+        {
+            _ghost.StretchRadius = 0f;
+            return;
+        }
+
+        // Представление читает визуальную позицию: при прогнозе призрак упреждает задержку,
+        // при движении камеры без мыши точку уже пересчитал CursorSystem
+        var visual = _cursor.VisualWorldPosition;
+        var anchor = _dragging ? _buildAnchor : visual;
+        bool alt = Input.IsKeyPressed(Key.Alt);
+
+        BuildPlan.Compute(GM, Pending, anchor, visual, alt, _plan);
+        UpdateStretchGhost(anchor, visual, alt);
+
+        _ghost.QueueRedraw();
+    }
+
+    /// <summary>
+    /// Круг охвата залежей у призрака. Радиус и центр совпадают с тем, что считает
+    /// <see cref="BuildPlan"/> для <see cref="BuildPattern.MetalArea"/>: иначе игрок
+    /// видел бы помеченные экстракторы, но не границу, по которой они отобраны.
+    /// </summary>
+    private void UpdateStretchGhost(Vector2 anchor, Vector2 cursor, bool alt)
+    {
+        _ghost.StretchRadius = 0f;
+
+        if (BuildPlan.PatternOf(Pending, alt) != BuildPattern.MetalArea)
             return;
 
-        var center = Placement.Snap(GM, Pending, _cursor);
-        _ghost.Center = center;
-        _ghost.Valid = Placement.CanPlace(GM, Pending, center);
-        _ghost.QueueRedraw();
+        float radius = anchor.DistanceTo(cursor);
+
+        if (radius < BuildPlan.AngleThreshold || _plan.Count == 0)
+            return;
+
+        _ghost.StretchCenter = _plan[0].Center;
+        _ghost.StretchRadius = radius;
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (GM?.Playground == null)
+        if (GM?.Playground == null || _cursor == null)
             return;
-
-        if (@event is InputEventMouse mouseEvent)
-            _cursor = GetViewport().GetCanvasTransform().AffineInverse() * mouseEvent.Position;
 
         if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
@@ -215,10 +277,21 @@ public partial class CommandSystem : GameSystem
         if (@event is not InputEventMouseButton mouse)
             return;
 
+        // Кнопки берут точную позицию события и никогда не прогнозируемую:
+        // приказ обязан уйти туда, куда ткнули
+        var point = _cursor.WorldFromEvent(mouse);
+
         switch (mouse.ButtonIndex)
         {
+            // Постройка ставится не по нажатию, а по отпусканию: между ними игрок задаёт
+            // угол и раскладку, и до отпускания решение не принято
             case MouseButton.Left when mouse.Pressed && Building:
-                PlaceBlueprint();
+                _buildAnchor = point;
+                _dragging = true;
+                break;
+
+            case MouseButton.Left when _dragging:
+                PlaceBatch(point);
                 break;
 
             // Рамку начинаем сразу: одиночный клик — это её вырожденный случай,
@@ -228,12 +301,18 @@ public partial class CommandSystem : GameSystem
             // к управлению отрядом, и держать за ним постройку больше незачем
             case MouseButton.Left when mouse.Pressed:
                 CancelBuild();
-                _bandStart = _cursor;
+                _bandStart = point;
                 _banding = true;
                 break;
 
             case MouseButton.Left:
-                FinishBand();
+                FinishBand(point);
+                break;
+
+            // Правая кнопка посреди протаскивания отменяет только его: выбор в панели
+            // остаётся, и следующее нажатие начинает раскладку заново
+            case MouseButton.Right when mouse.Pressed && _dragging:
+                _dragging = false;
                 break;
 
             case MouseButton.Right when mouse.Pressed && Building:
@@ -242,7 +321,7 @@ public partial class CommandSystem : GameSystem
 
             case MouseButton.Right when mouse.Pressed:
                 CancelBuild();
-                IssueOrder();
+                IssueOrder(point);
                 break;
         }
     }
@@ -284,7 +363,7 @@ public partial class CommandSystem : GameSystem
 
     // ── выделение ──────────────────────────────────────────────────────────────
 
-    private void FinishBand()
+    private void FinishBand(Vector2 point)
     {
         if (!_banding)
             return;
@@ -300,9 +379,9 @@ public partial class CommandSystem : GameSystem
         if (!add)
             ClearSelection();
 
-        if (_bandStart.DistanceTo(_cursor) < BandThreshold)
+        if (_bandStart.DistanceTo(point) < BandThreshold)
         {
-            var one = ActorUnderCursor();
+            var one = ActorAt(point);
 
             // Повтор по той же цели означает «и всех таких же». Прямое указание игрока,
             // поэтому ни родство, ни преобладание здесь не применяются
@@ -314,7 +393,7 @@ public partial class CommandSystem : GameSystem
             return;
         }
 
-        var band = Band;
+        var band = new Rect2(_bandStart, point - _bandStart).Abs();
         var caught = new List<IOrderable>();
 
         foreach (var actor in GM.Index.All<IOrderable>())
@@ -364,18 +443,17 @@ public partial class CommandSystem : GameSystem
     /// <summary>
     /// Выделяем только то, чем можно управлять: свой и с непустым набором приказов.
     /// Месторождение и склад в рамку не попадут — приказать им всё равно нечего.
+    /// Юнит, ещё выезжающий из корпуса завода, некликабелен.
     /// </summary>
     private static bool Commandable(IOrderable actor) =>
-        actor.Faction == Faction.Player && actor.AllowedOrders.Any;
+        actor.Faction == Faction.Player
+        && actor.AllowedOrders.Any
+        && !Targeting.Leaving(actor);
 
-    private IOrderable ActorUnderCursor()
-    {
-        var cursor = _cursor;
-
-        return GM.Index.All<IOrderable>()
-            .Where(actor => Commandable(actor) && Hit(actor, cursor))
-            .Nearest(cursor, actor => actor.GlobalPosition);
-    }
+    private IOrderable ActorAt(Vector2 point) =>
+        GM.Index.All<IOrderable>()
+            .Where(actor => Commandable(actor) && Hit(actor, point))
+            .Nearest(point, actor => actor.GlobalPosition);
 
     private static bool Hit(IOrderable actor, Vector2 point)
     {
@@ -397,7 +475,7 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private List<IOrderable> Recipients() => _selected;
 
-    private void IssueOrder()
+    private void IssueOrder(Vector2 point)
     {
         var recipients = Recipients();
         if (recipients.Count == 0)
@@ -406,20 +484,20 @@ public partial class CommandSystem : GameSystem
         bool queue = Input.IsKeyPressed(Key.Shift);
 
         // Цель разбираем один раз на всех: она общая, а вид приказа у каждого свой
-        var victim = EnemyUnderCursor();
-        var occupant = GM.Obstacles.At(_cursor) as Node;
-        var damagedUnit = DamagedUnitUnderCursor();
+        var victim = EnemyAt(point);
+        var occupant = GM.Obstacles.At(point) as Node;
+        var damagedUnit = DamagedUnitAt(point);
 
         foreach (var actor in recipients)
-            Send(actor, victim, occupant, damagedUnit, queue);
+            Send(actor, victim, occupant, damagedUnit, queue, point);
     }
 
     /// <summary>
-    /// Один приказ по цели под курсором. Порядок разбора — от самого определённого
+    /// Один приказ по цели в указанной точке. Порядок разбора — от самого определённого
     /// к самому общему: враг, каркас, повреждённое, и только потом голая земля.
     /// </summary>
     private void Send(IOrderable actor, Node2D victim, Node occupant, Node2D damagedUnit,
-        bool queue)
+        bool queue, Vector2 point)
     {
         if (victim != null && Give(actor, queue, Order.Attack(victim)))
             return;
@@ -428,13 +506,13 @@ public partial class CommandSystem : GameSystem
             && GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint))
             return;
 
-        // Ремонт: сначала постройка на клетке, потом юнит под курсором
+        // Ремонт: сначала постройка на клетке, потом юнит в точке приказа
         var damaged = Repairable(occupant as Node2D) ?? damagedUnit;
 
         if (damaged != null && GiveWork(actor, queue, Order.Repair(damaged), damaged))
             return;
 
-        Give(actor, queue, Order.MoveTo(_cursor));
+        Give(actor, queue, Order.MoveTo(point));
     }
 
     /// <summary>
@@ -470,29 +548,23 @@ public partial class CommandSystem : GameSystem
         queue ? actor.Orders.TryEnqueue(orders) : actor.Orders.TrySet(orders);
 
     /// <summary>
-    /// Враг, по которому щёлкнули. Корпус небольшой, поэтому даём припуск —
+    /// Враг в указанной точке. Корпус небольшой, поэтому даём припуск —
     /// попадать точно в кружок мышью неудобно, а промах уводит юнита гулять.
     /// </summary>
-    private Node2D EnemyUnderCursor()
-    {
-        var cursor = _cursor;
-
-        return GM.Index.All<Enemy>()
-            .Where(enemy => enemy.GlobalPosition.DistanceTo(cursor)
+    private Node2D EnemyAt(Vector2 point) =>
+        GM.Units[Faction.Hostile]
+            .Where(enemy => !Targeting.Leaving(enemy)
+                            && enemy.GlobalPosition.DistanceTo(point)
                             <= enemy.HitRadius + PickSlack)
-            .Nearest(cursor, enemy => enemy.GlobalPosition);
-    }
+            .Nearest(point, enemy => enemy.GlobalPosition);
 
-    private Node2D DamagedUnitUnderCursor()
-    {
-        var cursor = _cursor;
-
-        return GM.Index.All<Unit>()
-            .Where(unit => unit.GlobalPosition.DistanceTo(cursor) <= unit.HitRadius + PickSlack)
-            .Nearest(cursor, unit => unit.GlobalPosition) is { } found && Repairable(found) != null
+    private Node2D DamagedUnitAt(Vector2 point) =>
+        GM.Units[Faction.Player]
+            .Where(unit => !Targeting.Leaving(unit)
+                           && unit.GlobalPosition.DistanceTo(point) <= unit.HitRadius + PickSlack)
+            .Nearest(point, unit => unit.GlobalPosition) is { } found && Repairable(found) != null
             ? found
             : null;
-    }
 
     /// <summary>Годится ли под ремонт: своё, повреждённое и с курсом ремонта.</summary>
     private static Node2D Repairable(Node2D node) =>
@@ -502,33 +574,62 @@ public partial class CommandSystem : GameSystem
             ? node
             : null;
 
-    private void PlaceBlueprint()
+    /// <summary>
+    /// Поставить всю размеченную партию. Негодные места пропускаются молча: игрок видел их
+    /// красными всё протаскивание, и отказывать за всю партию из-за одного занятого места
+    /// значило бы требовать безошибочного ведения мыши.
+    ///
+    /// План считается заново по точной позиции отпускания кнопки, а не по визуальному
+    /// прогнозу и не по последнему кадру представления: между кадром и отпусканием курсор
+    /// успевает сдвинуться, и поставить нужно то, куда игрок ткнул фактически.
+    /// </summary>
+    private void PlaceBatch(Vector2 point)
     {
-        var def = Pending;
-        var center = Placement.Snap(GM, def, _cursor);
+        _dragging = false;
 
-        if (!Placement.CanPlace(GM, def, center) || BlueprintScene == null)
+        var def = Pending;
+
+        if (def == null || BlueprintScene == null)
             return;
 
-        var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, center);
+        BuildPlan.Compute(GM, def, _buildAnchor, point, Input.IsKeyPressed(Key.Alt), _plan);
+
+        // Строить пойдут выделенные — как и с любым другим приказом. Без выделения
+        // каркасы просто встанут на места и будут ждать, пока за них возьмутся
+        // свободные боты: те ищут работу сами
+        bool queue = Input.IsKeyPressed(Key.Shift);
+
+        foreach (var spot in _plan)
+        {
+            if (!spot.Valid)
+                continue;
+
+            var blueprint = PlaceOne(def, spot);
+
+            foreach (var actor in Recipients())
+                GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint);
+
+            // Первый каркас партии приказывается по нынешнему состоянию Shift, остальные —
+            // всегда в очередь: иначе каждый следующий стирал бы приказ на предыдущий
+            queue = true;
+
+            _placed = true;
+        }
+    }
+
+    private Blueprint PlaceOne(UnitDefinition def, BuildSpot spot)
+    {
+        var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, spot.Center, spot.Facing);
 
         GM.Events.Append(new BlueprintPlaced
         {
             EntityId = blueprint.Id,
             DefinitionId = def.Id,
-            Pos = center,
+            Pos = spot.Center,
+            Facing = spot.Facing,
         });
 
-        // Строить пойдут выделенные — как и с любым другим приказом. Без выделения
-        // каркас просто встанет на место и будет ждать, пока за него возьмётся
-        // свободный бот: те ищут работу сами
-        bool queue = Input.IsKeyPressed(Key.Shift);
-
-        foreach (var actor in Recipients())
-            GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint);
-
-        // Выбор в панели остаётся: дальше он оживает под Shift и гаснет без него
-        _placed = true;
+        return blueprint;
     }
 
     private void EnsureNodes()
@@ -541,7 +642,13 @@ public partial class CommandSystem : GameSystem
             _navigation = GM.Playground.Add(WorldLayer.Effects, new NavGridOverlay());
 
         if (_ghost == null || !IsInstanceValid(_ghost))
+        {
             _ghost = GM.Playground.Add(WorldLayer.Effects, new PlacementGhost());
+
+            // План принадлежит системе, а призрак получает его ссылкой: показанное
+            // и поставленное обязаны быть одним и тем же списком
+            _ghost.Spots = _plan;
+        }
 
         if (_overlay == null || !IsInstanceValid(_overlay))
             _overlay = GM.Playground.Add(WorldLayer.Effects, new OrderOverlay());
@@ -551,5 +658,9 @@ public partial class CommandSystem : GameSystem
 
         if (_boids == null || !IsInstanceValid(_boids))
             _boids = GM.Playground.Add(WorldLayer.Effects, new BoidsOverlay());
+
+        // Произвольные маркеры — поверх доменных оверлеев; доступ из кода через DebugDraw.Current.
+        if (_debugDraw == null || !IsInstanceValid(_debugDraw))
+            _debugDraw = GM.Playground.Add(WorldLayer.Effects, new DebugDraw());
     }
 }

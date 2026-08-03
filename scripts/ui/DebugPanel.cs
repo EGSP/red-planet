@@ -14,6 +14,10 @@ using Godot;
 /// в левом верхнем углу и занимали место постоянно, хотя нужны редко. За HUD осталась
 /// только кнопка паузы, и та ушла в правый нижний угол.
 ///
+/// Содержимое разложено по вертикальным вкладкам-доменам (<c>nav</c>, <c>boi</c>,
+/// <c>vis</c>, <c>giz</c>, <c>wav</c>, <c>dia</c>), чтобы растущие блоки не сдвигали
+/// чужие секции.
+///
 /// Панель показывается по F3 и на симуляцию не влияет: она читает состояние и правит
 /// только <see cref="DebugFlags"/>.
 /// </summary>
@@ -21,17 +25,24 @@ public partial class DebugPanel : CanvasLayer
 {
     private static readonly Color Heading = new(0.65f, 0.8f, 1f);
     private static readonly Color Numbers = new(0.8f, 0.85f, 0.9f);
+    private static readonly Color IconInk = new(0.75f, 0.88f, 1f);
 
-    /// <summary>Ширина панели. Сверху её ограничивает полоса ресурсов, снизу — ничего.</summary>
+    /// <summary>Ширина страницы содержимого. Колонка вкладок добавляется отдельно.</summary>
     private const int PanelWidth = 300;
+
+    /// <summary>Ширина колонки с кодами вкладок.</summary>
+    private const int TabWidth = 52;
 
     /// <summary>Во сколько знаков укладывается строка подсказки.</summary>
     private const int TooltipWidth = 64;
 
     private Control _frame;
+    private Control[] _pages;
     private Label _combat;
     private Label _navigation;
     private Label _paths;
+    private Label _waves;
+    private Label _fog;
 
     public override void _Ready()
     {
@@ -83,12 +94,17 @@ public partial class DebugPanel : CanvasLayer
         margin.AddThemeConstantOverride("margin_bottom", 140);
         row.AddChild(margin);
 
-        var column = new VBoxContainer
+        var shell = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Begin,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
         };
-        margin.AddChild(column);
+        shell.AddThemeConstantOverride("separation", 4);
+        margin.AddChild(shell);
+
+        var tabs = new VBoxContainer { CustomMinimumSize = new Vector2(TabWidth, 0) };
+        tabs.AddThemeConstantOverride("separation", 2);
+        shell.AddChild(tabs);
 
         var scroll = new ScrollContainer
         {
@@ -96,15 +112,87 @@ public partial class DebugPanel : CanvasLayer
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
             HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
         };
-        column.AddChild(scroll);
+        shell.AddChild(scroll);
 
         var panel = new PanelContainer { CustomMinimumSize = new Vector2(PanelWidth, 0) };
         scroll.AddChild(panel);
 
-        var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", 4);
-        panel.AddChild(box);
+        // Скрытые страницы в VBox не участвуют в расчёте высоты, поэтому ScrollContainer
+        // подстраивается под видимую вкладку, а не под сумму всех.
+        var stack = new VBoxContainer { CustomMinimumSize = new Vector2(PanelWidth, 0) };
+        panel.AddChild(stack);
 
+        _pages = new Control[6];
+        _pages[0] = Page(stack);
+        _pages[1] = Page(stack);
+        _pages[2] = Page(stack);
+        _pages[3] = Page(stack);
+        _pages[4] = Page(stack);
+        _pages[5] = Page(stack);
+
+        FillNav(_pages[0]);
+        FillBoi(_pages[1]);
+        FillVis(_pages[2]);
+        FillGiz(_pages[3]);
+        FillWav(_pages[4]);
+        FillDia(_pages[5]);
+
+        var group = new ButtonGroup();
+        Tab(tabs, group, 0, "nav", "Навигация", IconNav());
+        Tab(tabs, group, 1, "boi", "Локальный обход", IconBoi());
+        Tab(tabs, group, 2, "vis", "Зрение", IconVis());
+        Tab(tabs, group, 3, "giz", "Области юнитов", IconGiz());
+        Tab(tabs, group, 4, "wav", "Волны", IconWav());
+        Tab(tabs, group, 5, "dia", "Диагностика", IconDia());
+
+        ShowPage(0);
+    }
+
+    private static VBoxContainer Page(Node stack)
+    {
+        var box = new VBoxContainer
+        {
+            Visible = false,
+            CustomMinimumSize = new Vector2(PanelWidth, 0),
+        };
+        box.AddThemeConstantOverride("separation", 4);
+        stack.AddChild(box);
+        return box;
+    }
+
+    private void Tab(Node parent, ButtonGroup group, int index, string code, string title,
+        Texture2D icon)
+    {
+        var button = new Button
+        {
+            Text = code,
+            Icon = icon,
+            ToggleMode = true,
+            ButtonGroup = group,
+            ButtonPressed = index == 0,
+            CustomMinimumSize = new Vector2(TabWidth, 40),
+            IconAlignment = HorizontalAlignment.Center,
+            VerticalIconAlignment = VerticalAlignment.Top,
+            ExpandIcon = false,
+        };
+        button.AddThemeFontSizeOverride("font_size", 11);
+        button.TooltipText = title;
+        button.Toggled += on =>
+        {
+            if (on)
+                ShowPage(index);
+        };
+        parent.AddChild(button);
+    }
+
+    private void ShowPage(int index)
+    {
+        for (int i = 0; i < _pages.Length; i++)
+            _pages[i].Visible = i == index;
+    }
+
+    private void FillNav(Node box)
+    {
         Section(box, "Навигация",
             "Мир разбит на растр из ячеек по 16 px. По нему ищется путь и решается, " +
             "где юнит помещается. Растр выводится из прямоугольников зданий и " +
@@ -158,6 +246,23 @@ public partial class DebugPanel : CanvasLayer
             "прямо. Заполнение стоит памяти, поэтому ведётся только при включённом признаке.",
             () => DebugFlags.PathsExpanded, on => DebugFlags.PathsExpanded = on);
 
+        Section(box, "Растр", "Состояние навигационной карты.");
+        _navigation = Readout(box,
+            "«Препятствий» — сколько зданий и каркасов занимают место. «Ревизия» растёт " +
+            "при каждой пересборке растра: если она растёт без остановки, значит что-то " +
+            "меняет карту каждый кадр. «Пересборка» — во что эта работа обходится.");
+
+        Section(box, "Поиск пути", "Нагрузка на систему путей за прошедший кадр.");
+        _paths = Readout(box,
+            "«Готовых» — сколько запросов обслужено кешем без счёта. «В очереди» — сколько " +
+            "поисков отложено на следующий кадр из-за бюджета; устойчиво ненулевая очередь " +
+            "означает, что бюджета не хватает. «Узлов» — насколько тяжёлым был поиск. " +
+            "«Разных целей» — по этому числу вместе с числом движущихся решается, " +
+            "пора ли вводить общее векторное поле вместо отдельных путей.");
+    }
+
+    private void FillBoi(Node box)
+    {
         Section(box, "Локальный обход",
             "Поверх пути работают силы boids: они разводят юнитов между собой и обводят " +
             "вокруг тех, кто стоит на дороге. За обход препятствий отвечает не этот слой, " +
@@ -187,23 +292,114 @@ public partial class DebugPanel : CanvasLayer
             "не имеет: показывает только непустые ячейки и служит проверкой, " +
             "что раскладка не разъехалась с настоящими положениями.",
             () => DebugFlags.BoidCells, on => DebugFlags.BoidCells = on);
+    }
 
+    private void FillVis(Node box)
+    {
+        Section(box, "Туман войны",
+            "Поля зрения стороны игрока сведены в растр по ячейкам в 16 px, и по нему " +
+            "рисуются заливка закрытой части карты и обводка по общей границе видимого. " +
+            "На симуляцию это не влияет: цели выбираются и приказы отдаются по всей карте.");
+
+        Check(box, "заливка", "Закрашивать непросматриваемую часть карты.",
+            () => Fog()?.Fog ?? false, on => Set(settings => settings.Fog = on));
+
+        Check(box, "обводка",
+            "Линия по общей границе поля зрения. Толщина задана в пикселях экрана, " +
+            "поэтому при отдалении камеры линия не утолщается.",
+            () => Fog()?.Outline ?? false, on => Set(settings => settings.Outline = on));
+
+        Check(box, "скрывать противника",
+            "Юниты и снаряды противника вне поля зрения не рисуются. Стрелять по ним " +
+            "и выделять их по-прежнему можно: скрытие касается только отрисовки.",
+            () => Fog()?.HideEnemies ?? false, on => Set(settings => settings.HideEnemies = on));
+
+        Colour(box, "цвет заливки", "Цвет и плотность закрытой части карты.",
+            () => Fog()?.FogColor ?? Colors.Black, value => Set(settings => settings.FogColor = value));
+
+        Colour(box, "цвет обводки", "Цвет линии границы.",
+            () => Fog()?.OutlineColor ?? Colors.Yellow,
+            value => Set(settings => settings.OutlineColor = value));
+
+        _fog = Readout(box,
+            "«Источников» — сколько зрячих сущностей участвовало в последней пересборке. " +
+            "«Скрыто» — сколько сущностей противника сейчас не рисуется. " +
+            "«Пересборка» — во что обходится растр: она идёт по таймеру, а не каждый кадр.");
+    }
+
+    private void FillGiz(Node box)
+    {
+        Section(box, "Области юнитов",
+            "Круги зрения, атаки и рабочей руки. По умолчанию выключены. " +
+            "Матрица ниже включает вид для всех / своих / врагов: «все» перекрывает " +
+            "остальные два. Помимо матрицы круги появляются у выделенных при зажатом Ctrl " +
+            "и радиусы атаки турелей — при постановке постройки со стволом.");
+
+        FilterMatrix(box, "зрение",
+            "Круг обзора сущности.",
+            GizmoFlags.Vision);
+
+        FilterMatrix(box, "атака",
+            "Дальность ствола и рёбра конуса прицеливания.",
+            GizmoFlags.Attack);
+
+        FilterMatrix(box, "работа",
+            "Радиус строительной руки / манипулятора.",
+            GizmoFlags.Work);
+
+        var hints = new Label
+        {
+            Text = "Ctrl + выделение — инструменты выбранных\n" +
+                   "стройка турели — покрытие стоящих стволов",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        hints.AddThemeFontSizeOverride("font_size", 11);
+        box.AddChild(hints);
+    }
+
+    /// <summary>
+    /// Три флажка одного вида: все / свои / враги. «Все» при включении делает остальные
+    /// неважными, но не сбрасывает их — сняв «все», прежний выбор восстанавливается.
+    /// </summary>
+    private static void FilterMatrix(Node parent, string title, string tooltip, GizmoFilter filter)
+    {
+        if (parent.GetChildCount() > 0)
+            parent.AddChild(new HSeparator());
+
+        var heading = new Label { Text = title };
+        heading.AddThemeFontSizeOverride("font_size", 12);
+        heading.AddThemeColorOverride("font_color", Heading);
+        parent.AddChild(heading);
+        Explain(heading, tooltip);
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+        parent.AddChild(row);
+
+        Check(row, "все", "Показать у всех сторон; «свои» и «враги» при этом не читаются.",
+            () => filter.All, on => filter.All = on);
+        Check(row, "свои", "Сторона игрока.",
+            () => filter.Ally, on => filter.Ally = on);
+        Check(row, "враги", "Сторона противника.",
+            () => filter.Enemy, on => filter.Enemy = on);
+    }
+
+    private void FillWav(Node box)
+    {
+        Section(box, "Волны", "Что подсистема волн отобрала и что из этого вышло на карту.");
+        _waves = Readout(box,
+            "Первая строка — сколько осталось до ближайшей волны. Дальше история партии, " +
+            "от новых к старым: время, волна, показатель террора на миг отбора, " +
+            "бюджет и потраченная его часть, состав по видам, направление первого очага " +
+            "и назначенный отдых. Расхождение бюджета с потраченным означает, что остаток " +
+            "было некому занять: самый дешёвый допустимый вид оказался дороже него. " +
+            "«+N рядов» — состав не уместился в заданную глубину формы.");
+    }
+
+    private void FillDia(Node box)
+    {
         Section(box, "Счёт боя", "То же, что раньше висело в левом верхнем углу.");
         _combat = Readout(box, "Пришло, уничтожено, потеряно, и сколько накопил коммандер.");
-
-        Section(box, "Растр", "Состояние навигационной карты.");
-        _navigation = Readout(box,
-            "«Препятствий» — сколько зданий и каркасов занимают место. «Ревизия» растёт " +
-            "при каждой пересборке растра: если она растёт без остановки, значит что-то " +
-            "меняет карту каждый кадр. «Пересборка» — во что эта работа обходится.");
-
-        Section(box, "Поиск пути", "Нагрузка на систему путей за прошедший кадр.");
-        _paths = Readout(box,
-            "«Готовых» — сколько запросов обслужено кешем без счёта. «В очереди» — сколько " +
-            "поисков отложено на следующий кадр из-за бюджета; устойчиво ненулевая очередь " +
-            "означает, что бюджета не хватает. «Узлов» — насколько тяжёлым был поиск. " +
-            "«Разных целей» — по этому числу вместе с числом движущихся решается, " +
-            "пора ли вводить общее векторное поле вместо отдельных путей.");
 
         Section(box, "Управление", null);
 
@@ -217,6 +413,140 @@ public partial class DebugPanel : CanvasLayer
         hints.AddThemeFontSizeOverride("font_size", 11);
         box.AddChild(hints);
     }
+
+    // ── иконки вкладок ────────────────────────────────────────────────────────────
+
+    /// <summary>Сетка 3×3 — навигационный растр.</summary>
+    private static Texture2D IconNav() => Paint(image =>
+    {
+        for (int i = 3; i <= 12; i++)
+        {
+            Dot(image, i, 3);
+            Dot(image, i, 7);
+            Dot(image, i, 12);
+            Dot(image, 3, i);
+            Dot(image, 7, i);
+            Dot(image, 12, i);
+        }
+    });
+
+    /// <summary>Стрелка вправо-вверх — локальная сила обхода.</summary>
+    private static Texture2D IconBoi() => Paint(image =>
+    {
+        for (int i = 3; i <= 11; i++)
+            Dot(image, i, 12 - (i - 3) / 2);
+
+        Dot(image, 11, 3);
+        Dot(image, 12, 3);
+        Dot(image, 12, 4);
+        Dot(image, 10, 3);
+        Dot(image, 11, 4);
+        Dot(image, 12, 5);
+    });
+
+    /// <summary>Круг с точкой — поле зрения.</summary>
+    private static Texture2D IconVis() => Paint(image =>
+    {
+        int[] ring =
+        {
+            5, 2, 6, 2, 7, 2, 8, 2, 9, 2, 10, 2,
+            4, 3, 11, 3,
+            3, 4, 12, 4,
+            2, 5, 13, 5,
+            2, 6, 13, 6,
+            2, 7, 13, 7,
+            2, 8, 13, 8,
+            2, 9, 13, 9,
+            2, 10, 13, 10,
+            3, 11, 12, 11,
+            4, 12, 11, 12,
+            5, 13, 6, 13, 7, 13, 8, 13, 9, 13, 10, 13,
+        };
+
+        for (int i = 0; i < ring.Length; i += 2)
+            Dot(image, ring[i], ring[i + 1]);
+
+        Dot(image, 7, 7);
+        Dot(image, 8, 7);
+        Dot(image, 7, 8);
+        Dot(image, 8, 8);
+    });
+
+    /// <summary>Круг с крестом — области инструментов юнита.</summary>
+    private static Texture2D IconGiz() => Paint(image =>
+    {
+        int[] ring =
+        {
+            5, 2, 6, 2, 7, 2, 8, 2, 9, 2, 10, 2,
+            4, 3, 11, 3,
+            3, 4, 12, 4,
+            2, 5, 13, 5,
+            2, 6, 13, 6,
+            2, 9, 13, 9,
+            2, 10, 13, 10,
+            3, 11, 12, 11,
+            4, 12, 11, 12,
+            5, 13, 6, 13, 7, 13, 8, 13, 9, 13, 10, 13,
+        };
+
+        for (int i = 0; i < ring.Length; i += 2)
+            Dot(image, ring[i], ring[i + 1]);
+
+        for (int i = 4; i <= 11; i++)
+        {
+            Dot(image, i, 7);
+            Dot(image, i, 8);
+            Dot(image, 7, i);
+            Dot(image, 8, i);
+        }
+    });
+
+    /// <summary>Зигзаг — волна.</summary>
+    private static Texture2D IconWav() => Paint(image =>
+    {
+        int[] path =
+        {
+            2, 10, 3, 9, 4, 8, 5, 7, 6, 6, 7, 5, 8, 6, 9, 7, 10, 8, 11, 7, 12, 6, 13, 5,
+        };
+
+        for (int i = 0; i < path.Length; i += 2)
+        {
+            Dot(image, path[i], path[i + 1]);
+            Dot(image, path[i], path[i + 1] + 1);
+        }
+    });
+
+    /// <summary>Три столбика разной высоты — счётчики диагностики.</summary>
+    private static Texture2D IconDia() => Paint(image =>
+    {
+        for (int y = 9; y <= 13; y++)
+        {
+            Dot(image, 3, y);
+            Dot(image, 4, y);
+        }
+
+        for (int y = 5; y <= 13; y++)
+        {
+            Dot(image, 7, y);
+            Dot(image, 8, y);
+        }
+
+        for (int y = 3; y <= 13; y++)
+        {
+            Dot(image, 11, y);
+            Dot(image, 12, y);
+        }
+    });
+
+    private static ImageTexture Paint(Action<Image> draw)
+    {
+        var image = Image.CreateEmpty(16, 16, false, Image.Format.Rgba8);
+        image.Fill(Colors.Transparent);
+        draw(image);
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static void Dot(Image image, int x, int y) => image.SetPixel(x, y, IconInk);
 
     private static void Section(Node parent, string title, string tooltip)
     {
@@ -259,6 +589,45 @@ public partial class DebugPanel : CanvasLayer
         parent.AddChild(box);
 
         Explain(box, tooltip);
+    }
+
+    /// <summary>Выбор цвета. Альфа правится вместе с цветом: ею задана плотность заливки.</summary>
+    private static void Colour(Node parent, string title, string tooltip,
+        Func<Color> read, Action<Color> write)
+    {
+        var row = new HBoxContainer();
+        parent.AddChild(row);
+
+        var label = new Label { Text = title, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        row.AddChild(label);
+
+        var picker = new ColorPickerButton
+        {
+            Color = read(),
+            EditAlpha = true,
+            CustomMinimumSize = new Vector2(64, 20),
+        };
+
+        picker.ColorChanged += value => write(value);
+        row.AddChild(picker);
+
+        Explain(label, tooltip);
+    }
+
+    /// <summary>
+    /// Настройки тумана берутся у системы зрения, а не хранятся снимком: ресурс живёт
+    /// столько же, сколько сессия, а панель переживает её пересборку.
+    /// </summary>
+    private static FogSettings Fog() => GameManager.I?.System<VisionSystem>()?.Settings;
+
+    /// <summary>Правка настроек тумана, безопасная к отсутствию системы в сцене.</summary>
+    private static void Set(Action<FogSettings> change)
+    {
+        var settings = Fog();
+
+        if (settings != null)
+            change(settings);
     }
 
     /// <summary>
@@ -330,6 +699,9 @@ public partial class DebugPanel : CanvasLayer
             $"препятствий {gm.Obstacles.Count}   ревизия {gm.Nav.Revision}\n" +
             $"последняя пересборка {gm.Nav.LastBuildMs:0.00} мс";
 
+        _waves.Text = Waves(gm.System<WaveSystem>());
+        _fog.Text = Vision(gm.System<VisionSystem>());
+
         var pathfinding = gm.System<PathfindingSystem>();
         var movement = gm.System<MovementSystem>();
 
@@ -345,6 +717,67 @@ public partial class DebugPanel : CanvasLayer
             $"узлов: последний {pathfinding.LastExpanded}, худший {pathfinding.WorstExpanded}\n" +
             $"движется {movement?.Tracked ?? 0}, разных целей {Destinations(gm, pathfinding)}";
     }
+
+    /// <summary>
+    /// Обратный отсчёт и история волн, от новых к старым.
+    ///
+    /// Порядок обратный порядку событий намеренно: панель узкая, длинную историю в ней
+    /// приходится прокручивать, а нужна прежде всего последняя волна — та, чьи следствия
+    /// сейчас на экране.
+    /// </summary>
+    private static string Waves(WaveSystem waves)
+    {
+        if (waves == null)
+            return "подсистема волн не в сцене";
+
+        var text = new System.Text.StringBuilder();
+        text.Append($"до ближайшей {waves.TimeLeft:0} с");
+
+        var history = waves.History;
+
+        if (history.Count == 0)
+        {
+            text.Append("\nволн ещё не было");
+            return text.ToString();
+        }
+
+        for (int i = history.Count - 1; i >= 0; i--)
+        {
+            var record = history[i];
+
+            text.Append($"\n\n{Clock(record.GameTime)} {record.WaveId}   террор {record.Terror:0.0}\n" +
+                        $"бюджет {record.Budget:0.0}, потрачено {record.Spent:0.0}\n" +
+                        $"{record.Composition}\n" +
+                        $"угол {record.CenterAngleDegrees:0}°, очагов {record.Groups}, " +
+                        $"отдых {record.ChillSeconds:0} с");
+
+            if (record.ExtraRows > 0)
+                text.Append($", +{record.ExtraRows} рядов");
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>Состояние растра видимости: размер, источники и стоимость пересборки.</summary>
+    private static string Vision(VisionSystem vision)
+    {
+        if (vision == null)
+            return "система зрения не в сцене";
+
+        var field = vision.Field;
+
+        string rate = vision.Settings.EveryFrame
+            ? "каждый кадр"
+            : $"{vision.Settings.UpdateHz:0} раз в секунду";
+
+        return $"поле {field.Width}×{field.Width} по {field.Cell} px\n" +
+               $"источников {field.Sources}   скрыто {vision.Hidden}\n" +
+               $"последняя пересборка {field.LastBuildMs:0.00} мс, {rate}";
+    }
+
+    /// <summary>Время партии как «минуты:секунды»: по секундам от начала считать неудобно.</summary>
+    private static string Clock(float seconds) =>
+        $"{Mathf.FloorToInt(seconds / 60f)}:{Mathf.FloorToInt(seconds % 60f):00}";
 
     /// <summary>
     /// Сколько различных пунктов назначения обслуживается сейчас.

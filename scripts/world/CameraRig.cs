@@ -52,6 +52,11 @@ public partial class CameraRig : Camera2D
     private void ApplyZoom(float factor)
     {
         float value = Mathf.Clamp(Zoom.X * factor, ZoomMin, ZoomMax);
+
+        if (Mathf.IsEqualApprox(value, Zoom.X))
+            return;
+
         Zoom = new Vector2(value, value);
+        ShapeDraw.NotifyZoomChanged(GetTree());
     }
 }

@@ -1,0 +1,25 @@
+# Тяжесть: доля бюджета на Enforcer. Поздняя волна, длинный отдых после удара.
+
+id   = "enforcer_weight"
+name = "Тяжесть"
+tags = ["heavy_group", "enforcer"]
+
+prefer_next = ["swarm"]
+
+terror_range = [55.0, -1]
+
+army_power_budget     = 24.0
+army_power_per_terror = 0.12
+
+chill_interval_multiplier = 2.2
+
+[[unit_list]]
+mode                = "limit"
+units               = ["enforcer"]
+target_budget_share = 0.4
+
+[spawn]
+near_arc_degrees        = 30.0
+far_arc_degrees         = 20.0
+radius_depth_multiplier = 0.2
+spacing_cells           = 1.2

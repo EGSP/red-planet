@@ -1,0 +1,11 @@
+# Рука Stitch: только ремонт, в том числе юнитов. Строить не умеет.
+
+id   = "stitch_arm"
+name = "Манипулятор Stitch"
+kind = "work"
+
+range            = 2.0
+power            = 10.0
+energy_per_power = 0.75
+works            = ["repair"]
+repairs_units    = true

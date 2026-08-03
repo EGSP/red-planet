@@ -35,6 +35,12 @@ public partial class MovementSystem : GameSystem
     /// <summary>Сколько секунд без продвижения считается застреванием.</summary>
     [Export] public float StuckTimeout = 1.5f;
 
+    /// <summary>
+    /// Сколько секунд ждать выезда из корпуса завода, прежде чем телепортировать
+    /// юнита на ближайшую проходимую клетку у точки rolloff.
+    /// </summary>
+    [Export] public float ExitTimeout = 5f;
+
     private readonly List<IMobile> _actors = new();
     private readonly Dictionary<Vector2I, List<int>> _buckets = new();
     private readonly List<int> _nearby = new();
@@ -88,6 +94,14 @@ public partial class MovementSystem : GameSystem
         var mobile = _actors[index];
         var movement = mobile.Movement;
         var definition = mobile.Definition;
+
+        // Выезд из корпуса — до проверки Active: у только что выпущенного юнита приказа
+        // может не быть, и Halt иначе остановил бы его прямо внутри завода
+        if (movement.Leaving)
+        {
+            SteerExit(mobile, movement, definition, dt);
+            return;
+        }
 
         if (!movement.Active || definition.SpeedPx <= 0f)
         {
@@ -146,6 +160,42 @@ public partial class MovementSystem : GameSystem
             : Vector2.Zero;
 
         Accelerate(movement, definition, desired, dt);
+    }
+
+    /// <summary>
+    /// Принудительный отрезок из корпуса завода к точке rolloff. Путь не ищется,
+    /// соседей юнит не обходит: иначе толпа у ворот затолкнула бы его обратно внутрь.
+    /// </summary>
+    private void SteerExit(IMobile mobile, Movement movement, UnitDefinition definition, double dt)
+    {
+        movement.ExitFor += (float)dt;
+        movement.Settled = false;
+        movement.Blocked = false;
+        movement.SeekForce = Vector2.Zero;
+        movement.AvoidForce = Vector2.Zero;
+        movement.AlignForce = Vector2.Zero;
+        movement.SeekScale = 1f;
+        movement.Neighbours = 0;
+        movement.AvoidSide = 0;
+
+        if (definition.SpeedPx <= 0f)
+        {
+            Halt(movement);
+            return;
+        }
+
+        var delta = movement.ExitPoint - mobile.GlobalPosition;
+        float remaining = delta.Length();
+
+        if (remaining < 0.001f)
+        {
+            Halt(movement);
+            return;
+        }
+
+        var desired = delta / remaining * definition.SpeedPx;
+        Accelerate(movement, definition, desired, dt);
+        movement.SeekForce = delta / remaining;
     }
 
     /// <summary>
@@ -463,6 +513,7 @@ public partial class MovementSystem : GameSystem
         for (int i = 0; i < _actors.Count; i++)
         {
             var mobile = _actors[i];
+            var movement = mobile.Movement;
             float radius = mobile.HitRadius;
             var position = mobile.GlobalPosition;
 
@@ -486,20 +537,63 @@ public partial class MovementSystem : GameSystem
                     ? delta / distance
                     : Vector2.Right.Rotated(i * 2.399f);
 
-                float overlap = (wanted - distance) * 0.5f;
+                float overlap = wanted - distance;
 
-                position -= push * overlap;
-                other.GlobalPosition += push * overlap;
+                // Выезжающего из корпуса не толкают обратно внутрь: весь сдвиг — соседу
+                if (movement.Leaving && !other.Movement.Leaving)
+                {
+                    other.GlobalPosition += push * overlap;
+                    continue;
+                }
+
+                if (!movement.Leaving && other.Movement.Leaving)
+                {
+                    position -= push * overlap;
+                    continue;
+                }
+
+                position -= push * (overlap * 0.5f);
+                other.GlobalPosition += push * (overlap * 0.5f);
             }
 
-            position = GM.Obstacles.PushOut(position, radius);
+            position = GM.Obstacles.PushOut(position, radius, movement.Exit);
 
-            var bounds = Const.WorldBounds;
+            var bounds = World.Bounds;
             position.X = Mathf.Clamp(position.X, bounds.Position.X + radius, bounds.End.X - radius);
             position.Y = Mathf.Clamp(position.Y, bounds.Position.Y + radius, bounds.End.Y - radius);
 
             mobile.GlobalPosition = position;
+
+            if (movement.Leaving)
+                FinishExit(mobile, movement, position, radius);
         }
+    }
+
+    /// <summary>
+    /// Снять Leaving по любому из трёх оснований: корпус покинут, вышло время,
+    /// завод снесён. Телепорт — только по таймауту.
+    /// </summary>
+    private void FinishExit(IMobile mobile, Movement movement, Vector2 position, float radius)
+    {
+        var exit = movement.Exit;
+
+        if (exit == null)
+            return;
+
+        // Завод снесён посреди выезда либо корпус уже покинут — оба основания означают
+        // одно и то же: держать послабление больше не на чем
+        if (!GM.Obstacles.Contains(exit) || !GM.Obstacles.CircleHits(exit, position, radius))
+        {
+            movement.EndExit();
+            return;
+        }
+
+        if (movement.ExitFor < ExitTimeout)
+            return;
+
+        var cell = GM.Nav.NearestPassable(NavGrid.ToCell(movement.ExitPoint), radius);
+        mobile.GlobalPosition = NavGrid.ToWorld(cell);
+        movement.EndExit();
     }
 
     // ── раскладка соседей ─────────────────────────────────────────────────────────

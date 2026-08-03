@@ -10,11 +10,6 @@ using Godot;
 /// </summary>
 public partial class PathOverlay : Node2D
 {
-    private static readonly Color Ahead = new(0.45f, 0.95f, 1f, 0.85f);
-    private static readonly Color Behind = new(0.4f, 0.5f, 0.6f, 0.5f);
-    private static readonly Color Failed = new(1f, 0.45f, 0.35f, 0.9f);
-    private static readonly Color Visited = new(0.6f, 0.7f, 1f, 0.22f);
-
     private bool _shown;
 
     public override void _Process(double delta)
@@ -64,10 +59,11 @@ public partial class PathOverlay : Node2D
             return;
 
         float half = NavGrid.Cell * 0.5f;
+        var style = DrawTheme.Fill(VizKind.PathVisited, 0.22f);
 
         foreach (var point in pathfinding.Expanded)
-            DrawRect(new Rect2(ToLocal(point) - new Vector2(half, half),
-                NavGrid.Cell, NavGrid.Cell), Visited);
+            ShapeDraw.Rect(this, new Rect2(ToLocal(point) - new Vector2(half, half),
+                NavGrid.Cell, NavGrid.Cell), style);
     }
 
     private void DrawPath(PathfindingSystem pathfinding, IMobile mobile)
@@ -77,9 +73,14 @@ public partial class PathOverlay : Node2D
         if (handle == null || handle.Points.Count == 0)
             return;
 
-        var color = handle.Status == PathStatus.Unreachable || mobile.Movement.Blocked
-            ? Failed
-            : Ahead;
+        var kind = handle.Status == PathStatus.Unreachable || mobile.Movement.Blocked
+            ? VizKind.PathFailed
+            : VizKind.PathAhead;
+
+        var behind = DrawTheme.Line(VizKind.PathBehind);
+        var ahead = DrawTheme.Line(kind);
+        var waypoint = DrawTheme.Filled(kind, 0.55f, 1f, 1.5f, WidthMode.MinScreen);
+        var goal = DrawTheme.Filled(kind, 0.35f, 0.7f, 2f, WidthMode.Screen);
 
         var from = mobile.GlobalPosition;
 
@@ -92,16 +93,16 @@ public partial class PathOverlay : Node2D
             // откуда сущность пришла и не крутится ли она на месте
             if (i < handle.Cursor)
             {
-                DrawLine(ToLocal(previous), ToLocal(to), Behind, 1.5f);
+                ShapeDraw.Line(this, ToLocal(previous), ToLocal(to), behind);
                 continue;
             }
 
             var start = i == handle.Cursor ? from : previous;
 
-            DrawLine(ToLocal(start), ToLocal(to), color, 2f);
-            DrawCircle(ToLocal(to), 3.5f, color);
+            ShapeDraw.Line(this, ToLocal(start), ToLocal(to), ahead);
+            ShapeDraw.Circle(this, ToLocal(to), 3.5f, waypoint);
         }
 
-        DrawCircle(ToLocal(handle.Goal), 5f, new Color(color, 0.5f));
+        ShapeDraw.Circle(this, ToLocal(handle.Goal), 5f, goal);
     }
 }

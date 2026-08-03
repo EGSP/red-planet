@@ -15,8 +15,6 @@ using Godot;
 /// </summary>
 public partial class OrderOverlay : Node2D
 {
-    private static readonly Color Ring = new(0.6f, 1f, 0.75f);
-
     public override void _Process(double delta) => QueueRedraw();
 
     public override void _Draw()
@@ -61,7 +59,10 @@ public partial class OrderOverlay : Node2D
     private void DrawRing(IOrderable actor)
     {
         float radius = ((actor as IDamageable)?.HitRadius ?? Const.Unit * 0.4f) + 6f;
-        DrawArc(ToLocal(actor.GlobalPosition), radius, 0f, Mathf.Tau, 32, new Color(Ring, 0.9f), 2f);
+        float band = 3f;
+
+        ShapeDraw.Ring(this, ToLocal(actor.GlobalPosition), radius - band * 0.5f, radius + band * 0.5f,
+            DrawTheme.Radius(VizKind.Selection), 32);
     }
 
     /// <summary>
@@ -81,22 +82,24 @@ public partial class OrderOverlay : Node2D
         {
             var order = orders[i];
             var to = ToLocal(order.Point);
-            var tint = Order.Tint(order.Kind);
+            var kind = Order.Viz(order.Kind);
 
             // Текущий шаг ярче остальных: очередь читается сверху вниз даже на пёстрой карте
             float alpha = i == 0 ? 0.75f : 0.4f;
+            var line = DrawTheme.Line(kind, alpha, i == 0 ? 2.5f : 1.5f,
+                i == 0 ? WidthMode.Screen : WidthMode.MinScreen);
 
-            DrawLine(from, to, new Color(tint, alpha), i == 0 ? 2.5f : 1.5f);
-            DrawMark(to, order.Kind, new Color(tint, alpha + 0.15f));
+            ShapeDraw.Line(this, from, to, line);
+            DrawMark(to, order.Kind, new Color(DrawTheme.Hue(kind), alpha + 0.15f));
 
             // Номер шага нужен только там, где шагов больше одного
             if (orders.Count > 1)
                 DrawString(font, to + new Vector2(9f, -9f), $"{i + 1}",
-                    HorizontalAlignment.Left, -1, 11, new Color(tint, 0.9f));
+                    HorizontalAlignment.Left, -1, 11, new Color(DrawTheme.Hue(kind), 0.9f));
 
             if (i == 0)
                 DrawString(font, to + new Vector2(9f, 18f), Order.Name(order.Kind),
-                    HorizontalAlignment.Left, -1, 11, new Color(tint, 0.8f));
+                    HorizontalAlignment.Left, -1, 11, new Color(DrawTheme.Hue(kind), 0.8f));
 
             from = to;
         }
@@ -106,30 +109,32 @@ public partial class OrderOverlay : Node2D
     private void DrawMark(Vector2 at, OrderKind kind, Color tint)
     {
         const float size = 7f;
+        var stroke = ShapeStyle.Outline(tint, 2f, WidthMode.Screen);
 
         switch (kind)
         {
             case OrderKind.Move:
-                DrawArc(at, size * 0.6f, 0f, Mathf.Tau, 16, tint, 2f);
+                ShapeDraw.Circle(this, at, size * 0.6f,
+                    ShapeStyle.Filled(new Color(tint, 0.25f), tint, 2f, WidthMode.Screen), 16);
                 break;
 
             case OrderKind.Attack:
-                DrawLine(at + new Vector2(-size, -size), at + new Vector2(size, size), tint, 2f);
-                DrawLine(at + new Vector2(-size, size), at + new Vector2(size, -size), tint, 2f);
+                ShapeDraw.Line(this, at + new Vector2(-size, -size), at + new Vector2(size, size), stroke);
+                ShapeDraw.Line(this, at + new Vector2(-size, size), at + new Vector2(size, -size), stroke);
                 break;
 
             case OrderKind.Repair:
-                DrawLine(at + new Vector2(-size, 0f), at + new Vector2(size, 0f), tint, 2f);
-                DrawLine(at + new Vector2(0f, -size), at + new Vector2(0f, size), tint, 2f);
+                ShapeDraw.Line(this, at + new Vector2(-size, 0f), at + new Vector2(size, 0f), stroke);
+                ShapeDraw.Line(this, at + new Vector2(0f, -size), at + new Vector2(0f, size), stroke);
                 break;
 
             case OrderKind.Build:
-                DrawRect(new Rect2(at - Vector2.One * size, Vector2.One * size * 2f), tint,
-                    false, 2f);
+                ShapeDraw.Rect(this, new Rect2(at - Vector2.One * size, Vector2.One * size * 2f), stroke);
                 break;
 
             default:
-                DrawArc(at, size, 0f, Mathf.Tau, 20, tint, 1.5f);
+                ShapeDraw.Circle(this, at, size,
+                    ShapeStyle.Filled(new Color(tint, 0.2f), tint, 1.5f, WidthMode.MinScreen), 20);
                 break;
         }
     }
@@ -137,8 +142,6 @@ public partial class OrderOverlay : Node2D
     private void DrawBand(Rect2 band)
     {
         var local = new Rect2(ToLocal(band.Position), band.Size);
-
-        DrawRect(local, new Color(Ring, 0.08f));
-        DrawRect(local, new Color(Ring, 0.7f), false, 1.5f);
+        ShapeDraw.Rect(this, local, DrawTheme.Radius(VizKind.Band));
     }
 }

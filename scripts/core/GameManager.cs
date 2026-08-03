@@ -25,6 +25,14 @@ public partial class GameManager : Node
     /// <summary>Мир сессии: сюда Spawner складывает всё рождённое.</summary>
     [Export] public Playground Playground;
 
+    /// <summary>
+    /// Настройки мира: размер поля, раскладка точек метала, кольцо появления противника.
+    /// Назначаются здесь, а действуют через <see cref="World"/>, поскольку границы поля
+    /// спрашивает и тот код, которому менеджер сессии не нужен, — растр навигации,
+    /// постановка построек, отрисовка ориентиров.
+    /// </summary>
+    [Export] public WorldSettings WorldTuning;
+
     /// <summary>Журнал документов — шина, через которую системы говорят друг с другом.</summary>
     public EventStore Events { get; } = new();
 
@@ -84,6 +92,15 @@ public partial class GameManager : Node
     /// </summary>
     public KeySlice<Faction, IDamageable> Targets { get; private set; }
 
+    /// <summary>
+    /// Подвижные сущности, разложенные по сторонам. Нужен потому, что после слияния классов
+    /// тип узла о стороне больше ничего не говорит: и армия игрока в терроре, и объём
+    /// давления противника считаются по одному и тому же классу Unit и различаются только
+    /// стороной. Обход с отсевом чужих дал бы полный проход на каждый спрос, а спрашивают
+    /// этот состав и мозговые системы, и подсчёт показателей.
+    /// </summary>
+    public KeySlice<Faction, Unit> Units { get; private set; }
+
     private int _lastEntityId;
 
     public int NewId() => ++_lastEntityId;
@@ -91,6 +108,11 @@ public partial class GameManager : Node
     public override void _EnterTree()
     {
         I = this;
+
+        // Настройки мира ставим первой строкой: от них зависят границы поля и размер
+        // растра навигации, а тот создаётся здесь же, несколькими строками ниже
+        if (WorldTuning != null)
+            World.Settings = WorldTuning;
 
         // Площадка — сестринская ветка, и к этому мигу она уже собрана: дерево сцены
         // создаётся целиком до того, как хоть кто-то в нём получит _EnterTree
@@ -105,6 +127,7 @@ public partial class GameManager : Node
         // Постоянные разрезы заводим здесь же, где и проекции: состав производного
         // состояния должен быть виден в одном месте, а не всплывать по коду систем
         Targets = Index.SliceBy<IDamageable, Faction>(target => target.Faction);
+        Units = Index.SliceBy<Unit, Faction>(unit => unit.Faction);
 
         // Порядок держим явным: если проекция читает другую, зависимость идёт раньше.
         // Сначала собираем состав, потом подписываем — тогда они могут ссылаться друг на друга.
@@ -130,6 +153,11 @@ public partial class GameManager : Node
             system.Link();
 
         SystemsLinked = true;
+
+        // Меньшие приоритеты _Process исполняются раньше. Камера остаётся на нулевом,
+        // а графический прогон систем идёт после неё: мировая точка под курсором должна
+        // учитывать положение камеры уже текущего кадра.
+        ProcessPriority = 1;
     }
 
     /// <summary>
@@ -145,14 +173,18 @@ public partial class GameManager : Node
 
     public override void _PhysicsProcess(double dt)
     {
-        Scheduler.RunFrame(dt);
+        Scheduler.RunCycle(UpdateCycle.PhysicsProcess, dt);
 
-        // Состав мира меняется здесь, после всех систем: рождённое за кадр входит в разрезы
-        // разом, погибшее разом выметается. Иначе одни системы видели бы новичка, а другие нет
+        // Состав мира и транзиентные документы меняются только здесь, после физических
+        // систем: рождённое за шаг входит в разрезы разом, погибшее разом выметается.
+        // Графический цикл к симуляции не относится и частоту этого шага не повышает
         Index.Sweep();
 
         Events.ClearTransient();
     }
+
+    public override void _Process(double dt) =>
+        Scheduler.RunCycle(UpdateCycle.Process, dt);
 
     /// <summary>Ярлык к самой ходовой проекции — общему хранилищу базы.</summary>
     public StockpileProjection Stockpile => Projections.Get<StockpileProjection>();

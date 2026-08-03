@@ -1,0 +1,16 @@
+# Панель завода: очередь производства, не постановка каркасов.
+
+id = "bot_factory_buildbar"
+priority = 5
+kind = "plant"
+
+[[sections]]
+id = "units"
+title = "Юниты"
+order = 0
+cells = [
+	{ x = 0, y = 0, build = "dox" },
+	{ x = 1, y = 0, build = "ant" },
+	{ x = 2, y = 0, build = "inferno" },
+	{ x = 3, y = 0, build = "stitch" },
+]

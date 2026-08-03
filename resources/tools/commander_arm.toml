@@ -9,7 +9,7 @@ name = "Строительная рука коммандера"
 kind = "work"
 
 range            = 3.0
-power            = 30.0
+power            = 60.0
 energy_per_power = 1.0
 works            = ["build"]
 repairs_units    = true

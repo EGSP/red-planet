@@ -26,10 +26,7 @@ public partial class Commander : Unit
         if (Definition == null)
             return;
 
-        // Радиус инструмента
-        DrawArc(Vector2.Zero, Definition.WorkRangePx, 0f, Mathf.Tau, 48,
-            new Color(0.5f, 0.8f, 1f, 0.18f), 1.5f);
-
+        // Круг руки рисует UnitGizmos в base._Draw — здесь только счётчик урона
         DrawDamageTaken();
     }
 

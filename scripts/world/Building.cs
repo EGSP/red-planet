@@ -1,11 +1,17 @@
 using Godot;
 
 /// <summary>
-/// Готовая постройка: занимает прямоугольник по форме своего справочника.
+/// Готовая постройка: занимает прямоугольник по форме своего справочника, повёрнутый
+/// на угол, под которым её поставили.
 ///
-/// Ось «вперёд» у здания есть, но ноду оно не крутит: занимаемый прямоугольник
-/// осепараллелен, а поворот ноды его не поворачивает. Поэтому направление живёт отдельным
-/// числом из справочника и рисуется маркером — задел под турели и ворота.
+/// УГОЛ ПРИНАДЛЕЖИТ ЭКЗЕМПЛЯРУ, А НЕ СПРАВОЧНИКУ. Раньше он брался из определения и был
+/// у всех построек одного рода одинаков, потому что повернуть постройку было нечем.
+/// Теперь его задаёт игрок при постановке, а справочник даёт лишь начальное значение
+/// для тех, кто появляется в мире помимо стройки, — стартовой базы например.
+///
+/// Ноду постройка по-прежнему не крутит: в Rotation у турели живёт ось башни, и корпус
+/// от её вращения шевелиться не должен. Поэтому угол корпуса — отдельное число,
+/// а поворот при отрисовке применяется правкой трансформа канвы.
 /// </summary>
 public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVision, IRepairable,
     IOrderable, IObstacle
@@ -13,13 +19,16 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     public int Id { get; private set; }
     public UnitDefinition Definition { get; private set; }
 
+    /// <summary>Угол корпуса, под которым постройку поставили. Ось занимаемого места.</summary>
+    public float BodyFacing { get; private set; }
+
     /// <summary>
-    /// Занимаемое место. Считается от позиции и формы, а НЕ от поворота ноды: у турели
-    /// в Rotation живёт ось башни, и корпус от её вращения шевелиться не должен.
+    /// Занимаемое место. Считается от позиции, формы и угла корпуса, а НЕ от поворота ноды:
+    /// у турели в Rotation живёт ось башни, и корпус от её вращения шевелиться не должен.
     /// </summary>
-    public Rect2 Footprint => Definition == null
-        ? new Rect2(GlobalPosition, Vector2.Zero)
-        : Placement.Footprint(Definition, GlobalPosition);
+    public Obb Footprint => Definition == null
+        ? new Obb(GlobalPosition, Vector2.Zero)
+        : Placement.Footprint(Definition, GlobalPosition, BodyFacing);
 
     public Health Health { get; private set; }
 
@@ -49,10 +58,10 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     public Faction Faction => Faction.Player;
 
     /// <summary>
-    /// Ось «вперёд». У обычной постройки она из справочника и не меняется;
+    /// Ось «вперёд». У обычной постройки она совпадает с углом корпуса и не меняется;
     /// турель переопределяет её на поворот собственной ноды — башня крутится.
     /// </summary>
-    public virtual float Facing => Definition != null ? Mathf.DegToRad(Definition.FacingDegrees) : 0f;
+    public virtual float Facing => BodyFacing;
 
     /// <summary>Радиус попадания — по описанной окружности: по краю стены снаряд тоже попадает.</summary>
     public float HitRadius => Definition != null
@@ -64,15 +73,24 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     /// <summary>Курс ремонта берётся прямо из справочника: прочность, делённая на цену.</summary>
     public float HealthPerMetal => Definition?.HealthPerMetal ?? 0f;
 
-    public virtual void Init(int id, UnitDefinition def, Vector2 center)
+    public virtual void Init(int id, UnitDefinition def, Vector2 center, float facing)
     {
         Id = id;
         Definition = def;
         Position = center;
+        BodyFacing = facing;
         Health = new Health(def.MaxHealth);
 
         QueueRedraw();
+        SetProcess(true);
     }
+
+    /// <summary>
+    /// Области инструментов включаются кадрами (Ctrl, покрытие турелей, вкладка giz),
+    /// поэтому постройка обязана перерисовываться, иначе круг появится только при
+    /// следующей смене состояния.
+    /// </summary>
+    public override void _Process(double delta) => QueueRedraw();
 
     /// <summary>
     /// Генератор заявляет выработку. Постройка с <see cref="ConversionDefinition"/> —
@@ -146,15 +164,26 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
 
-        VisionGizmo.Draw(this, VisionRadius, Definition.Color);
+        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
+            selected: GizmoGate.IsSelected(this),
+            armedStructure: Definition.Weapon != null);
 
-        DrawRect(rect, Definition.Color);
-        DrawRect(rect, new Color(0f, 0f, 0f, 0.35f), false, 2f);
+        // Корпус повёрнут на угол постановки. Правка трансформа канвы, а не поворот ноды:
+        // ноду держит за собой турель, у которой в Rotation ось башни
+        DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
 
-        // Ось «вперёд» — короткая насечка от центра к краю
-        var forward = Heading.Forward(Facing);
+        ShapeDraw.Rect(this, rect,
+            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f, WidthMode.Screen));
+
+        // Ось «вперёд» — короткая насечка от центра к краю. Рисуется в координатах корпуса,
+        // поэтому насечка вперёд и есть направление корпуса
         float span = Mathf.Min(size.X, size.Y);
-        DrawLine(forward * span * 0.2f, forward * span * 0.45f, new Color(1f, 1f, 1f, 0.5f), 3f);
+        ShapeDraw.Line(this, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
+            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f), 3f, WidthMode.Screen));
+
+        // Подпись и полоса прочности читаются с экрана, а не с корпуса, поэтому поворот
+        // на них не распространяется
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
         DrawString(ThemeDB.FallbackFont, new Vector2(rect.Position.X + 4f, rect.Position.Y + 16f),
             Definition.DisplayName, HorizontalAlignment.Left, -1, 12, Colors.Black);

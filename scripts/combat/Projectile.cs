@@ -101,11 +101,13 @@ public partial class Projectile : Node2D
 
     public override void _Draw()
     {
-        DrawCircle(Vector2.Zero, Radius, Tint);
+        ShapeDraw.Circle(this, Vector2.Zero, Radius, ShapeStyle.Solid(Tint));
 
         // Короткий хвост назад по движению — очередь читается как очередь.
-        // Ноду не поворачиваем, поэтому локальные координаты совпадают с мировым смещением
+        // Ноду не поворачиваем, поэтому локальные координаты совпадают с мировым смещением.
+        // Толщина хвоста в мировых единицах равна радиусу снаряда.
         var tail = -Velocity.Normalized() * Radius * 4f;
-        DrawLine(Vector2.Zero, tail, new Color(Tint, 0.45f), Radius);
+        ShapeDraw.Line(this, Vector2.Zero, tail,
+            ShapeStyle.Outline(new Color(Tint, 0.45f), Radius, WidthMode.World));
     }
 }

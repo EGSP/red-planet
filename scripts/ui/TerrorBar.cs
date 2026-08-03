@@ -1,7 +1,7 @@
 using Godot;
 
 /// <summary>
-/// Плашки террора у правого края: итог и три слагаемых, из которых он собран.
+/// Плашки террора у правого края: итог и четыре слагаемых, из которых он собран.
 ///
 /// ПОКАЗЫВАЕТСЯ ВКЛАД ПОСЛЕ КРИВОЙ, а не сырая сумма весов. Это не оформительская мелочь:
 /// по сырой сумме игрок не смог бы объяснить себе, почему двадцать новых заборов не сдвинули
@@ -31,6 +31,7 @@ public partial class TerrorBar : CanvasLayer
     private Plate _production;
     private Plate _expansion;
     private Plate _army;
+    private Plate _time;
 
     public override void _Ready()
     {
@@ -74,6 +75,10 @@ public partial class TerrorBar : CanvasLayer
         _production = AddPlate(rows, "производство");
         _expansion = AddPlate(rows, "экспансия");
         _army = AddPlate(rows, "армия");
+
+        // Время стоит последним и показывается наравне с прочими: игрок должен видеть,
+        // какая часть давления пришла от него самого, а какая набежала сама
+        _time = AddPlate(rows, "время");
     }
 
     private static Label AddTotal(Node parent)
@@ -148,11 +153,23 @@ public partial class TerrorBar : CanvasLayer
         Show(_production, terror.Production, terror.RawProduction);
         Show(_expansion, terror.Expansion, terror.RawExpansion);
         Show(_army, terror.Army, terror.RawArmy);
+
+        // У времени сырая величина — секунды, и в секундах она нечитаема: показываем
+        // минуты и секунды, как показывают длительность партии
+        _time.Value.Text = $"{terror.Time:0.#}";
+        _time.Raw.Text = Elapsed(terror.RawTime);
     }
 
     private static void Show(Plate plate, float value, float raw)
     {
         plate.Value.Text = $"{value:0.#}";
         plate.Raw.Text = $"{raw:0.#}";
+    }
+
+    private static string Elapsed(float seconds)
+    {
+        int total = Mathf.FloorToInt(seconds);
+
+        return $"{total / 60}:{total % 60:00}";
     }
 }

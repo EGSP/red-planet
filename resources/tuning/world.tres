@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="WorldSettings" format=3 uid="uid://dxh016jrpgobj"]
+
+[ext_resource type="Script" uid="uid://y5qf2c1v7038" path="res://scripts/world/WorldSettings.cs" id="1_settings"]
+
+[resource]
+script = ExtResource("1_settings")
+Seed = 4076502051

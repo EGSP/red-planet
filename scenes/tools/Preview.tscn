@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://cdrjiwky3sbh3"]
+
+[ext_resource type="Script" uid="uid://3kpl2w4knl1c" path="res://scripts/tools/SessionPreview.cs" id="1_preview"]
+[ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="2_world"]
+[ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="3_waves"]
+
+[node name="Preview" type="Node2D" unique_id=1691428143]
+
+[node name="Camera" type="Camera2D" parent="." unique_id=1031185748]
+position = Vector2(32, 32)
+zoom = Vector2(0.22, 0.22)
+
+[node name="SessionPreview" type="Node2D" parent="." unique_id=485349297]
+script = ExtResource("1_preview")
+WorldTuning = ExtResource("2_world")
+Waves = ExtResource("3_waves")
+WaveId = "pincer"
+WaveSeed = 1682095231

@@ -21,8 +21,19 @@ using Godot;
 public sealed class NavGrid
 {
     public const int Cell = Const.NavCell;
-    public const int Width = Const.NavWidth;
-    public const int Area = Width * Width;
+
+    /// <summary>
+    /// Ячеек по стороне. Величина перестала быть константой вместе с тем, как размер мира
+    /// переехал в настройки: растр покрывает поле целиком, поэтому его сторона есть
+    /// следствие размера поля, а не самостоятельное число.
+    ///
+    /// Массивы под неё выделяются при создании карты и пересоздаются, если размер поля
+    /// изменился, — см. <see cref="Fit"/>. По ходу партии этого не происходит: настройки
+    /// правятся между партиями и в редакторе.
+    /// </summary>
+    public static int Width => World.NavWidth;
+
+    public static int Area => Width * Width;
 
     /// <summary>Расстояние в третях ячейки: шаг по стороне.</summary>
     private const int Straight = 3;
@@ -35,10 +46,10 @@ public sealed class NavGrid
 
     private readonly ObstacleMap _obstacles;
 
-    private readonly bool[] _blocked = new bool[Area];
+    private bool[] _blocked = new bool[Area];
 
     /// <summary>Расстояние до ближайшей непроходимой ячейки, в третях ячейки.</summary>
-    private readonly int[] _distance = new int[Area];
+    private int[] _distance = new int[Area];
 
     /// <summary>
     /// Метки связных областей, своя раскладка на каждый порог клиренса. Считаются лениво:
@@ -64,11 +75,11 @@ public sealed class NavGrid
     // ── координаты ────────────────────────────────────────────────────────────────
 
     public static Vector2I ToCell(Vector2 world) => new(
-        Mathf.FloorToInt((world.X - Const.WorldMin.X) / Cell),
-        Mathf.FloorToInt((world.Y - Const.WorldMin.Y) / Cell));
+        Mathf.FloorToInt((world.X - World.Min.X) / Cell),
+        Mathf.FloorToInt((world.Y - World.Min.Y) / Cell));
 
     public static Vector2 ToWorld(Vector2I cell) =>
-        Const.WorldMin + new Vector2(cell.X + 0.5f, cell.Y + 0.5f) * Cell;
+        World.Min + new Vector2(cell.X + 0.5f, cell.Y + 0.5f) * Cell;
 
     public static Vector2 ToWorld(int index) =>
         ToWorld(new Vector2I(index % Width, index / Width));
@@ -221,10 +232,29 @@ public sealed class NavGrid
     /// </summary>
     public void Fresh()
     {
-        if (_sourceRevision == _obstacles.Revision)
+        if (_sourceRevision == _obstacles.Revision && _blocked.Length == Area)
             return;
 
+        Fit();
         Rebuild();
+    }
+
+    /// <summary>
+    /// Подогнать массивы под текущий размер поля.
+    ///
+    /// Нужно потому, что размер мира стал настройкой: карта создаётся раньше, чем сцена
+    /// успевает назначить настройки, и в редакторе поле правят прямо во время работы.
+    /// Проверка стоит одно сравнение длины на запрос, а без неё изменённый размер означал бы
+    /// обращение за границы массива.
+    /// </summary>
+    private void Fit()
+    {
+        if (_blocked.Length == Area)
+            return;
+
+        _blocked = new bool[Area];
+        _distance = new int[Area];
+        _components.Clear();
     }
 
     /// <summary>
@@ -243,7 +273,7 @@ public sealed class NavGrid
         System.Array.Clear(_blocked);
 
         foreach (var obstacle in _obstacles.All)
-            Rasterize(_obstacles.RectOf(obstacle));
+            Rasterize(_obstacles.ShapeOf(obstacle));
 
         Chamfer();
 
@@ -255,24 +285,46 @@ public sealed class NavGrid
     /// Растеризация консервативная: ячейка, задетая прямоугольником хотя бы краем,
     /// помечается целиком. Ошибка идёт в пользу безопасности — юнит не пройдёт там,
     /// где формально помещался бы на пару пикселей.
+    ///
+    /// Обход идёт по осепараллельным границам, а помечается ячейка по пересечению с самим
+    /// прямоугольником: у повёрнутого границы прихватывают углы, где его нет вовсе,
+    /// и без второй проверки диагональная стена перегораживала бы вдвое больше места.
     /// </summary>
-    private void Rasterize(Rect2 rect)
+    private void Rasterize(in Obb shape)
     {
-        if (rect.Size.X <= 0f || rect.Size.Y <= 0f)
+        if (shape.IsEmpty)
             return;
 
-        var min = ToCell(rect.Position);
-        var max = ToCell(rect.End - new Vector2(0.001f, 0.001f));
+        var bounds = shape.Bounds;
+
+        var min = ToCell(bounds.Position);
+        var max = ToCell(bounds.End - new Vector2(0.001f, 0.001f));
 
         int x0 = Mathf.Max(min.X, 0);
         int y0 = Mathf.Max(min.Y, 0);
         int x1 = Mathf.Min(max.X, Width - 1);
         int y1 = Mathf.Min(max.Y, Width - 1);
 
+        // Осепараллельному хватает и обхода: пересечение с ячейкой у него заведомо есть,
+        // а проверять его заново значило бы платить за поворот там, где поворота нет
+        bool square = Mathf.IsZeroApprox(Mathf.Sin(shape.Angle * 2f));
+
         for (int y = y0; y <= y1; y++)
+        {
             for (int x = x0; x <= x1; x++)
+            {
+                if (!square && !shape.Intersects(CellShape(x, y)))
+                    continue;
+
                 _blocked[y * Width + x] = true;
+            }
+        }
     }
+
+    /// <summary>Ячейка растра как прямоугольник мира — для точной проверки пересечения.</summary>
+    private static Obb CellShape(int x, int y) => Obb.FromRect(new Rect2(
+        World.Min + new Vector2(x, y) * Cell,
+        new Vector2(Cell, Cell)));
 
     /// <summary>
     /// Расстояние до ближайшего препятствия за два прохода. Соседи за краем мира считаются
