@@ -1,8 +1,8 @@
 # Пушка коммандера: усреднённая. Бьёт слабее толстяка и реже стрелка, зато достаёт дальше обоих.
 
 id   = "commander_gun"
+base = "/tools/base_weapon.toml"
 name = "Универсальная пушка"
-kind = "weapon"
 
 range             = 6.5
 damage            = 14.0

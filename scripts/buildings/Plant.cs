@@ -235,6 +235,7 @@ public partial class Plant : Building
             return;
 
         unit.Rotation = BodyFacing;
+        unit.SnapToolToBody();
 
         CopyRally(unit);
         unit.Movement.BeginExit(this, ExitPoint(def));

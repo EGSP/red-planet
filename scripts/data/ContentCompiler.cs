@@ -85,23 +85,82 @@ public static class ContentCompiler
 
     private static int LoadTools(Catalog catalog)
     {
+        var raw = new Dictionary<string, TomlTable>();
+        var toolPaths = new List<string>();
         int errors = 0;
 
-        foreach (string path in Files(ToolsDir))
+        // Справочники констант: инструмент может сослаться на units.vars / weapons.vars
+        foreach (string path in Files(ContentDir))
         {
-            var document = TomlDocument.Load(path);
+            if (!TomlResolver.IsVars(path))
+                continue;
 
-            if (document == null)
+            var table = TomlDocument.LoadTable(path);
+
+            if (table == null)
             {
                 errors++;
                 continue;
             }
 
+            raw[path] = table;
+        }
+
+        foreach (string path in Files(ToolsDir))
+        {
+            var table = TomlDocument.LoadTable(path);
+
+            if (table == null)
+            {
+                errors++;
+                continue;
+            }
+
+            raw[path] = table;
+
+            if (!TomlResolver.IsVars(path))
+                toolPaths.Add(path);
+        }
+
+        errors += TomlResolver.Resolve(raw, out var resolved);
+
+        var seen = new HashSet<string>();
+
+        foreach (string path in toolPaths)
+        {
+            if (!resolved.TryGetValue(path, out var table))
+            {
+                errors++;
+                continue;
+            }
+
+            var document = TomlDocument.Wrap(table, path);
+            string id = document.RequiredString("id");
+            bool abstractTool = document.Bool("abstract");
+
+            if (string.IsNullOrEmpty(id))
+            {
+                document.Done();
+                errors += document.Errors;
+                continue;
+            }
+
+            if (!seen.Add(id))
+            {
+                GD.PushError($"[Контент] инструмент «{id}» объявлен дважды: {path}");
+                errors++;
+                document.Done();
+                errors += document.Errors;
+                continue;
+            }
+
+            // Читаем и abstract-основу: иначе Done сочтёт непрочитанные ключи ошибкой.
+            // В каталог основа не попадает — как abstract у юнитов.
             var tool = ReadTool(document);
             document.Done();
             errors += document.Errors;
 
-            if (document.Failed || string.IsNullOrEmpty(tool?.Id))
+            if (abstractTool || document.Failed || tool == null)
                 continue;
 
             if (!catalog.AddTool(tool))
@@ -121,12 +180,15 @@ public static class ContentCompiler
         var kind = document.Enum("kind", ToolKind.Work);
         float range = document.Float("range", 3f);
 
+        bool aimWhileMoving = document.Bool("aim_while_moving", true);
+
         if (kind == ToolKind.Weapon)
             return new WeaponDefinition
             {
                 Id = id,
                 DisplayName = name,
                 Range = range,
+                AimWhileMoving = aimWhileMoving,
                 Damage = document.Float("damage", 10f),
                 FireInterval = document.Float("fire_interval", 1f),
                 ProjectileSpeed = document.Float("projectile_speed", 14f),
@@ -141,6 +203,7 @@ public static class ContentCompiler
             Id = id,
             DisplayName = name,
             Range = range,
+            AimWhileMoving = aimWhileMoving,
             Power = document.Float("power", 1f),
             EnergyPerPower = document.Float("energy_per_power", 5f),
             Kinds = ReadWorkKinds(document),

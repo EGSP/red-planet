@@ -55,6 +55,18 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     private Order _assisted;
 
+    /// <summary>
+    /// Направление инструмента в мировых радианах: ствол или манипулятор.
+    /// Корпус при этом смотрит по <see cref="Node2D.Rotation"/> — туда, куда едет.
+    /// </summary>
+    private float _toolFacing;
+
+    /// <summary>
+    /// В этом физическом кадре инструмент уже доворачивали к цели. Без признака
+    /// графический шаг снова тянул бы его к корпусу и гасил наведение.
+    /// </summary>
+    private bool _toolAimed;
+
     public Unit() => Orders = new OrderQueue(this);
 
     public Vector2 Anchor => _anchor;
@@ -135,8 +147,22 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public SelectionGroup SelectionGroup => Definition?.SelectionGroup ?? SelectionGroup.Bots;
 
-    /// <summary>Ось «вперёд» подвижной сущности — это поворот самой ноды.</summary>
-    public float Facing => Rotation;
+    /// <summary>
+    /// Ось прицеливания: независимый инструмент, если умение это допускает,
+    /// иначе направление корпуса.
+    /// </summary>
+    public float Facing => AimsIndependently ? _toolFacing : Rotation;
+
+    /// <summary>Куда смотрит ствол или манипулятор прямо сейчас.</summary>
+    public float ToolFacing => AimsIndependently ? _toolFacing : Rotation;
+
+    /// <summary>
+    /// Инструмент наводится отдельно от корпуса на ходу. Берётся из умения:
+    /// ствол с <c>aim_while_moving</c> или рабочая рука с тем же признаком.
+    /// </summary>
+    private bool AimsIndependently =>
+        Definition?.Weapon is { AimWhileMoving: true }
+        || Definition?.BuildTool is { AimWhileMoving: true };
 
     public float HitRadius => Definition?.RadiusPx ?? Const.Unit * 0.35f;
 
@@ -184,8 +210,19 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // Якорь ставится сразу: юнит, которому ещё ничего не приказывали, обязан
         // держаться места своего появления, а не расползаться за целями от него
         _anchor = GlobalPosition;
+        _toolFacing = Rotation;
 
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// Выровнять инструмент по корпусу без доворота. Нужен после внешней установки
+    /// <see cref="Node2D.Rotation"/> при рождении: иначе ствол остаётся на старом угле.
+    /// </summary>
+    public void SnapToolToBody()
+    {
+        _toolFacing = Rotation;
+        _toolAimed = false;
     }
 
     /// <summary>
@@ -241,10 +278,47 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float desired = Heading.AngleTo(GlobalPosition, point);
         float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
+
+        if (AimsIndependently)
+        {
+            _toolFacing = Heading.TurnToward(_toolFacing, desired, step);
+            _toolAimed = true;
+            return;
+        }
+
+        // Корпусный инструмент: на ходу корпус крутит движение, стоя — наведение
+        if (Movement.Velocity.LengthSquared() > 0.0001f)
+            return;
+
         Rotation = Heading.TurnToward(Rotation, desired, step);
+        _toolFacing = Rotation;
+        _toolAimed = true;
     }
 
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        if (!_toolAimed)
+            AlignTool(delta);
+
+        _toolAimed = false;
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// Без цели инструмент возвращается к направлению корпуса. У корпусного оружия
+    /// ось всегда совпадает с корпусом.
+    /// </summary>
+    private void AlignTool(double dt)
+    {
+        if (!AimsIndependently)
+        {
+            _toolFacing = Rotation;
+            return;
+        }
+
+        float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
+        _toolFacing = Heading.TurnToward(_toolFacing, Rotation, step);
+    }
 
     /// <summary>Приказов нет — отпускаем узел работы и стоим.</summary>
     public void OnIdle(double dt)
@@ -409,8 +483,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Приказ атаковать: подойти на дальность своего ствола и держаться. Сам выстрел —
     /// дело WeaponSystem, сюда попадает только подход.
     ///
-    /// В пределах дальности корпус крутит система стрельбы, на подходе — система движения.
-    /// Своего доворота здесь нет: два доворота за кадр удвоили бы скорость вращения.
+    /// В пределах дальности инструмент крутит система стрельбы; корпус на ходу
+    /// по-прежнему доворачивает система движения. Своего доворота здесь нет.
     /// </summary>
     private void RunAttack(Order order, double dt)
     {
@@ -697,11 +771,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float radius = Definition.RadiusPx;
 
+        float toolLocal = ToolFacing - Rotation;
+
         UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
-            selected: GizmoGate.IsSelected(this));
+            selected: GizmoGate.IsSelected(this),
+            facingOffset: toolLocal);
 
         DrawHull(radius);
-        DrawForwardMark(radius);
+        DrawMoveMark(radius);
+        DrawToolMark(radius, toolLocal);
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
 
@@ -786,24 +864,56 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Ствол или манипулятор. Длина ствола растёт с дальностью оружия;
-    /// у ремонтника без ствола — дуга спереди.
+    /// Треугольник на корпусе: нос совпадает с направлением движения
+    /// (<see cref="Node2D.Rotation"/>), а не с инструментом.
     /// </summary>
-    private void DrawForwardMark(float radius)
+    private void DrawMoveMark(float radius)
     {
-        if (Definition.CanRepair && Definition.Weapon == null)
+        float nose = radius * 0.62f;
+        float back = radius * 0.12f;
+        float half = radius * 0.32f;
+        var tip = new[]
+        {
+            new Vector2(nose, 0f),
+            new Vector2(back, -half),
+            new Vector2(back, half),
+        };
+
+        ShapeDraw.Polygon(this, tip,
+            ShapeStyle.Filled(Definition.Color.Lightened(0.25f), new Color(0f, 0f, 0f, 0.55f), 1.5f,
+                WidthMode.Screen));
+    }
+
+    /// <summary>
+    /// Передняя часть инструмента: ствол или дуга манипулятора. Рисуется в локальных
+    /// координатах со сдвигом на угол инструмента относительно корпуса.
+    /// </summary>
+    private void DrawToolMark(float radius, float toolLocal)
+    {
+        bool hasWeapon = Definition.Weapon != null;
+        bool hasArm = Definition.BuildTool != null;
+
+        if (!hasWeapon && !hasArm)
+            return;
+
+        DrawSetTransform(Vector2.Zero, toolLocal, Vector2.One);
+
+        if (!hasWeapon && hasArm)
         {
             ShapeDraw.Arc(this, Vector2.Zero, radius * 1.15f, -0.7f, 0.7f,
                 ShapeStyle.Outline(new Color(0.45f, 0.85f, 1f, 0.85f), 2.5f, WidthMode.Screen));
-            return;
+        }
+        else
+        {
+            float barrel = radius * 1.2f;
+            if (hasWeapon)
+                barrel = radius + Mathf.Clamp(Definition.Weapon.RangePx * 0.12f, radius * 0.4f,
+                    radius * 2.2f);
+
+            ShapeDraw.Line(this, Vector2.Zero, new Vector2(barrel, 0f),
+                ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
         }
 
-        float barrel = radius * 1.2f;
-        if (Definition.Weapon != null)
-            barrel = radius + Mathf.Clamp(Definition.Weapon.RangePx * 0.12f, radius * 0.4f,
-                radius * 2.2f);
-
-        ShapeDraw.Line(this, Vector2.Zero, new Vector2(barrel, 0f),
-            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
     }
 }

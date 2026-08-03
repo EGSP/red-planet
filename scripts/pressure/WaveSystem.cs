@@ -259,6 +259,7 @@ public partial class WaveSystem : GameSystem
 
         // Появился — уже смотрит на базу: иначе первый ход выглядит как разворот на месте
         enemy.Rotation = Heading.AngleTo(position, Vector2.Zero);
+        enemy.SnapToolToBody();
 
         GM.Events.Append(new EnemySpawned
         {

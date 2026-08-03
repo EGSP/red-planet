@@ -1,8 +1,8 @@
 # Скорострел Peacekeeper: очередь с разбросом, опасен толпой.
 
 id   = "peacekeeper_smg"
+base = "/tools/base_weapon.toml"
 name = "Скорострел Миротворца"
-kind = "weapon"
 
 range             = 4.7
 damage            = 3.5

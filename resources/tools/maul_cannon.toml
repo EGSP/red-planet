@@ -1,14 +1,13 @@
 # Тяжёлое орудие Maul: редко, больно, недалеко.
 
 id   = "maul_cannon"
+base = "/tools/base_weapon.toml"
 name = "Орудие Молота"
-kind = "weapon"
 
 range             = 3.3
 damage            = 28.0
 fire_interval     = 1.5
 projectile_speed  = 8.0
 spread_degrees    = 3.0
-aim_cone_degrees  = 8.0
 projectile_radius = 0.14
 projectile_color  = [1.0, 0.55, 0.25]

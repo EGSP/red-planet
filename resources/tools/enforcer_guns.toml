@@ -1,8 +1,8 @@
 # Спаренные стволы Enforcer: высокий суммарный DPS.
 
 id   = "enforcer_guns"
+base = "/tools/base_weapon.toml"
 name = "Стволы Карателя"
-kind = "weapon"
 
 range             = 6.7
 damage            = 9.0

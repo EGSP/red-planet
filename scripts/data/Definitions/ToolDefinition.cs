@@ -19,6 +19,13 @@ public abstract class ToolDefinition
     /// <summary>Дальность действия в юнитах мира.</summary>
     public float Range = 3f;
 
+    /// <summary>
+    /// Может ли инструмент наводиться независимо от корпуса на ходу.
+    /// Иначе ось инструмента совпадает с направлением движения, а доворот к цели
+    /// возможен только стоя: на ходу корпус принадлежит системе движения.
+    /// </summary>
+    public bool AimWhileMoving = true;
+
     public float RangePx => Range * Const.Unit;
 }
 
