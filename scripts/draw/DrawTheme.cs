@@ -52,10 +52,13 @@ public enum VizKind
     WorldBorder,
 
     PreviewClearance,
-    PreviewStart,
-    PreviewField,
+    PreviewRing0,
+    PreviewRing1,
+    PreviewRing2,
     PreviewSpawn,
+    PreviewWaveStart,
     PreviewWave,
+    PreviewCluster,
 }
 
 /// <summary>
@@ -114,12 +117,15 @@ public static class DrawTheme
         VizKind.GridAxis => new(1.00f, 1.00f, 1.00f),
         VizKind.WorldBorder => new(1.00f, 0.60f, 0.40f),
 
-        // Preview-пояса: красный / оранжевый / синий / пурпурный / жёлтый.
+        // Preview-пояса: зачистка / три кольца / появление / старт волны / сектор / кластер.
         VizKind.PreviewClearance => new(1.00f, 0.28f, 0.28f),
-        VizKind.PreviewStart => new(1.00f, 0.58f, 0.18f),
-        VizKind.PreviewField => new(0.30f, 0.52f, 1.00f),
+        VizKind.PreviewRing0 => new(1.00f, 0.58f, 0.18f),
+        VizKind.PreviewRing1 => new(0.30f, 0.52f, 1.00f),
+        VizKind.PreviewRing2 => new(0.20f, 0.85f, 0.55f),
         VizKind.PreviewSpawn => new(0.92f, 0.28f, 0.88f),
+        VizKind.PreviewWaveStart => new(1.00f, 0.72f, 0.35f),
         VizKind.PreviewWave => new(1.00f, 0.85f, 0.22f),
+        VizKind.PreviewCluster => new(0.95f, 0.62f, 0.25f),
 
         _ => Colors.White,
     };
@@ -188,8 +194,9 @@ public static class DrawTheme
         VizKind.Band => (0.08f, 0.70f, 1.5f, WidthMode.MinScreen),
         VizKind.BoidBody => (0.05f, 0.85f, 2.0f, WidthMode.Screen),
         VizKind.BoidSense => (0.04f, 0.55f, 1.5f, WidthMode.MinScreen),
-        VizKind.PreviewClearance or VizKind.PreviewStart or VizKind.PreviewField
-            or VizKind.PreviewSpawn or VizKind.PreviewWave =>
+        VizKind.PreviewClearance or VizKind.PreviewRing0 or VizKind.PreviewRing1
+            or VizKind.PreviewRing2 or VizKind.PreviewSpawn or VizKind.PreviewWaveStart
+            or VizKind.PreviewWave or VizKind.PreviewCluster =>
             (0.08f, 0.70f, 2.0f, WidthMode.Screen),
         _ => (0.05f, 0.70f, 1.5f, WidthMode.Screen),
     };

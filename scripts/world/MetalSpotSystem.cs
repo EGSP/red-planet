@@ -14,8 +14,8 @@ using Godot;
 /// чего в редакторе действительно не бывает, — проверка занятости по настоящим препятствиям
 /// и создание сущностей.
 ///
-/// Все точки одинаковы. Богатства, коэффициентов и видов у них нет: разницу создаёт только
-/// положение — до дальней точки дольше идти и труднее её прикрыть.
+/// Все точки одинаковы по богатству отдельного рудника. Разницу создаёт кластер:
+/// на краю карты кластеры крупнее и насыщеннее, ближе к базе — мельче.
 /// </summary>
 public partial class MetalSpotSystem : GameSystem
 {
@@ -44,14 +44,16 @@ public partial class MetalSpotSystem : GameSystem
 
     private void Generate()
     {
-        var placed = MetalSpotLayout.Build(Settings, Settings.Seed, Free);
+        var plan = MetalSpotLayout.Build(Settings, Settings.Seed, Free);
 
-        foreach (var position in placed)
+        foreach (var position in plan.Spots)
             GM.Spawn.SpawnMetalSpot(position);
 
-        if (placed.Count < Settings.SpotCount)
-            GD.PushWarning($"[Точки метала] размещено {placed.Count} из {Settings.SpotCount}. " +
-                           "Поле тесное для заданного числа точек и расстояния между ними");
+        if (plan.Clusters.Count == 0 && (Settings.Rings == null || Settings.Rings.Length == 0))
+            GD.PushWarning("[Точки метала] кольца руды не заданы");
+        else if (plan.Spots.Count == 0)
+            GD.PushWarning("[Точки метала] ни одной точки не размещено. " +
+                           "Поле тесное для заданных кластеров и расстояния между точками");
     }
 
     /// <summary>

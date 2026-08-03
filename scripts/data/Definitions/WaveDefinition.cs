@@ -60,7 +60,7 @@ public sealed class WaveShapeOverrides
 {
     public float? NearArcDegrees;
     public float? FarArcDegrees;
-    public float? RadiusOffsetMultiplier;
+    public float? WaveStart;
     public float? RadiusDepthMultiplier;
     public float? SpacingCells;
     public int? Groups;

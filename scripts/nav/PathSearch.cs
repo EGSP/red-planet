@@ -66,8 +66,15 @@ public sealed class PathSearch
         var start = NavGrid.ToCell(from);
         var goal = NavGrid.ToCell(to);
 
-        if (!NavGrid.InBounds(start) || !NavGrid.InBounds(goal))
+        bool startOutside = !NavGrid.InBounds(start);
+
+        // Цель за растром поля застройки не обслуживается: приказы ведут внутрь мира.
+        // Старт снаружи допустим — подход до края считается открытым пространством.
+        if (!NavGrid.InBounds(goal))
             return false;
+
+        if (startOutside)
+            start = EntryCell(from, radiusPx);
 
         // Цель внутри здания: ведём к ближайшему свободному месту, а не отказываем.
         // Приказ «идти сюда» по постройке должен приводить юнита к её краю
@@ -85,8 +92,11 @@ public sealed class PathSearch
         if (!_grid.Passable(start, radiusPx) || !_grid.Passable(goal, radiusPx))
             return false;
 
-        // Прямая видимость — самый частый случай на нашей карте: поиск не запускаем вовсе
-        if (_grid.LineOfSight(from, to, radiusPx))
+        // Прямая видимость — самый частый случай на нашей карте: поиск не запускаем вовсе.
+        // Снаружи растра сегмент до входа свободен, поэтому смотрим от точки входа.
+        var sightFrom = startOutside ? NavGrid.ToWorld(start) : from;
+
+        if (_grid.LineOfSight(sightFrom, to, radiusPx))
         {
             result.Add(to);
             return true;
@@ -101,6 +111,22 @@ public sealed class PathSearch
         Trace(start, goal, from, to);
         Smooth(radiusPx, result);
         return true;
+    }
+
+    /// <summary>
+    /// Ближайшая проходимая ячейка на краю растра со стороны внешней точки: снаружи
+    /// препятствий нет, поэтому достаточно зажать координаты ячейки в границы сетки.
+    /// </summary>
+    private Vector2I EntryCell(Vector2 from, float radiusPx)
+    {
+        var cell = NavGrid.ToCell(from);
+        int last = NavGrid.Width - 1;
+
+        cell = new Vector2I(
+            Mathf.Clamp(cell.X, 0, last),
+            Mathf.Clamp(cell.Y, 0, last));
+
+        return _grid.NearestPassable(cell, radiusPx);
     }
 
     private bool Search(Vector2I start, Vector2I goal, float radiusPx, int maxNodes)
@@ -254,7 +280,7 @@ public sealed class PathSearch
 
             for (int probe = _raw.Count - 1; probe > anchor + 1; probe--)
             {
-                if (!_grid.LineOfSight(_raw[anchor], _raw[probe], radiusPx))
+                if (!ClearSight(_raw[anchor], _raw[probe], radiusPx))
                     continue;
 
                 next = probe;
@@ -264,6 +290,29 @@ public sealed class PathSearch
             result.Add(_raw[next]);
             anchor = next;
         }
+    }
+
+    /// <summary>
+    /// Видимость с учётом подхода снаружи растра: сегмент за пределами поля застройки
+    /// считается свободным, проверка идёт только по отрезку внутри сетки.
+    /// </summary>
+    private bool ClearSight(Vector2 a, Vector2 b, float radiusPx)
+    {
+        var cellA = NavGrid.ToCell(a);
+        var cellB = NavGrid.ToCell(b);
+        bool aOut = !NavGrid.InBounds(cellA);
+        bool bOut = !NavGrid.InBounds(cellB);
+
+        if (aOut && bOut)
+            return true;
+
+        if (aOut)
+            a = NavGrid.ToWorld(EntryCell(a, radiusPx));
+
+        if (bOut)
+            b = NavGrid.ToWorld(EntryCell(b, radiusPx));
+
+        return _grid.LineOfSight(a, b, radiusPx);
     }
 
     /// <summary>

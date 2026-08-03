@@ -17,7 +17,7 @@ public readonly struct WaveShape
 {
     public readonly float NearArcDegrees;
     public readonly float FarArcDegrees;
-    public readonly float RadiusOffsetMultiplier;
+    public readonly float WaveStart;
     public readonly float RadiusDepthMultiplier;
     public readonly float SpacingCells;
     public readonly int Groups;
@@ -30,13 +30,13 @@ public readonly struct WaveShape
     /// </summary>
     public readonly float BaseRadiusPx;
 
-    public WaveShape(float nearArc, float farArc, float radiusOffset, float radiusDepth,
+    public WaveShape(float nearArc, float farArc, float waveStart, float radiusDepth,
         float spacing, int groups, float groupsArc, float baseRadiusPx)
     {
         BaseRadiusPx = Mathf.Max(baseRadiusPx, 1f);
         NearArcDegrees = Mathf.Max(nearArc, 0f);
         FarArcDegrees = Mathf.Max(farArc, 0f);
-        RadiusOffsetMultiplier = Mathf.Max(radiusOffset, 0.01f);
+        WaveStart = Mathf.Max(waveStart, 0.01f);
         RadiusDepthMultiplier = Mathf.Max(radiusDepth, 0f);
         SpacingCells = Mathf.Max(spacing, 0.1f);
         Groups = Mathf.Max(groups, 1);
@@ -44,7 +44,7 @@ public readonly struct WaveShape
     }
 
     /// <summary>Радиус ближней к базе дуги в пикселях.</summary>
-    public float NearRadiusPx => BaseRadiusPx * RadiusOffsetMultiplier;
+    public float NearRadiusPx => BaseRadiusPx * WaveStart;
 
     /// <summary>Глубина формы в пикселях: расстояние между дугами.</summary>
     public float DepthPx => BaseRadiusPx * RadiusDepthMultiplier;
@@ -109,14 +109,10 @@ public partial class WaveSettings : Resource
     /// </summary>
     [Export] public float NearArcDegrees = 30f;
 
-    /// <summary>Умолчание для угла дальней дуги, градусов.</summary>
-    [Export] public float FarArcDegrees = 40f;
-
     /// <summary>
-    /// Умолчание для положения ближней дуги в долях радиуса появления фона. Единственное
-    /// поле группы, которое не перекрывает ни одна волна: кольцо появления общее для всех.
+    /// Умолчание для угла дальней дуги, градусов.
     /// </summary>
-    [Export] public float RadiusOffsetMultiplier = 1f;
+    [Export] public float FarArcDegrees = 40f;
 
     /// <summary>Умолчание для глубины формы в долях радиуса появления фона.</summary>
     [Export] public float RadiusDepthMultiplier = 0.12f;
@@ -137,17 +133,20 @@ public partial class WaveSettings : Resource
     [Export] public float GroupsArcDegrees = 90f;
 
     /// <summary>
-    /// Форма волны: заданное волной поверх умолчаний. Волна описывает отличия, а не
-    /// повторяет весь набор, поэтому здесь и происходит слияние.
+    /// Форма волны: заданное волной поверх умолчаний. Положение ближней дуги
+    /// (<c>WaveStart</c>) берётся из <see cref="WorldSettings"/>, если волна его не задала —
+    /// иначе у мира и у волн было бы два независимых регулятора одной линии.
     /// </summary>
     public WaveShape ShapeOf(WaveShapeOverrides over, float baseRadiusPx)
     {
         over ??= new WaveShapeOverrides();
 
+        float waveStart = over.WaveStart ?? World.Settings.WaveStart;
+
         return new WaveShape(
             over.NearArcDegrees ?? NearArcDegrees,
             over.FarArcDegrees ?? FarArcDegrees,
-            over.RadiusOffsetMultiplier ?? RadiusOffsetMultiplier,
+            waveStart,
             over.RadiusDepthMultiplier ?? RadiusDepthMultiplier,
             over.SpacingCells ?? SpacingCells,
             over.Groups ?? Groups,

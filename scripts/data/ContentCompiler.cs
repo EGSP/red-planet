@@ -722,8 +722,12 @@ public static class ContentCompiler
             if (spawn.Has("far_arc_degrees"))
                 over.FarArcDegrees = spawn.Float("far_arc_degrees");
 
+            if (spawn.Has("wave_start"))
+                over.WaveStart = spawn.Float("wave_start");
+
+            // Прежнее имя ключа: читаем, пока файлы волн не переписаны.
             if (spawn.Has("radius_offset_multiplier"))
-                over.RadiusOffsetMultiplier = spawn.Float("radius_offset_multiplier");
+                over.WaveStart = spawn.Float("radius_offset_multiplier");
 
             if (spawn.Has("radius_depth_multiplier"))
                 over.RadiusDepthMultiplier = spawn.Float("radius_depth_multiplier");
