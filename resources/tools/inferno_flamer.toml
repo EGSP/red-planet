@@ -1,7 +1,7 @@
 # Огнемёт Inferno: короткий конус, редкие тяжёлые удары.
 
 id   = "inferno_flamer"
-name = "Огнемёт Inferno"
+name = "Огнемёт Инферно"
 kind = "weapon"
 
 range             = 1.3

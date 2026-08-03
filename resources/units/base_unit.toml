@@ -1,0 +1,35 @@
+# Общий предок подвижных сущностей. Числа совпадают с умолчаниями UnitDefinition в коде;
+# конкретный файл перекрывает только отличия. Сам в каталог не попадает.
+#
+# Сюда — форма юнита: тело, ход, бой, полный список приказов. Чистые скаляры без секций —
+# в units.vars.toml.
+
+id       = "base_unit"
+abstract = true
+name     = "Юнит"
+class    = "bot"
+color    = [0.6, 0.6, 0.65]
+tags     = ["mobile"]
+
+[body]
+max_health   = 100.0
+radius       = 0.35
+vision_range = "/content/units.vars.toml/vision_range"
+hull         = "circle"
+hull_aspect  = 1.5
+armor_rings  = 0
+front_plate  = false
+
+[movement]
+# speed задаёт потомок: без скорости сущность неподвижна
+turn_speed   = 180.0
+acceleration = 0.0
+brake        = -1.0
+
+[battle]
+approach_hold = "/content/units.vars.toml/approach_hold"
+
+# Полный перечень: пересечение с фактическими умениями отсекает лишнее.
+# Потомок снимает лишнее через deny, не перечисляя allow заново.
+[orders]
+allow = ["move", "follow", "attack", "build", "repair", "delete"]

@@ -35,10 +35,6 @@ public partial class Assembler : Building, IWorker
 
     public override void _Process(double delta) => QueueRedraw();
 
-    /// <summary>Башня стоит на месте: стройка, ремонт и снос.</summary>
-    public override OrderSet AllowedOrders =>
-        OrderSet.None.With(OrderKind.Build).With(OrderKind.Repair).With(OrderKind.Delete);
-
     /// <summary>Башня стоит на месте, поэтому её якорь внимания — она сама.</summary>
     public Vector2 Anchor => GlobalPosition;
 

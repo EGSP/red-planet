@@ -1,7 +1,7 @@
 # Орудие Ant: средний темп, заметная дальность.
 
 id   = "ant_cannon"
-name = "Орудие Ant"
+name = "Орудие Анта"
 kind = "weapon"
 
 range             = 6.7

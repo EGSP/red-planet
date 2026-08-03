@@ -1,20 +1,18 @@
 # Stitch: боевой ремонтник. Чинит юнитов и постройки, сам не строит.
 
-id       = "stitch"
-name     = "Stitch"
-class    = "bot"
-color    = [0.45, 0.85, 0.95]
-tags     = ["mobile", "builder"]
-tools    = ["stitch_arm"]
+id    = "stitch"
+base  = "/units/base_unit.toml"
+name  = "Стич"
+color = [0.45, 0.85, 0.95]
+tags  = ["mobile", "builder"]
+tools = ["stitch_arm"]
 
 [footprint]
 rows = ["#"]
 
 [body]
-max_health   = 25.0
-radius       = 0.3
-vision_range = 9.0
-hull         = "circle"
+max_health = 25.0
+radius     = 0.3
 
 [movement]
 speed      = 2.4

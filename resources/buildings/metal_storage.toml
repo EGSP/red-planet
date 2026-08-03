@@ -2,8 +2,8 @@
 # работы экстрактора, а не десятки минут как у PA metal_storage.
 
 id    = "metal_storage"
+base  = "/buildings/base_building.toml"
 name  = "Склад металла"
-class = "structure"
 color = [0.7, 0.45, 0.28]
 tags  = ["structure", "economy", "basic"]
 
@@ -14,8 +14,7 @@ pattern_alt  = "square"
 pattern_step = "narrow"
 
 [body]
-max_health   = 300.0
-vision_range = 6.0
+max_health = 300.0
 
 [storage]
 metal = 1000.0

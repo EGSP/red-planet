@@ -54,7 +54,7 @@ public partial class OutcomeMenu : CanvasLayer
         _title.AddThemeColorOverride("font_color", victory ? VictoryColor : DefeatColor);
         _subtitle.Text = victory
             ? "Портал удержан. Основные силы получили проход."
-            : "База уничтожена.";
+            : "Крепость уничтожена.";
         _frame.Visible = true;
     }
 

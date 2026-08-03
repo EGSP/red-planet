@@ -336,10 +336,11 @@ public sealed class UnitDefinition
     public float? ArmyPowerWeight;
 
     /// <summary>
-    /// На какой доле дальности оружия юнит прекращает сближение. Меньше единицы, чтобы цель
-    /// не выпадала из радиуса от любого шага в сторону.
+    /// На какой доле дальности оружия юнит прекращает сближение и удерживает позицию.
+    /// Меньше единицы, чтобы цель не выпадала из радиуса от любого шага в сторону.
+    /// В .toml — ключ <c>approach_hold</c>.
     /// </summary>
-    public float StandoffFraction = 0.75f;
+    public float ApproachHoldFraction = 0.75f;
 
     /// <summary>
     /// Род при выделении рамкой. Выводится компилятором из тега structure, а не задаётся
@@ -352,6 +353,38 @@ public sealed class UnitDefinition
 
     /// <summary>Рабочий инструмент: стройка и/или ремонт.</summary>
     public WorkToolDefinition BuildTool;
+
+    /// <summary>
+    /// Явно разрешённые приказы: <c>allow</c> минус <c>deny</c> после слияния base.
+    /// Имеет смысл только при <see cref="HasOrderList"/>.
+    /// </summary>
+    public OrderSet DeclaredOrders = OrderSet.None;
+
+    /// <summary>
+    /// Явно запрещённые приказы из <c>deny</c>. В отличие от простого отсутствия в allow,
+    /// такой приказ не попадает ни в принятые, ни в мягкий список панели.
+    /// </summary>
+    public OrderSet DeniedOrders = OrderSet.None;
+
+    /// <summary>В файле была секция <c>[orders]</c> (в том числе с пустым allow или только deny).</summary>
+    public bool HasOrderList;
+
+    /// <summary>
+    /// Что сущность умеет исполнить по классу и снабжению. Считает компилятор после
+    /// связывания инструментов; от объявления в файле не зависит.
+    /// </summary>
+    public OrderSet ExecutableOrders = OrderSet.None;
+
+    /// <summary>Пересечение объявленного и исполнимого — то, что принимает очередь.</summary>
+    public OrderSet AcceptedOrders => DeclaredOrders.Intersect(ExecutableOrders);
+
+    /// <summary>
+    /// Исполнимо, но ни разрешено, ни запрещено явно. Панель показывает со звёздочкой;
+    /// к исполнению не принимается. Приказы из <see cref="DeniedOrders"/> сюда не входят.
+    /// </summary>
+    public OrderSet SoftOrders =>
+        (HasOrderList ? ExecutableOrders.Except(DeclaredOrders) : ExecutableOrders)
+        .Except(DeniedOrders);
 
     /// <summary>Параметры завода. Заданы только у <see cref="UnitClass.Plant"/>.</summary>
     public PlantDefinition Plant;

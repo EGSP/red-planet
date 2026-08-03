@@ -439,8 +439,18 @@ public interface IOrderable
     /// <summary>Имя для интерфейса.</summary>
     string DisplayName { get; }
 
-    /// <summary>Что этой сущности вообще можно приказать. Пустой набор — ничего.</summary>
+    /// <summary>
+    /// Приказы, которые очередь принимает: пересечение объявленных в определении
+    /// и фактически исполнимых. Пустой набор сам по себе не запрещает выделение —
+    /// см. <see cref="SoftOrders"/>.
+    /// </summary>
     OrderSet AllowedOrders { get; }
+
+    /// <summary>
+    /// Исполнимые, но не объявленные в определении. Панель показывает их со звёздочкой;
+    /// в очередь они не ставятся.
+    /// </summary>
+    OrderSet SoftOrders { get; }
 
     /// <summary>Род при выделении рамкой — см. <see cref="SelectionGroups"/>.</summary>
     SelectionGroup SelectionGroup { get; }

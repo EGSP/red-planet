@@ -61,6 +61,35 @@ public sealed class TomlDocument
         return null;
     }
 
+    /// <summary>
+    /// Обернуть уже материализованную таблицу (после <see cref="TomlResolver"/>).
+    /// Сырой разбор файла сюда не входит — только чтение ключей с учётом израсходованных.
+    /// </summary>
+    public static TomlDocument Wrap(TomlTable table, string where) =>
+        new(table ?? new TomlTable(), where);
+
+    /// <summary>Сырая таблица файла до разрешения base и ссылок. Null — файл не разобрался.</summary>
+    public static TomlTable LoadTable(string path)
+    {
+        using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+
+        if (file == null)
+        {
+            GD.PushError($"[Контент] файл не открывается: {path}");
+            return null;
+        }
+
+        var syntax = Toml.Parse(file.GetAsText(), path);
+
+        if (!syntax.HasErrors)
+            return syntax.ToModel();
+
+        foreach (var error in syntax.Diagnostics)
+            GD.PushError($"[Контент] {error}");
+
+        return null;
+    }
+
     public bool Has(string key) => _table.ContainsKey(key);
 
     /// <summary>Строка. Нет ключа — запасное значение.</summary>

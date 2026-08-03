@@ -2,6 +2,7 @@
 # Юнит появляется в центре корпуса и выезжает по rolloff_directions.
 
 id       = "bot_factory"
+base     = "/buildings/base_building.toml"
 name     = "Завод"
 class    = "plant"
 color    = [0.45, 0.55, 0.7]
@@ -33,3 +34,6 @@ rolloff_clearance   = 0.0
 
 [assembly]
 cost_metal = 600.0
+
+[orders]
+allow = ["move", "follow", "attack", "delete"]

@@ -448,13 +448,14 @@ public partial class CommandSystem : GameSystem
     }
 
     /// <summary>
-    /// Выделяем только то, чем можно управлять: своё и с непустым набором приказов.
-    /// У обычной постройки в наборе только снос — она попадает в рамку, и Del её сносит.
-    /// Юнит, ещё выезжающий из корпуса завода, некликабелен.
+    /// Выделяем своё с непустым видимым набором приказов: принятые плюс мягкие
+    /// (умеет, но в определении не разрешено). Мягкие нужны, чтобы сущность с забытым
+    /// <c>[orders]</c> оставалась доступной для проверки в панели. Юнит, ещё выезжающий
+    /// из корпуса завода, некликабелен.
     /// </summary>
     private static bool Commandable(IOrderable actor) =>
         actor.Faction == Faction.Player
-        && actor.AllowedOrders.Any
+        && (actor.AllowedOrders.Any || actor.SoftOrders.Any)
         && !Targeting.Leaving(actor);
 
     private IOrderable ActorAt(Vector2 point) =>

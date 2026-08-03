@@ -1,7 +1,7 @@
 # Спаренные стволы Enforcer: высокий суммарный DPS.
 
 id   = "enforcer_guns"
-name = "Стволы Enforcer"
+name = "Стволы Карателя"
 kind = "weapon"
 
 range             = 6.7

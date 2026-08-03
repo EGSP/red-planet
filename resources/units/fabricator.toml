@@ -1,8 +1,8 @@
 # Фабрикатор: строит и чинит, копать не умеет.
 
 id       = "fabricator"
+base     = "/units/base_unit.toml"
 name     = "Фабрикатор"
-class    = "bot"
 color    = [0.4, 0.9, 0.5]
 buildbar = "fabricator_buildbar"
 tags     = ["mobile", "builder"]
@@ -14,9 +14,8 @@ tools    = ["fabricator_arm"]
 rows = ["#"]
 
 [body]
-max_health   = 90.0
-radius       = 0.32
-vision_range = 9.0
+max_health = 90.0
+radius     = 0.32
 
 [movement]
 speed      = 4.0

@@ -76,18 +76,6 @@ public partial class Plant : Building
         }
     }
 
-    /// <summary>
-    /// Заводу можно отдать rally и снос: движение, сопровождение, атака копируются на
-    /// выпущенных юнитов (<see cref="Building.RunOrder"/> для них пуст у предка, кроме
-    /// сноса); снос завод исполняет сам.
-    /// </summary>
-    public override OrderSet AllowedOrders =>
-        OrderSet.None
-            .With(OrderKind.Move)
-            .With(OrderKind.Follow)
-            .With(OrderKind.Attack)
-            .With(OrderKind.Delete);
-
     public int CountOf(string unitId)
     {
         int count = 0;

@@ -122,18 +122,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     public PressureOrigin Origin { get; set; } = PressureOrigin.Ambient;
 
     /// <summary>
-    /// Что юниту можно приказать. Выводится из того, чем он снабжён, а не задаётся списком:
-    /// нет руки — нет приказа строить, нет ствола — нет атаки. Поэтому набор не может
-    /// разойтись с тем, что юнит на самом деле умеет.
+    /// Приказы, которые очередь принимает. Состав задаёт секция <c>[orders]</c> определения
+    /// в пересечении с тем, что юнит умеет по снабжению и классу.
     /// </summary>
-    public virtual OrderSet AllowedOrders => Definition == null
-        ? OrderSet.None
-        : OrderSet.None
-            .With(OrderKind.Move, Definition.IsMobile)
-            .With(OrderKind.Follow, Definition.IsMobile)
-            .With(OrderKind.Attack, Definition.Weapon != null)
-            .With(OrderKind.Build, Definition.CanBuild)
-            .With(OrderKind.Repair, Definition.CanRepair);
+    public virtual OrderSet AllowedOrders => Definition?.AcceptedOrders ?? OrderSet.None;
+
+    /// <summary>
+    /// Умеет, но в определении не разрешено — для панели со звёздочкой на время проверки
+    /// полноты <c>[orders]</c>.
+    /// </summary>
+    public OrderSet SoftOrders => Definition?.SoftOrders ?? OrderSet.None;
 
     public SelectionGroup SelectionGroup => Definition?.SelectionGroup ?? SelectionGroup.Bots;
 
@@ -286,10 +284,33 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
                 RunFollow(order, dt);
                 return;
 
+            case OrderKind.Delete:
+                Demolish();
+                return;
+
             default:
                 RunWork(order, dt);
                 return;
         }
+    }
+
+    /// <summary>
+    /// Снос через тот же канал, что и гибель от урона: документ DamageDealt разбирает
+    /// DamageSystem в React. Прямой QueueFree из Simulate оставил бы журнал без следа.
+    /// </summary>
+    private void Demolish()
+    {
+        if (Health == null || Health.IsDead || IsQueuedForDeletion())
+            return;
+
+        float amount = Mathf.Max(Health.Current, 1f);
+        GameManager.I.Events.Append(new DamageDealt
+        {
+            TargetId = Id,
+            SourceId = Id,
+            Amount = amount,
+            Pos = GlobalPosition,
+        });
     }
 
     /// <summary>
@@ -412,7 +433,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // откуда любое смещение цели или толчок соседа выводили его из радиуса.
         // Безоружный подходит на длину инструмента: приказ хотя бы не зависает
         float stop = Weapon != null
-            ? Targeting.ApproachDistance(Weapon, target, Definition.StandoffFraction)
+            ? Targeting.ApproachDistance(Weapon, target, Definition.ApproachHoldFraction)
             : Definition.WorkRangePx;
 
         if (GlobalPosition.DistanceTo(to) > stop)
@@ -515,7 +536,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Detach();
 
         float stop = Targeting.ApproachDistance(Weapon, victim as IDamageable,
-            Definition.StandoffFraction);
+            Definition.ApproachHoldFraction);
 
         if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
             Movement.Seek(victim.GlobalPosition, stop);

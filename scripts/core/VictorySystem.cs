@@ -1,21 +1,21 @@
 using Godot;
 
 /// <summary>
-/// Победа и поражение: достроенный портал и минута удержания — победа; гибель базы —
+/// Победа и поражение: достроенный портал и минута удержания — победа; гибель крепости —
 /// поражение. Система появляется вместе с сессией и больше нигде не живёт.
 ///
 /// ПОЧЕМУ НЕ «ПОБЕДА В МОМЕНТ ДОСТРОЙКИ». Чеклист требует, чтобы портал был обязательством,
-/// а не кнопкой. Минута ожидания после достройки — цена удержания: враг ещё бьёт, база
+/// а не кнопкой. Минута ожидания после достройки — цена удержания: враг ещё бьёт, крепость
 /// ещё может пасть, и победа засчитывается только тем, кто дожил.
 ///
 /// Счётчик порталов, а не привязка к одному id: если портал снесли во время ожидания,
-/// отсчёт сбрасывается; если построили снова — начинается заново. База одна, и её гибель
+/// отсчёт сбрасывается; если построили снова — начинается заново. Крепость одна, и её гибель
 /// сразу завершает партию поражением, даже если отсчёт уже шёл.
 /// </summary>
 public partial class VictorySystem : GameSystem
 {
     public const string PortalId = "portal";
-    public const string BaseId = "base";
+    public const string FortressId = "fortress";
 
     /// <summary>Сколько секунд нужно удержать достроенный портал до победы.</summary>
     [Export] public float VictoryHoldSeconds = 60f;
@@ -81,7 +81,7 @@ public partial class VictorySystem : GameSystem
         if (GM.GetParent() is not Session session || session.Outcome != SessionOutcome.None)
             return;
 
-        if (record.DefinitionId == BaseId)
+        if (record.DefinitionId == FortressId)
         {
             session.End(SessionOutcome.Defeat);
             return;

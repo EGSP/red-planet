@@ -1,11 +1,10 @@
 # Inferno: тяжёлый ближний танк MLA. Прочность и урон в упор, дальность минимальна.
 
-id       = "inferno"
-name     = "Inferno"
-class    = "bot"
-color    = [0.95, 0.45, 0.25]
-tags     = ["mobile"]
-tools    = ["inferno_flamer"]
+id    = "inferno"
+base  = "/units/base_unit.toml"
+name  = "Инферно"
+color = [0.95, 0.45, 0.25]
+tools = ["inferno_flamer"]
 
 [footprint]
 rows = ["#"]
@@ -26,7 +25,7 @@ turn_speed = 90.0
 brake      = 6.0
 
 [battle]
-standoff = 0.55
+approach_hold = 0.55
 
 [assembly]
 cost_metal   = 225.0

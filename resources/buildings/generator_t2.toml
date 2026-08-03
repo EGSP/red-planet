@@ -2,8 +2,8 @@
 # Числа — energy_plant_adv celestial: 3750 энергии / стоимость 2000, энергия ÷100.
 
 id    = "generator_t2"
+base  = "/buildings/base_building.toml"
 name  = "Реактор"
-class = "structure"
 color = [1.0, 0.62, 0.2]
 tags  = ["structure", "economy", "advanced", "important"]
 
@@ -14,8 +14,7 @@ pattern_alt  = "square"
 pattern_step = "narrow"
 
 [body]
-max_health   = 350.0
-vision_range = 6.0
+max_health = 350.0
 
 [production]
 energy = 37.5

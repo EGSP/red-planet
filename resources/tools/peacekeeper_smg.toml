@@ -1,7 +1,7 @@
 # Скорострел Peacekeeper: очередь с разбросом, опасен толпой.
 
 id   = "peacekeeper_smg"
-name = "Скорострел Peacekeeper"
+name = "Скорострел Миротворца"
 kind = "weapon"
 
 range             = 4.7

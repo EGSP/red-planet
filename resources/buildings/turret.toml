@@ -2,6 +2,7 @@
 # turn_speed у неё есть, а speed нулевая.
 
 id    = "turret"
+base  = "/buildings/base_building.toml"
 name  = "Турель"
 class = "turret"
 color = [0.6, 0.85, 1.0]
@@ -17,11 +18,14 @@ pattern_alt  = "diamond"
 pattern_step = "margin"
 
 [body]
-max_health   = 250.0
-vision_range = 6.0
+max_health = 250.0
 
 [movement]
 turn_speed = 90.0
 
 [assembly]
 cost_metal = 225.0
+
+# Атака добавляется к унаследованному сносу.
+[orders]
+allow = ["attack", "delete"]

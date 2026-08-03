@@ -1,7 +1,7 @@
 # Орудие Shank: средний темп, дальность как у Ant.
 
 id   = "shank_cannon"
-name = "Орудие Shank"
+name = "Орудие Шэнка"
 kind = "weapon"
 
 range             = 6.7

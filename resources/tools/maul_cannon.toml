@@ -1,7 +1,7 @@
 # Тяжёлое орудие Maul: редко, больно, недалеко.
 
 id   = "maul_cannon"
-name = "Орудие Maul"
+name = "Орудие Молота"
 kind = "weapon"
 
 range             = 3.3

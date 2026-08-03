@@ -43,11 +43,13 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     public string DisplayName => Definition?.DisplayName ?? "постройка";
 
     /// <summary>
-    /// Обычной постройке можно только снести себя: склад, стена и генератор стоят и
-    /// работают сами, иных приказов у них нет. Турель и башня-сборщик набор расширяют.
-    /// Пустой набор означал бы «не выделяется» — снос тогда было бы не на что навесить.
+    /// Приказы из определения: пересечение <c>[orders]</c> и исполнимых по классу.
+    /// Обычной постройке в файле обычно разрешён только снос; турель и завод расширяют список.
     /// </summary>
-    public virtual OrderSet AllowedOrders => OrderSet.None.With(OrderKind.Delete);
+    public virtual OrderSet AllowedOrders => Definition?.AcceptedOrders ?? OrderSet.None;
+
+    /// <summary>Исполнимо, но не объявлено — панель помечает звёздочкой.</summary>
+    public virtual OrderSet SoftOrders => Definition?.SoftOrders ?? OrderSet.None;
 
     public SelectionGroup SelectionGroup => SelectionGroup.Structures;
 
