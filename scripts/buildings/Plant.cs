@@ -279,17 +279,27 @@ public partial class Plant : Building
         _cursor = (_cursor + 1) % _queue.Count;
     }
 
+    /// <summary>
+    /// Раздать новорождённому точку сбора.
+    ///
+    /// РАЗДАЮТСЯ КОПИИ, А НЕ САМИ ПРИКАЗЫ. Приказ движения дожидается всех своих участников
+    /// (см. <see cref="Order"/>), и стоит выехавшему из корпуса войти в состав общего
+    /// приказа, как весь отряд встал бы у точки сбора, дожидаясь следующего юнита, которого
+    /// завод ещё только собирает. Копия несёт то же намерение, но состав у неё свой.
+    /// </summary>
     private void CopyRally(Unit unit)
     {
         if (Orders.Count == 0)
             return;
 
         var copy = new Order[Orders.Count];
+        int i = 0;
 
-        for (int i = 0; i < Orders.Count; i++)
-            copy[i] = CloneOrder(Orders.Items[i]);
+        foreach (var order in Orders.Remaining)
+            copy[i++] = CloneOrder(order);
 
-        unit.Orders.TrySet(copy);
+        if (unit.Orders.TrySet(copy))
+            unit.SetAnchor(copy[^1].Point);
     }
 
     private static Order CloneOrder(Order source)
@@ -303,7 +313,8 @@ public partial class Plant : Building
             OrderKind.Attack when Alive.Is(source.Entity) => Order.Attack(source.Entity),
             OrderKind.Follow when Alive.Is(source.Entity) => Order.Follow(source.Entity),
             OrderKind.Repair when Alive.Is(source.Entity) => Order.Repair(source.Entity),
-            OrderKind.Build when Alive.Is(source.Target) => Order.Work(OrderKind.Build, source.Target),
+            OrderKind.Build when Alive.Is(source.Target as Node2D) =>
+                Order.Work(OrderKind.Build, source.Target),
             _ => Order.MoveTo(source.Point),
         };
     }

@@ -42,7 +42,40 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>Сколько осталось до переигровки цели. Ведёт мозговая система, она же и решает.</summary>
     private float _retarget;
 
+    /// <summary>
+    /// Якорь внимания — см. <see cref="IWorker.Anchor"/>. Ставится при рождении и меняется
+    /// только приказом игрока: занятие, выбранное самостоятельно, якоря не сдвигает,
+    /// иначе отлучка за целью переносила бы участок вслед за юнитом.
+    /// </summary>
+    private Vector2 _anchor;
+
+    /// <summary>
+    /// Чужой приказ, в котором юнит помогает ведущему прямо сейчас. Своей очереди
+    /// не принадлежит и в неё не попадает: помощь длится ровно пока идёт сопровождение.
+    /// </summary>
+    private Order _assisted;
+
     public Unit() => Orders = new OrderQueue(this);
+
+    public Vector2 Anchor => _anchor;
+
+    /// <summary>
+    /// Юнита уже посылали. Признак нужен единственному правилу: приставленный к месту
+    /// не бросает его ради коммандера, а тот, кому ничего не приказывали, идёт за ним,
+    /// как и раньше. Без этого различия отряд, оставленный держать рубеж, уходил бы
+    /// с него сам, едва закончив дело, — и якорь внимания не значил бы ничего.
+    /// </summary>
+    public bool Posted { get; private set; }
+
+    /// <summary>
+    /// Перенести якорь внимания. Зовёт тот, кто отдаёт приказ по воле игрока:
+    /// <see cref="CommandSystem"/> и завод, раздающий новорождённым точку сбора.
+    /// </summary>
+    public void SetAnchor(Vector2 point)
+    {
+        _anchor = point;
+        Posted = true;
+    }
 
     /// <summary>
     /// Пора ли искать цель заново. Прежняя может быть и жива — просто рядом выросло что-то
@@ -124,10 +157,20 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     public WeaponDefinition Weapon => Definition?.Weapon;
 
     /// <summary>
-    /// Огонь без приказов — по ближайшему, по приказу «атака» — по назначенному.
-    /// На работе не стреляем: занятый юнит делом занят.
+    /// Занят делом: подключён к узлу работы или чинит. Такому не до стрельбы.
     /// </summary>
-    public virtual bool CanFire => Idle || Current?.Kind == OrderKind.Attack;
+    private bool Busy => Alive.Is(_attached) || RepairTarget != null;
+
+    /// <summary>
+    /// Стреляем всегда, кроме как за работой. Прежде огонь вели только без приказов,
+    /// и сопровождающий отряд молча шёл мимо противника, потому что приказ у него был.
+    /// Сопровождение и движение стрельбе не мешают: прикрытие строителей — не отдельная
+    /// задача, а то, что вооружённый делает попутно.
+    ///
+    /// Приказ атаки стреляет и на работе — но работать и атаковать одновременно нельзя,
+    /// поэтому случай этот вырожденный и оставлен ради ясности правила.
+    /// </summary>
+    public virtual bool CanFire => Current?.Kind == OrderKind.Attack || !Busy;
 
     /// <summary>
     /// По приказу бьём именно назначенную жертву, даже если рядом мельтешит другая:
@@ -139,6 +182,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     public override void _Ready()
     {
         Health ??= new Health(Definition?.MaxHealth ?? 80f);
+
+        // Якорь ставится сразу: юнит, которому ещё ничего не приказывали, обязан
+        // держаться места своего появления, а не расползаться за целями от него
+        _anchor = GlobalPosition;
 
         QueueRedraw();
     }
@@ -202,7 +249,11 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     public override void _Process(double delta) => QueueRedraw();
 
     /// <summary>Приказов нет — отпускаем узел работы и стоим.</summary>
-    public void OnIdle(double dt) => Detach();
+    public void OnIdle(double dt)
+    {
+        _assisted = null;
+        Detach();
+    }
 
     /// <summary>
     /// Отработать приказ за кадр. Снимать невыполнимое с головы очереди не наше дело —
@@ -213,8 +264,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (Definition == null)
             return;
 
+        // Помощь ведущему живёт ровно один кадр и подтверждается заново: приказ
+        // сопровождения мог смениться, а ведущий — закончить работу
+        _assisted = null;
+
         switch (order.Kind)
         {
+            case OrderKind.Move:
+                RunMove(order, dt);
+                return;
+
             case OrderKind.Attack:
                 RunAttack(order, dt);
                 return;
@@ -234,7 +293,43 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Движение и стройка: дойти, а дойдя — подключиться к узлу работы.
+    /// Движение с ожиданием отставших.
+    ///
+    /// ОТРЯД СОБИРАЕТСЯ, А НЕ РАСТЯГИВАЕТСЯ. Приказ движения, отданный нескольким, снимается
+    /// только тогда, когда дошли все его участники: дошедший первым стоит и ждёт. Иначе
+    /// быстрый юнит уходил бы к следующему приказу цепочки в одиночку, и отряд, посланный
+    /// в две точки подряд, прибывал бы во вторую по частям.
+    ///
+    /// Ждать не приходится тому, кто получил приказ один: он сам себе весь состав. Копии
+    /// приказа, которые завод раздаёт новорождённым, состав тоже не разделяют — см.
+    /// <see cref="Order"/>.
+    ///
+    /// Приказ считается исполненным и тогда, когда ближе не пройти из-за своих: всему отряду
+    /// в одну точку не поместиться, и ждать этого бессмысленно.
+    /// </summary>
+    private void RunMove(Order order, double dt)
+    {
+        Detach();
+
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        {
+            Movement.Seek(order.Pos, reach);
+            return;
+        }
+
+        order.Arrive(Id);
+
+        // Стоим на месте: неподтверждённое намерение движения гаснет само,
+        // и юнит удерживает позицию, пока подтягиваются остальные
+        if (order.PartyReady)
+            Orders.DropCurrent();
+    }
+
+    /// <summary>
+    /// Стройка: дойти до места работы, а дойдя — поставить каркас, если это план,
+    /// или подключиться к нему инструментом, если это уже каркас.
     ///
     /// Приказ объявляет намерение и проверяет, дошли ли. Сам ход и доворот корпуса
     /// на ходу делает система движения: обходя препятствие, юнит едет не туда, куда
@@ -242,22 +337,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     private void RunWork(Order order, double dt)
     {
-        var target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
+        var target = order.Target.GlobalPosition;
 
         // Дальность принадлежит инструменту, а не юниту: раньше одно число служило всем
         // занятиям сразу, хотя тянутся они на разное
         var tool = Definition.BuildTool;
+        float reach = tool?.RangePx ?? Const.Unit;
 
-        float reach = order.Kind == OrderKind.Move
-            ? Const.Unit * 0.2f
-            : tool?.RangePx ?? Const.Unit;
-
-        // Приказ «идти» считается исполненным и тогда, когда ближе не пройти из-за своих:
-        // всему отряду в одну точку не поместиться, и ждать этого бессмысленно. К работе
-        // это не относится — там нужна не точка, а дальность инструмента до цели
-        bool settled = order.Kind == OrderKind.Move && Movement.Settled;
-
-        if (!settled && GlobalPosition.DistanceTo(target) > reach)
+        if (GlobalPosition.DistanceTo(target) > reach)
         {
             Detach();
             Movement.Seek(target, reach);
@@ -266,12 +353,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         // Дошли: разворачиваемся к тому, с чем работаем
         AimAt(target, dt);
-
-        if (order.Kind == OrderKind.Move)
-        {
-            Orders.DropCurrent();
-            return;
-        }
+        order.Arrive(Id);
 
         if (tool == null)
         {
@@ -279,14 +361,23 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        if (_attached != order.Target)
+        // План неосязаем и мощности не принимает: его нужно превратить в каркас.
+        // Приказ на каркас план впишет в очередь сам, следом за собой
+        if (order.Target is BuildPlan plan)
+        {
+            Detach();
+            plan.Realize();
+            return;
+        }
+
+        if (order.Target is WorkNode node && _attached != node)
         {
             Detach();
 
             // Узлу сообщаем и мощность, и прожорливость: энергию тратит инструмент,
             // а сколько именно — записано в нём же
-            order.Target.AttachWorker(Id, tool.Power, tool.EnergyDrain);
-            _attached = order.Target;
+            node.AttachWorker(Id, tool.Power, tool.EnergyDrain);
+            _attached = node;
         }
     }
 
@@ -304,6 +395,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         var victim = order.Entity;
         var target = victim as IDamageable;
         var to = victim.GlobalPosition;
+
+        // Поводок: цель, которую юнит выбрал себе сам, не уводит его дальше внимания
+        // от якоря. Прямое указание игрока поводка не имеет и ведёт куда угодно
+        if (order.Leashed && _anchor.DistanceTo(to) > Definition.AttentionRadiusPx)
+        {
+            Orders.DropCurrent();
+            return;
+        }
 
         // Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
         // границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
@@ -337,9 +436,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>
     /// Сопровождение: держаться рядом, но не наступать на пятки. Приказ не завершается сам —
     /// его вытесняет работа, как только она появится.
+    ///
+    /// СОПРОВОЖДЕНИЕ ВКЛЮЧАЕТ ПОМОЩЬ. Строитель, приставленный к строителю, берётся
+    /// за то же дело, что и ведущий, а не смотрит, как тот работает один.
     /// </summary>
     private void RunFollow(Order order, double dt)
     {
+        if (Assist(order, dt) || Guard(order))
+            return;
+
         Detach();
 
         var to = order.Entity.GlobalPosition;
@@ -348,27 +453,119 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             Movement.Seek(to, Const.FollowDistancePx);
     }
 
-    /// <summary>Кого чиним прямо сейчас: приказ ремонта, цель в пределах инструмента.</summary>
-    private IRepairable RepairTarget
+    /// <summary>
+    /// Прикрытие ведущего: подойти к противнику на дистанцию огня и держаться, пока тот
+    /// не уйдёт. Приказ сопровождения при этом не тратится и не отменяется, поэтому
+    /// сопровождающий возвращается к ведущему сам, как только стрелять станет не в кого.
+    ///
+    /// ЗОНА ИНТЕРЕСА ОТСЧИТЫВАЕТСЯ ОТ ВЕДУЩЕГО, А НЕ ОТ СЕБЯ. Отсчёт от себя означал бы, что
+    /// каждый шаг за целью расширяет область поиска, и охранение утягивалось бы за одиночкой
+    /// через всю карту — ровно то, ради чего заведён якорь внимания.
+    ///
+    /// Стрельбу отсюда никто не ведёт: она разрешена самим фактом сопровождения
+    /// (см. <see cref="CanFire"/>), а стреляет <see cref="WeaponSystem"/>.
+    /// </summary>
+    private bool Guard(Order order)
     {
-        get
+        if (Weapon == null || !Alive.Is(order.Entity))
+            return false;
+
+        var center = order.Entity.GlobalPosition;
+
+        if (Targeting.Nearest(center, Faction.Opposite(), Definition.AttentionRadiusPx)
+            is not Node2D victim)
+            return false;
+
+        Detach();
+
+        float stop = Targeting.ApproachDistance(Weapon, victim as IDamageable,
+            Definition.StandoffFraction);
+
+        if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
+            Movement.Seek(victim.GlobalPosition, stop);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Помощь ведущему: делать то же, что делает он, пока это в пределах внимания.
+    ///
+    /// ЧУЖОЙ ПРИКАЗ НЕ ПОПАДАЕТ В СВОЮ ОЧЕРЕДЬ. Помощь — не приказ, а поведение внутри
+    /// сопровождения: ведущий бросит работу, и помощник тут же вернётся к нему, ничего
+    /// не отменяя. Попади приказ в очередь — его пришлось бы оттуда вынимать, а до тех пор
+    /// помощник считался бы занятым и сопровождение бы потерял.
+    ///
+    /// Предел внимания отсчитывается от ведущего: помощник ходит за ним, а не за его
+    /// работой, и уходить от него дальше, чем видит, не должен.
+    /// </summary>
+    private bool Assist(Order order, double dt)
+    {
+        if (Definition.BuildTool == null || order.Entity is not IOrderable leader)
+            return false;
+
+        var work = leader.Orders.Current;
+
+        if (work == null || !Orders.Allows(work.Kind))
+            return false;
+
+        if (work.Kind is not (OrderKind.Build or OrderKind.Repair))
+            return false;
+
+        var point = work.Point;
+
+        if (order.Entity.GlobalPosition.DistanceTo(point) > Definition.AttentionRadiusPx)
+            return false;
+
+        _assisted = work;
+
+        float reach = Definition.BuildTool.RangePx;
+
+        if (GlobalPosition.DistanceTo(point) > reach)
         {
-            var order = Current;
-
-            if (order?.Kind != OrderKind.Repair || Definition == null || !Definition.CanRepair)
-                return null;
-
-            if (order.Entity is not IRepairable repairable || !Targeting.IsValid(order.Entity))
-                return null;
-
-            if (order.Entity is Unit && !Definition.CanRepairUnits)
-                return null;
-
-            float reach = Definition.BuildTool.RangePx;
-            return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
-                ? repairable
-                : null;
+            Detach();
+            Movement.Seek(point, reach);
+            return true;
         }
+
+        AimAt(point, dt);
+
+        // Ремонт идёт через RepairTarget, а каркас ставит сам ведущий: помощнику
+        // остаётся подключиться к тому, что уже стоит
+        if (work.Target is WorkNode node && _attached != node)
+        {
+            Detach();
+            node.AttachWorker(Id, Definition.BuildTool.Power, Definition.BuildTool.EnergyDrain);
+            _attached = node;
+        }
+        else if (work.Kind == OrderKind.Repair)
+        {
+            Detach();
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Кого чиним прямо сейчас: свой приказ ремонта либо чужой, в котором помогаем.
+    /// Цель обязана быть в пределах инструмента — иначе чинить нечего.
+    /// </summary>
+    private IRepairable RepairTarget => Repairing(Current) ?? Repairing(_assisted);
+
+    private IRepairable Repairing(Order order)
+    {
+        if (order?.Kind != OrderKind.Repair || Definition == null || !Definition.CanRepair)
+            return null;
+
+        if (order.Entity is not IRepairable repairable || !Targeting.IsValid(order.Entity))
+            return null;
+
+        if (order.Entity is Unit && !Definition.CanRepairUnits)
+            return null;
+
+        float reach = Definition.BuildTool.RangePx;
+        return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
+            ? repairable
+            : null;
     }
 
     private void Detach()

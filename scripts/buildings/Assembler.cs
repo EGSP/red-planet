@@ -39,13 +39,16 @@ public partial class Assembler : Building, IWorker
     public override OrderSet AllowedOrders =>
         OrderSet.None.With(OrderKind.Build).With(OrderKind.Repair);
 
+    /// <summary>Башня стоит на месте, поэтому её якорь внимания — она сама.</summary>
+    public Vector2 Anchor => GlobalPosition;
+
     public override void RunOrder(Order order, double dt)
     {
         switch (order.Kind)
         {
             case OrderKind.Build:
                 _repairTarget = null;
-                Attach(order.Target);
+                Work(order);
                 return;
 
             case OrderKind.Repair:
@@ -53,6 +56,36 @@ public partial class Assembler : Building, IWorker
                 _repairTarget = order.Entity;
                 return;
         }
+    }
+
+    /// <summary>
+    /// Стройка в пределах манипулятора. Дальнее башне недоступно вовсе: дойти она не может,
+    /// и приказ на далёкое место просто снимается — иначе он висел бы в очереди вечно.
+    ///
+    /// План башня ставит так же, как это делает фабрикатор: превращает в каркас, а приказ
+    /// на каркас план вписывает в очередь сам.
+    /// </summary>
+    private void Work(Order order)
+    {
+        var site = order.Target;
+
+        if (site == null
+            || GlobalPosition.DistanceTo(site.GlobalPosition) > Definition.WorkRangePx)
+        {
+            Detach();
+            Orders.DropCurrent();
+            return;
+        }
+
+        if (site is BuildPlan plan)
+        {
+            Detach();
+            plan.Realize();
+            return;
+        }
+
+        if (site is WorkNode node)
+            Attach(node);
     }
 
     public override void OnIdle(double dt)

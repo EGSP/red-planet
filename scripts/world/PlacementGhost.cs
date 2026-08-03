@@ -18,7 +18,7 @@ using Godot;
 /// <see cref="GizmoGate.ShowArmedCoverage"/>).
 ///
 /// У раскладки по залежам (<see cref="BuildPattern.MetalArea"/>) дополнительно рисуется
-/// круг растягивания: радиус тот же, по которому <see cref="BuildPlan"/> отбирает точки
+/// круг растягивания: радиус тот же, по которому <see cref="BuildLayout"/> отбирает точки
 /// метала, иначе видно только будущие экстракторы, а границу охвата — нет.
 /// </summary>
 public partial class PlacementGhost : Node2D

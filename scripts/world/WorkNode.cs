@@ -11,7 +11,7 @@ using Godot;
 /// намеренно: месторождение было вторым, пока метал добывали вручную, и та же форма
 /// понадобится любому занятию, где несколько исполнителей складывают мощность в одну работу.
 /// </summary>
-public abstract partial class WorkNode : Node2D, IEconomyActor
+public abstract partial class WorkNode : Node2D, IEconomyActor, IWorkSite
 {
     /// <summary>
     /// Локальный реестр подключений: id исполнителя -> его мощность и расход энергии.

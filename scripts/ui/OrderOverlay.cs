@@ -71,35 +71,49 @@ public partial class OrderOverlay : Node2D
     /// </summary>
     private void DrawChain(IOrderable actor)
     {
-        var orders = actor.Orders.Items;
-        if (orders.Count == 0)
+        // Список общий на весь отряд, а место в нём у каждого своё, да ещё и ветки
+        // сцепляются: спрашиваем у очереди готовый остаток, иначе исполнителю приписался бы
+        // шаг, который он уже прошёл, либо потерялось бы продолжение в чужой ветке
+        int total = actor.Orders.Count;
+
+        if (total == 0)
             return;
 
         var font = ThemeDB.FallbackFont;
         var from = ToLocal(actor.GlobalPosition);
+        int step = -1;
 
-        for (int i = 0; i < orders.Count; i++)
+        foreach (var order in actor.Orders.Remaining)
         {
-            var order = orders[i];
+            step++;
+
             var to = ToLocal(order.Point);
             var kind = Order.Viz(order.Kind);
 
             // Текущий шаг ярче остальных: очередь читается сверху вниз даже на пёстрой карте
-            float alpha = i == 0 ? 0.75f : 0.4f;
-            var line = DrawTheme.Line(kind, alpha, i == 0 ? 2.5f : 1.5f,
-                i == 0 ? WidthMode.Screen : WidthMode.MinScreen);
+            float alpha = step == 0 ? 0.75f : 0.4f;
+            var line = DrawTheme.Line(kind, alpha, step == 0 ? 2.5f : 1.5f,
+                step == 0 ? WidthMode.Screen : WidthMode.MinScreen);
 
             ShapeDraw.Line(this, from, to, line);
             DrawMark(to, order.Kind, new Color(DrawTheme.Hue(kind), alpha + 0.15f));
 
             // Номер шага нужен только там, где шагов больше одного
-            if (orders.Count > 1)
-                DrawString(font, to + new Vector2(9f, -9f), $"{i + 1}",
+            if (total > 1)
+                DrawString(font, to + new Vector2(9f, -9f), $"{step + 1}",
                     HorizontalAlignment.Left, -1, 11, new Color(DrawTheme.Hue(kind), 0.9f));
 
-            if (i == 0)
-                DrawString(font, to + new Vector2(9f, 18f), Order.Name(order.Kind),
+            // Ожидание отставших подписывается отдельно: юнит стоит на месте, и без
+            // объяснения это выглядит как застрявший приказ
+            if (step == 0)
+            {
+                string label = order.Waiting(actor.EntityId)
+                    ? $"{Order.Name(order.Kind)} — ждём {order.Awaited}"
+                    : Order.Name(order.Kind);
+
+                DrawString(font, to + new Vector2(9f, 18f), label,
                     HorizontalAlignment.Left, -1, 11, new Color(DrawTheme.Hue(kind), 0.8f));
+            }
 
             from = to;
         }
