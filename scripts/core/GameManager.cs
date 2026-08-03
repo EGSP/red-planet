@@ -33,6 +33,12 @@ public partial class GameManager : Node
     /// </summary>
     [Export] public WorldSettings WorldTuning;
 
+    /// <summary>
+    /// Настройки навигации: порог клиренса и смежные величины. Действуют через
+    /// <see cref="NavGrid.Settings"/> — туда же смотрит <see cref="NavGrid.Required"/>.
+    /// </summary>
+    [Export] public NavSettings NavTuning;
+
     /// <summary>Журнал документов — шина, через которую системы говорят друг с другом.</summary>
     public EventStore Events { get; } = new();
 
@@ -113,6 +119,9 @@ public partial class GameManager : Node
         // растра навигации, а тот создаётся здесь же, несколькими строками ниже
         if (WorldTuning != null)
             World.Settings = WorldTuning;
+
+        if (NavTuning != null)
+            NavGrid.Settings = NavTuning;
 
         // Площадка — сестринская ветка, и к этому мигу она уже собрана: дерево сцены
         // создаётся целиком до того, как хоть кто-то в нём получит _EnterTree

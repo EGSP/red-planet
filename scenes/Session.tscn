@@ -39,6 +39,7 @@
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="40_worldsettings"]
 [ext_resource type="Script" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
 [ext_resource type="Resource" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
+[ext_resource type="Resource" path="res://resources/tuning/nav.tres" id="43_navsettings"]
 
 [node name="Session" type="Node2D" unique_id=716196635]
 script = ExtResource("1_session")
@@ -50,6 +51,7 @@ StartingMetal = 250.0
 script = ExtResource("2_manager")
 Playground = NodePath("../Playground")
 WorldTuning = ExtResource("40_worldsettings")
+NavTuning = ExtResource("43_navsettings")
 
 [node name="CursorSystem" type="Node" parent="Systems" unique_id=926610412]
 script = ExtResource("5_cursor")

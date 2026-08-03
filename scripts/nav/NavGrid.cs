@@ -70,6 +70,12 @@ public sealed class NavGrid
     /// <summary>Прямоугольник последнего изменения источника.</summary>
     public Rect2 LastChange => _obstacles.LastChange;
 
+    /// <summary>
+    /// Текущие настройки навигации. Назначает <see cref="GameManager"/> из
+    /// <c>resources/tuning/nav.tres</c>; без назначения действует экземпляр по умолчанию.
+    /// </summary>
+    public static NavSettings Settings { get; set; } = new();
+
     public NavGrid(ObstacleMap obstacles) => _obstacles = obstacles;
 
     // ── координаты ────────────────────────────────────────────────────────────────
@@ -94,11 +100,16 @@ public sealed class NavGrid
     /// <summary>
     /// Какое расстояние в третях ячейки требуется, чтобы поместился радиус.
     ///
-    /// Половина ячейки вычитается потому, что расстояние меряется до ЦЕНТРА непроходимой
+    /// Половина ячейки учитывается потому, что расстояние меряется до ЦЕНТРА непроходимой
     /// ячейки, а препятствие занимает её целиком: ближняя граница на полклетки ближе центра.
+    /// <see cref="NavSettings.ClearanceFactor"/> масштабирует радиус до сравнения: меньше
+    /// единицы — мягче проходимость, больше — строже. На поле <c>_distance</c> не влияет.
     /// </summary>
-    public static int Required(float radiusPx) =>
-        Mathf.Max(1, Mathf.CeilToInt((radiusPx / Cell + 0.5f) * Straight));
+    public static int Required(float radiusPx)
+    {
+        float factor = Mathf.Max(Settings?.ClearanceFactor ?? 1f, 0.01f);
+        return Mathf.Max(1, Mathf.CeilToInt((radiusPx * factor / Cell + 0.5f) * Straight));
+    }
 
     public bool Blocked(Vector2I cell)
     {

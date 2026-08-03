@@ -49,6 +49,7 @@ Radius (поле застройки)
 ## Что подбирается ползунками
 
 `resources/tuning/world.tres` — размер поля, кольца руды, радиус появления и `WaveStart`.
+`resources/tuning/nav.tres` — множитель порога клиренса (`ClearanceFactor`) для проходимости юнитов.
 `resources/tuning/waves.tres` — умолчания формы волн (кроме `WaveStart`) и темп. Отдельная
 волна может перекрыть `wave_start` секцией `[spawn]` своего файла в `resources/waves/`.
 

@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="NavSettings" format=3]
+
+[ext_resource type="Script" path="res://scripts/nav/NavSettings.cs" id="1_nav"]
+
+[resource]
+script = ExtResource("1_nav")
+ClearanceFactor = 1.0
