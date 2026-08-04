@@ -10,7 +10,7 @@ tools = ["dox_smg"]
 rows = ["#"]
 
 [body]
-max_health = 40.0
+max_health = 65.0
 radius     = 0.28
 
 [movement]
@@ -21,7 +21,7 @@ turn_speed = 240.0
 approach_hold = 0.8
 
 [assembly]
-cost_metal   = 35.0
+cost_metal   = 45.0
 frame_health = 60.0
 
 [terror]

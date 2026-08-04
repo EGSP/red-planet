@@ -23,8 +23,36 @@ public partial class HoverSystem : GameSystem
     /// <summary>Насколько промахивается мышь: припуск к границе цели, в пикселях.</summary>
     [Export] public float PickSlack = Const.Unit * 0.2f;
 
+    /// <summary>
+    /// Сколько секунд курсор должен простоять на новой цели, прежде чем наведение
+    /// на неё перейдёт. Ноль означает мгновенную смену.
+    /// </summary>
+    [Export] public float SwitchDelay = 0.15f;
+
+    /// <summary>
+    /// Цвет обводки сущности под курсором вместе с её прозрачностью.
+    ///
+    /// Умолчание берётся из общей палитры (<see cref="VizKind.Hover"/>), а не задаётся
+    /// здесь числами: смысл «под курсором» имеет в игре один оттенок, и расходиться
+    /// с палитрой он не должен. Поле нужно затем, чтобы подобрать заметность обводки
+    /// из инспектора, не пересобирая проект.
+    /// </summary>
+    [Export] public Color OutlineColor = DrawTheme.Hue(VizKind.Hover) with { A = 0.9f };
+
+    /// <summary>Толщина обводки в экранных пикселях.</summary>
+    [Export] public float OutlineWidth = 2f;
+
+    /// <summary>Отступ обводки от границы сущности, пиксели.</summary>
+    [Export] public float OutlineGap = 5f;
+
     private CursorSystem _cursor;
     private HoverOverlay _overlay;
+
+    /// <summary>Что нашлось под курсором в последних кадрах, ещё не показанное.</summary>
+    private IDamageable _candidate;
+
+    /// <summary>Сколько секунд кандидат держится под курсором без перерыва.</summary>
+    private float _dwell;
 
     /// <summary>
     /// Сущность под курсором либо null. Читают обводка и справка; больше её никто
@@ -47,13 +75,52 @@ public partial class HoverSystem : GameSystem
     {
         if (GM.Playground == null || _cursor == null)
         {
-            Hovered = null;
+            Forget();
             return;
         }
 
         EnsureNodes();
 
-        Hovered = Suppressed ? null : Pick(_cursor.ActualWorldPosition);
+        Settle(Suppressed ? null : Pick(_cursor.ActualWorldPosition), dt);
+    }
+
+    /// <summary>
+    /// Перевести наведение на найденное, выдержав задержку.
+    ///
+    /// ЗАЧЕМ ЗАДЕРЖКА. Курсор, переносимый через строй, пересекает по дороге десяток корпусов,
+    /// и без выдержки обводка со справкой успевали мигнуть на каждом. Задержка отсекает
+    /// проходные цели: показывается то, на чём курсор остановился, а не то, над чем он
+    /// пролетел. Выдержка нужна и на сход с цели — иначе справка гасла бы от того, что мышь
+    /// на миг соскользнула с края корпуса.
+    ///
+    /// ГИБЕЛЬ ЖДАТЬ НЕ ЗАСТАВЛЯЕТ. Показанная цель, которая вышла из игры или скрылась
+    /// в тумане, снимается сразу: справка о том, чего уже нет, — не выдержка, а враньё.
+    /// </summary>
+    private void Settle(IDamageable found, double dt)
+    {
+        if (Hovered != null && !Pickable(Hovered))
+            Hovered = null;
+
+        if (!ReferenceEquals(found, _candidate))
+        {
+            _candidate = found;
+            _dwell = 0f;
+        }
+        else
+        {
+            _dwell += (float)dt;
+        }
+
+        if (!ReferenceEquals(_candidate, Hovered) && _dwell >= SwitchDelay)
+            Hovered = _candidate;
+    }
+
+    /// <summary>Наведения нет и накопленная выдержка ни к чему не относится.</summary>
+    private void Forget()
+    {
+        Hovered = null;
+        _candidate = null;
+        _dwell = 0f;
     }
 
     /// <summary>

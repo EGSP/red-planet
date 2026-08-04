@@ -20,7 +20,7 @@ max_health   = 6000.0
 vision_range = 8.0
 
 [plant]
-factory_cooldown    = 1.0
+factory_cooldown    = 2.0
 build_power         = 15.0
 energy_per_power    = 45.0
 rolloff_directions  = [[1.0, 0.0], [-1.0, 0.0]]

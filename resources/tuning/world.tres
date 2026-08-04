@@ -10,7 +10,7 @@ point_count = 3
 [sub_resource type="Resource" id="ring_start"]
 script = ExtResource("2_ring")
 Radius = 12
-TerrorMultiplier = 0.34
+TerrorMultiplier = 0.55
 ClusterCountMax = 3
 SpotsInClusterMin = 2
 SpotsInClusterMax = 3
