@@ -65,6 +65,7 @@ public sealed class WaveShapeOverrides
     public float? SpacingCells;
     public int? Groups;
     public float? GroupsArcDegrees;
+    public float? GroupDelaySeconds;
 }
 
 /// <summary>

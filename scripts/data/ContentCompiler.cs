@@ -715,6 +715,9 @@ public static class ContentCompiler
 
             if (spawn.Has("groups_arc_degrees"))
                 over.GroupsArcDegrees = spawn.Float("groups_arc_degrees");
+
+            if (spawn.Has("group_delay_seconds"))
+                over.GroupDelaySeconds = spawn.Float("group_delay_seconds");
         }
 
         return wave;

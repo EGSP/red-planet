@@ -24,6 +24,12 @@ public readonly struct WaveShape
     public readonly float GroupsArcDegrees;
 
     /// <summary>
+    /// Пауза между соседними очагами, секунд. Ноль — все очаги выходят в одном шаге.
+    /// Очаг с номером g выходит через g × эту величину после первого.
+    /// </summary>
+    public readonly float GroupDelaySeconds;
+
+    /// <summary>
     /// Радиус окружности появления, от которого отсчитываются обе дуги. Передаётся снаружи,
     /// а не берётся из настроек мира напрямую: в предпросмотре форма показывается для того
     /// радиуса, который правится в инспекторе прямо сейчас, а не для действующего в игре.
@@ -31,7 +37,7 @@ public readonly struct WaveShape
     public readonly float BaseRadiusPx;
 
     public WaveShape(float nearArc, float farArc, float waveStart, float radiusDepth,
-        float spacing, int groups, float groupsArc, float baseRadiusPx)
+        float spacing, int groups, float groupsArc, float groupDelay, float baseRadiusPx)
     {
         BaseRadiusPx = Mathf.Max(baseRadiusPx, 1f);
         NearArcDegrees = Mathf.Max(nearArc, 0f);
@@ -41,6 +47,7 @@ public readonly struct WaveShape
         SpacingCells = Mathf.Max(spacing, 0.1f);
         Groups = Mathf.Max(groups, 1);
         GroupsArcDegrees = groupsArc;
+        GroupDelaySeconds = Mathf.Max(groupDelay, 0f);
     }
 
     /// <summary>Радиус ближней к базе дуги в пикселях.</summary>
@@ -133,6 +140,15 @@ public partial class WaveSettings : Resource
     [Export] public float GroupsArcDegrees = 90f;
 
     /// <summary>
+    /// Умолчание для паузы между соседними очагами, секунд. Ноль — очаги выходят разом.
+    /// Давит на подвижную оборону и на периметр: игрок решает, стягивать ли юнитов
+    /// к первому очагу, пока второй ещё не появился. Против башенной обороны приём
+    /// не действует. Величина должна быть заметно меньше времени разбора первого очага,
+    /// иначе получается не охват, а две отдельные волны подряд.
+    /// </summary>
+    [Export] public float GroupDelaySeconds;
+
+    /// <summary>
     /// Форма волны: заданное волной поверх умолчаний. Положение ближней дуги
     /// (<c>WaveStart</c>) берётся из <see cref="WorldSettings"/>, если волна его не задала —
     /// иначе у мира и у волн было бы два независимых регулятора одной линии.
@@ -151,6 +167,7 @@ public partial class WaveSettings : Resource
             over.SpacingCells ?? SpacingCells,
             over.Groups ?? Groups,
             over.GroupsArcDegrees ?? GroupsArcDegrees,
+            over.GroupDelaySeconds ?? GroupDelaySeconds,
             baseRadiusPx);
     }
 
