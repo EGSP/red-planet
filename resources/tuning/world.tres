@@ -46,7 +46,7 @@ ClusterProbabilityCurve = SubResource("Curve_k7r1i")
 [resource]
 script = ExtResource("1_settings")
 Radius = 64
-Seed = 3987634799
+Seed = 0
 Rings = [SubResource("ring_start"), SubResource("ring_mid"), SubResource("ring_far")]
 SpotSpacing = 2
 PlacementAttempts = 63
