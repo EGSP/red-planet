@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 /// <summary>
@@ -15,9 +16,11 @@ using Godot;
 /// С планом застройка становится следствием присутствия: сначала исполнитель доходит,
 /// и только потом на месте появляется то, что можно обстрелять.
 ///
-/// ПЛАН — НЕ ПРИКАЗ, хотя и рождается из него. Приказ живёт в очереди одного исполнителя
+/// ПЛАН — НЕ ПРИКАЗ, хотя и рождается из него. Приказ живёт в очереди исполнителя
 /// и исчезает вместе с ним; план переживает гибель того, кому был назначен, и за него
-/// берётся любой, кому его поручат. Поэтому план — сущность мира, а приказ на неё —
+/// берётся любой, кому его поручат. Отказ игрока от приказа — другое дело: вместе
+/// с брошенными приказами снимаются и планы, на которые больше никто не нацелен
+/// (см. <see cref="ReleaseAbandoned"/>). Поэтому план — сущность мира, а приказ на неё —
 /// обычный <see cref="OrderKind.Build"/>.
 /// </summary>
 public partial class BuildPlan : Node2D, IWorkSite, IFacing
@@ -123,6 +126,77 @@ public partial class BuildPlan : Node2D, IWorkSite, IFacing
         Superseded?.Invoke(frame);
 
         Retire();
+    }
+
+    /// <summary>
+    /// Отменить план по воле игрока. Размеченное место освобождается; приказы на него
+    /// становятся невыполнимыми сами — преемника нет, и <see cref="Superseded"/>
+    /// не объявляется.
+    /// </summary>
+    public void Cancel()
+    {
+        if (_spent)
+            return;
+
+        _spent = true;
+
+        var gm = GameManager.I;
+
+        if (gm != null && Definition != null)
+        {
+            gm.Events.Append(new BuildPlanCancelled
+            {
+                EntityId = Id,
+                DefinitionId = Definition.Id,
+                Pos = GlobalPosition,
+            });
+        }
+
+        Retire();
+    }
+
+    /// <summary>
+    /// Снять планы, от которых отказались вместе с приказами и на которые больше никто
+    /// не нацелен. Планы без приказов (размеченные в ожидании исполнителя) сюда не
+    /// попадают: их нет в снимке брошенного остатка. Гибель исполнителя эту процедуру
+    /// не вызывает — план переживает назначение.
+    /// </summary>
+    public static void ReleaseAbandoned(IEnumerable<BuildPlan> abandoned)
+    {
+        if (abandoned == null)
+            return;
+
+        foreach (var plan in abandoned)
+        {
+            if (plan == null || !plan.NeedsWork)
+                continue;
+
+            if (Ordered(plan))
+                continue;
+
+            plan.Cancel();
+        }
+    }
+
+    /// <summary>Есть ли ещё живая ветка с приказом строить этот план.</summary>
+    private static bool Ordered(BuildPlan plan)
+    {
+        var index = GameManager.I?.Index;
+
+        if (index == null)
+            return false;
+
+        foreach (var list in index.All<OrderList>())
+        {
+            if (!list.Live)
+                continue;
+
+            foreach (var order in list.Items)
+                if (order.Kind == OrderKind.Build && ReferenceEquals(order.Target, plan))
+                    return true;
+        }
+
+        return false;
     }
 
     /// <summary>

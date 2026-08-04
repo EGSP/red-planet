@@ -182,11 +182,30 @@ public sealed class OrderQueue : IOrderFollower
         return true;
     }
 
-    /// <summary>Подписаться на ветку и встать в её начало, отпустив прежнюю.</summary>
+    /// <summary>
+    /// Подписаться на ветку и встать в её начало, отпустив прежнюю.
+    ///
+    /// Вместе с брошенным остатком снимаются планы построек, на которые больше никто
+    /// не нацелен: отказ от приказа — отказ и от размеченного намерения. Гибель
+    /// исполнителя идёт через <see cref="Clear"/> и планы не трогает.
+    /// </summary>
     public void Adopt(OrderList list)
     {
         if (list == null || list == _list)
             return;
+
+        List<BuildPlan> abandoned = null;
+
+        foreach (var order in Remaining)
+        {
+            if (order.Kind != OrderKind.Build || order.Target is not BuildPlan { NeedsWork: true } plan)
+                continue;
+
+            abandoned ??= new List<BuildPlan>();
+
+            if (!abandoned.Contains(plan))
+                abandoned.Add(plan);
+        }
 
         Leave();
 
@@ -194,6 +213,8 @@ public sealed class OrderQueue : IOrderFollower
         _done = null;
         list.Subscribe(this);
         _current = list.At(0);
+
+        BuildPlan.ReleaseAbandoned(abandoned);
     }
 
     /// <summary>
