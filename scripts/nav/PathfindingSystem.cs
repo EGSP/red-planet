@@ -126,6 +126,40 @@ public partial class PathfindingSystem : GameSystem
             _cache.Remove(key);
     }
 
+    /// <summary>
+    /// Длина пути от <paramref name="from"/> до <paramref name="to"/> без записи в кеш
+    /// и вне бюджета кадра. Нужна разовым оценкам (выбор выезда завода), а не движению:
+    /// движению отвечает <see cref="Request"/>, и именно он делит кадр между запросами.
+    /// </summary>
+    public bool TryMeasure(Vector2 from, Vector2 to, float radiusPx, out float length)
+    {
+        length = float.PositiveInfinity;
+
+        if (_search == null)
+            return false;
+
+        bool found = _search.TryFind(from, to, radiusPx, MaxNodesPerSearch, _points);
+        if (!found)
+            return false;
+
+        length = PolylineLength(from, _points);
+        return true;
+    }
+
+    private static float PolylineLength(Vector2 from, List<Vector2> points)
+    {
+        float length = 0f;
+        var prev = from;
+
+        foreach (var point in points)
+        {
+            length += prev.DistanceTo(point);
+            prev = point;
+        }
+
+        return length;
+    }
+
     public override void Step(double dt)
     {
         GM.Nav.Poll();
