@@ -19,7 +19,7 @@ tags = ["split"]
 terror_range = [25.0, -1]
 
 army_power_budget     = 14.0
-army_power_per_terror = 0.0
+army_power_per_terror = 0.5
 
 chill_interval_multiplier = 1.4
 

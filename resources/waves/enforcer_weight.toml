@@ -6,7 +6,7 @@ tags = ["heavy_group", "enforcer"]
 
 prefer_next = ["swarm"]
 
-terror_range = [55.0, -1]
+terror_range = [340.0, -1]
 
 army_power_budget     = 400.0
 army_power_per_terror = 0.12
