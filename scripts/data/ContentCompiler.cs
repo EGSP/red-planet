@@ -338,6 +338,7 @@ public static class ContentCompiler
             ApproachHoldFraction = basis.ApproachHoldFraction,
             ExpansionPowerWeight = basis.ExpansionPowerWeight,
             ArmyPowerWeight = basis.ArmyPowerWeight,
+            IgnoreTerrorModifiers = basis.IgnoreTerrorModifiers,
             Hull = basis.Hull,
             HullAspect = basis.HullAspect,
             ArmorRings = basis.ArmorRings,
@@ -434,6 +435,9 @@ public static class ContentCompiler
 
             if (terror.Has("army_power"))
                 definition.ArmyPowerWeight = terror.Float("army_power");
+
+            definition.IgnoreTerrorModifiers =
+                terror.Bool("ignore_modifiers", basis.IgnoreTerrorModifiers);
         }
 
         // Раздел боя описывает то, как сущность ведёт себя в схватке. Раньше доля подхода

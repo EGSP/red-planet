@@ -361,6 +361,13 @@ public sealed class UnitDefinition
     public float? ArmyPowerWeight;
 
     /// <summary>
+    /// Не умножать мощь экспансии на коэффициент зоны кольца мира. В .toml — ключ
+    /// <c>ignore_modifiers</c> в секции <c>[terror]</c>. Нужен там, где вес задан
+    /// абсолютным числом и не должен расти с удалением от точки высадки.
+    /// </summary>
+    public bool IgnoreTerrorModifiers;
+
+    /// <summary>
     /// На какой доле дальности оружия юнит прекращает сближение и удерживает позицию.
     /// Меньше единицы, чтобы цель не выпадала из радиуса от любого шага в сторону.
     /// В .toml — ключ <c>approach_hold</c>.

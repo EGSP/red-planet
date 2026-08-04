@@ -122,7 +122,8 @@ public static class HoverFacts
     }
 
     /// <summary>
-    /// Вклад сущности в террор — со множителем кольца, в котором она стоит.
+    /// Вклад сущности в террор — со множителем кольца, в котором она стоит, если
+    /// определение не отключило модификаторы через <see cref="UnitDefinition.IgnoreTerrorModifiers"/>.
     ///
     /// ЧТО ЗА ЧИСЛО. Это сырое слагаемое до кривой насыщения и до веса, с которыми
     /// <see cref="TerrorSystem"/> сводит четыре слагаемых в один показатель. Долю в готовом
@@ -138,7 +139,8 @@ public static class HoverFacts
     {
         float terror = target switch
         {
-            Building building => definition.ExpansionPower * RingMultiplier(building.Position),
+            Building building => definition.ExpansionPower *
+                (definition.IgnoreTerrorModifiers ? 1f : RingMultiplier(building.Position)),
             Unit { Faction: Faction.Player } => definition.ArmyPower,
             _ => 0f,
         };

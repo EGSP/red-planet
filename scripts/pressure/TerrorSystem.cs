@@ -148,7 +148,9 @@ public partial class TerrorSystem : GameSystem
 
     /// <summary>
     /// Экспансия: вес каждой постройки, умноженный на множитель кольца мира
-    /// (<see cref="WorldSettings.TerrorMultiplierAt"/>).
+    /// (<see cref="WorldSettings.TerrorMultiplierAt"/>), кроме тех, у кого в определении
+    /// стоит <see cref="UnitDefinition.IgnoreTerrorModifiers"/> — у них в сумму входит
+    /// голый вес.
     ///
     /// Каркасы сюда не входят — разрез набирается по готовым постройкам. Это намеренно:
     /// поставленный, но не достроенный каркас ещё ничего не занял и решением не является,
@@ -170,6 +172,12 @@ public partial class TerrorSystem : GameSystem
 
             if (weight <= 0f)
                 continue;
+
+            if (def.IgnoreTerrorModifiers)
+            {
+                sum += weight;
+                continue;
+            }
 
             float cells = building.Position.DistanceTo(landing) / Const.Unit;
             sum += weight * World.Settings.TerrorMultiplierAt(cells);

@@ -14,7 +14,8 @@ facing_degrees = -90.0
 max_health = 5000.0
 
 [terror]
-expansion_power = 233.0
+expansion_power   = 233.0
+ignore_modifiers  = true
 
 [conversion]
 energy_drain = 5000.0
