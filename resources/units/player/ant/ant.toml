@@ -1,8 +1,9 @@
-# Ant: средний танк MLA. Надёжнее Dox, бьёт дальше и больнее.
+# Ant: средний танк MLA. Выпускается заводом машин.
 
 id    = "ant"
 base  = "/units/base_unit.toml"
 name  = "Ант"
+class = "vehicle"
 color = [0.35, 0.7, 0.55]
 tools = ["ant_cannon"]
 

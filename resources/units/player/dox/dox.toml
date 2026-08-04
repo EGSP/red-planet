@@ -21,7 +21,7 @@ turn_speed = 240.0
 approach_hold = 0.8
 
 [assembly]
-cost_metal   = 45.0
+cost_metal   = 35.0
 frame_health = 60.0
 
 [terror]

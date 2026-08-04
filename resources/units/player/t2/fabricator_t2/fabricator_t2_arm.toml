@@ -1,7 +1,7 @@
 # Рука продвинутого фабрикатора. PA fabrication_bot_adv: metal 45 / energy 1800.
 
 id   = "fabricator_t2_arm"
-base = "/units/fabricator/fabricator_arm.toml"
+base = "/units/player/fabricator/fabricator_arm.toml"
 name = "Тяжёлая строительная рука"
 
 range            = 2.6

@@ -4,7 +4,7 @@ id    = "extractor"
 base  = "/buildings/base_building.toml"
 name  = "Экстрактор"
 color = [0.85, 0.55, 0.3]
-tags  = ["structure", "economy", "basic"]
+tags  = ["structure", "economy", "t1"]
 
 [footprint]
 rows    = ["#"]

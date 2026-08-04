@@ -20,9 +20,9 @@ tags = ["titan"]
 # то, что титан не успел
 prefer_next = ["swarm"]
 
-terror_range = [100.0, -1]
+terror_range = [500.0, -1]
 
-army_power_budget     = 40.0
+army_power_budget     = 1500.0
 army_power_per_terror = 0.25
 
 # Наибольший множитель отдыха в наборе: восстановиться после титана дороже, чем после

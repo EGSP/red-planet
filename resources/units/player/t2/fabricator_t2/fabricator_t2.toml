@@ -9,7 +9,7 @@ base     = "/units/base_unit.toml"
 name     = "Тяжёлый фабрикатор"
 color    = [0.35, 0.8, 0.7]
 buildbar = "fabricator_t2_buildbar"
-tags     = ["mobile", "builder"]
+tags     = ["mobile", "builder", "t2"]
 tools    = ["fabricator_t2_arm"]
 
 [footprint]

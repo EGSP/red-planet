@@ -5,7 +5,7 @@ base  = "/buildings/base_building.toml"
 name  = "Турель"
 class = "turret"
 color = [0.6, 0.85, 1.0]
-tags  = ["structure", "defense", "basic"]
+tags  = ["structure", "defense", "t1"]
 tools = ["turret_gun"]
 
 [footprint]

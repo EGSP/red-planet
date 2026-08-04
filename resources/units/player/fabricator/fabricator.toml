@@ -20,5 +20,5 @@ speed      = 4.0
 turn_speed = 240.0
 
 [assembly]
-cost_metal   = 150.0
+cost_metal   = 75.0
 frame_health = 80.0

@@ -763,6 +763,10 @@ public static class ContentCompiler
                 ? SelectionGroup.Structures
                 : SelectionGroup.Bots;
 
+            // Тир по умолчанию — t1: иначе каждый файл обязан повторять одно и то же
+            if (!definition.Tags.HasAny(catalog.Tags.AnyTier))
+                definition.Tags |= catalog.Tags.T1;
+
             definition.ExecutableOrders = ExecutableOrdersOf(definition);
 
             if (definition.Buildbar.Length > 0 && catalog.Buildbar(definition.Buildbar) == null)

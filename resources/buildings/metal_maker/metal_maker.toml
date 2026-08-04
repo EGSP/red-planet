@@ -5,7 +5,7 @@ base  = "/buildings/base_building.toml"
 name  = "Синтезатор"
 class = "factory"
 color = [0.55, 0.62, 0.72]
-tags  = ["structure", "economy", "basic"]
+tags  = ["structure", "economy", "t1"]
 
 [footprint]
 rows           = ["##", "##"]

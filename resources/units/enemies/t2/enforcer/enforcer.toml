@@ -1,9 +1,10 @@
-# Enforcer: ядро поздней волны. Высокий суммарный DPS при умеренной цене.
+# Enforcer: ядро поздней волны (T2). Высокий суммарный DPS при умеренной цене.
 
 id    = "enforcer"
 base  = "/units/enemies/base_enemy.toml"
 name  = "Каратель"
 color = [0.7, 0.25, 0.4]
+tags  = ["mobile", "enemy", "t2"]
 tools = ["enforcer_guns"]
 
 [body]
@@ -17,4 +18,4 @@ speed      = 2.4
 turn_speed = 140.0
 
 [terror]
-army_power = 3.0
+army_power = 50.0

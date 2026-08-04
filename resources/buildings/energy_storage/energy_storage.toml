@@ -4,7 +4,7 @@ id    = "energy_storage"
 base  = "/buildings/base_building.toml"
 name  = "Батарея"
 color = [0.45, 0.75, 0.95]
-tags  = ["structure", "economy", "basic"]
+tags  = ["structure", "economy", "t1"]
 
 [footprint]
 rows         = ["##", "##"]

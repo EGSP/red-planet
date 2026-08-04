@@ -1,0 +1,11 @@
+# Рука машинного фабрикатора. PA fabrication_vehicle: metal 11 / energy 700.
+
+id   = "vehicle_fabricator_arm"
+name = "Строительная рука машины"
+kind = "work"
+
+range            = 2.0
+power            = 11.0
+energy_per_power = 63.636
+works            = ["build"]
+repairs_units    = true

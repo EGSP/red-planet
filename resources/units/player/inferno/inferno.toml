@@ -1,8 +1,9 @@
-# Inferno: тяжёлый ближний танк MLA. Прочность и урон в упор, дальность минимальна.
+# Inferno: тяжёлый ближний танк MLA. Выпускается заводом машин.
 
 id    = "inferno"
 base  = "/units/base_unit.toml"
 name  = "Инферно"
+class = "vehicle"
 color = [0.95, 0.45, 0.25]
 tools = ["inferno_flamer"]
 

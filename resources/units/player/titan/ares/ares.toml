@@ -30,4 +30,4 @@ cost_metal   = 30000.0
 frame_health = 50000.0
 
 [terror]
-army_power = 16.0
+army_power = 700.0

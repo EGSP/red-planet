@@ -23,4 +23,4 @@ brake      = 5.0
 approach_hold = 0.6
 
 [terror]
-army_power = 50.0
+army_power = 1000.0
