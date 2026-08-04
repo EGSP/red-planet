@@ -1,0 +1,14 @@
+# Скорострел Dox: PA 10×2 @ RoF 1.0 → один поток damage 10 / interval 0.5.
+
+id   = "dox_smg"
+base = "/tools/base_weapon.toml"
+name = "Скорострел Докса"
+
+range             = 5.0
+damage            = 10.0
+fire_interval     = 0.5
+projectile_speed  = 8.7
+spread_degrees    = 6.0
+aim_cone_degrees  = 14.0
+projectile_radius = 0.045
+projectile_color  = [0.55, 0.9, 1.0]

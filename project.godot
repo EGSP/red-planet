@@ -18,11 +18,6 @@ config/icon="res://icon.svg"
 [autoload]
 
 
-
-
-
-
-
 Content="*res://scripts/data/Content.cs"
 
 [display]

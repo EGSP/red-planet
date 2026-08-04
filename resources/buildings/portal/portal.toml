@@ -1,0 +1,23 @@
+# Портал: условие победы. Локальная постройка; расход энергии на шкале PA (×100 от прежнего сжатого).
+
+id    = "portal"
+base  = "/buildings/base_building.toml"
+name  = "Портал"
+color = [0.35, 0.78, 0.92]
+tags  = ["structure", "important"]
+
+[footprint]
+rows           = ["###", "###", "###"]
+facing_degrees = -90.0
+
+[body]
+max_health = 5000.0
+
+[terror]
+expansion_power = 233.0
+
+[conversion]
+energy_drain = 5000.0
+
+[assembly]
+cost_metal = 8000.0

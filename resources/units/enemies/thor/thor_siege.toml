@@ -1,0 +1,14 @@
+# Осадное орудие Тора: PA cannon dmg 600, RoF 0.33, range 400, vel 270.
+
+id   = "thor_siege"
+base = "/tools/base_weapon.toml"
+name = "Осадное орудие Тора"
+
+range             = 26.7
+damage            = 600.0
+fire_interval     = 3.03
+projectile_speed  = 18.0
+spread_degrees    = 2.5
+aim_cone_degrees  = 8.0
+projectile_radius = 0.18
+projectile_color  = [1.0, 0.4, 0.5]

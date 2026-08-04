@@ -166,7 +166,7 @@ public partial class TerrorSystem : GameSystem
             if (def == null)
                 continue;
 
-            float weight = def.TerrorExpansion;
+            float weight = def.ExpansionPower;
 
             if (weight <= 0f)
                 continue;

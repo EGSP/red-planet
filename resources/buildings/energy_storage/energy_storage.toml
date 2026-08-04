@@ -1,0 +1,22 @@
+# Батарея: PA energy_storage — HP 7500, cost 450, energy 300000.
+
+id    = "energy_storage"
+base  = "/buildings/base_building.toml"
+name  = "Батарея"
+color = [0.45, 0.75, 0.95]
+tags  = ["structure", "economy", "basic"]
+
+[footprint]
+rows         = ["##", "##"]
+pattern      = "line"
+pattern_alt  = "square"
+pattern_step = "narrow"
+
+[body]
+max_health = 7500.0
+
+[storage]
+energy = 300000.0
+
+[assembly]
+cost_metal = 450.0

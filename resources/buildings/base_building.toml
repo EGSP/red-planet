@@ -14,3 +14,8 @@ vision_range = "/content/units.vars.toml/structure_vision"
 
 [orders]
 allow = ["delete"]
+
+# Мощь экспансии: абсолютный вес постройки в слагаемом террора, до множителя зоны.
+# Потомки перекрывают значение там, где единица не подходит.
+[terror]
+expansion_power = 1.0

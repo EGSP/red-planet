@@ -20,7 +20,7 @@ point_count = 6
 
 [resource]
 script = ExtResource("1_settings")
-EnergyPerMetal = 0.86
+EnergyPerMetal = 85.71
 ProductionCurve = SubResource("Curve_production")
 ProductionTail = 0.15
 ExpansionCurve = SubResource("Curve_expansion")

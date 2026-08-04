@@ -1,0 +1,26 @@
+# Тор: осадный титан Legion. PA HP 95000; cannon 600 @ RoF 0.33, range 400.
+
+id    = "thor"
+base  = "/units/enemies/base_enemy.toml"
+name  = "Тор"
+color = [0.9, 0.35, 0.45]
+tags  = ["mobile", "enemy", "titan"]
+tools = ["thor_siege"]
+
+[body]
+max_health   = 95000.0
+radius       = 0.95
+vision_range = 13.0
+hull         = "crescent"
+armor_rings  = 2
+
+[movement]
+speed      = 2.6
+turn_speed = 35.0
+brake      = 3.0
+
+[battle]
+approach_hold = 0.8
+
+[terror]
+army_power = 100.0

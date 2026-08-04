@@ -36,15 +36,17 @@ public static class ContentCompiler
 {
     private const string TagsPath = "res://resources/content/tags.toml";
     private const string ContentDir = "res://resources/content/";
-    private const string ToolsDir = "res://resources/tools/";
     private const string BuildbarsDir = "res://resources/buildbars/";
     private const string WavesDir = "res://resources/waves/";
 
-    /// <summary>Каталоги с определениями сущностей. Вид задаётся ключом class, а не папкой.</summary>
-    private static readonly string[] UnitDirs =
+    /// <summary>
+    /// Корни определений сущностей и инструментов. Вид задаётся ключом class / kind,
+    /// а не папкой; обход рекурсивный, чтобы юнит и его ствол жили в одной подпапке.
+    /// </summary>
+    private static readonly string[] DefinitionRoots =
     {
+        "res://resources/tools/",
         "res://resources/units/",
-        "res://resources/units/enemies/",
         "res://resources/buildings/",
     };
 
@@ -54,8 +56,7 @@ public static class ContentCompiler
         int errors = 0;
 
         errors += LoadTags(catalog.Tags);
-        errors += LoadTools(catalog);
-        errors += LoadUnits(catalog);
+        errors += LoadDefinitions(catalog);
         errors += LoadBuildbars(catalog);
         errors += LoadWaves(catalog);
         errors += Link(catalog);
@@ -81,15 +82,18 @@ public static class ContentCompiler
         return registry.Declare(names, TagsPath) ? 0 : 1;
     }
 
-    // ── Инструменты ───────────────────────────────────────────────────────────────
+    // ── Инструменты и сущности ────────────────────────────────────────────────────
 
-    private static int LoadTools(Catalog catalog)
+    /// <summary>
+    /// Один мешок на tools + units + buildings: наследование идёт между соседними
+    /// файлами в подпапке юнита, а после Resolve файлы делятся по ключу kind.
+    /// </summary>
+    private static int LoadDefinitions(Catalog catalog)
     {
         var raw = new Dictionary<string, TomlTable>();
-        var toolPaths = new List<string>();
+        var definitionPaths = new List<string>();
         int errors = 0;
 
-        // Справочники констант: инструмент может сослаться на units.vars / weapons.vars
         foreach (string path in Files(ContentDir))
         {
             if (!TomlResolver.IsVars(path))
@@ -106,7 +110,8 @@ public static class ContentCompiler
             raw[path] = table;
         }
 
-        foreach (string path in Files(ToolsDir))
+        foreach (string root in DefinitionRoots)
+        foreach (string path in Files(root))
         {
             var table = TomlDocument.LoadTable(path);
 
@@ -119,14 +124,15 @@ public static class ContentCompiler
             raw[path] = table;
 
             if (!TomlResolver.IsVars(path))
-                toolPaths.Add(path);
+                definitionPaths.Add(path);
         }
 
         errors += TomlResolver.Resolve(raw, out var resolved);
 
-        var seen = new HashSet<string>();
+        var seenTools = new HashSet<string>();
+        var seenUnits = new HashSet<string>();
 
-        foreach (string path in toolPaths)
+        foreach (string path in definitionPaths)
         {
             if (!resolved.TryGetValue(path, out var table))
             {
@@ -134,41 +140,98 @@ public static class ContentCompiler
                 continue;
             }
 
-            var document = TomlDocument.Wrap(table, path);
-            string id = document.RequiredString("id");
-            bool abstractTool = document.Bool("abstract");
-
-            if (string.IsNullOrEmpty(id))
-            {
-                document.Done();
-                errors += document.Errors;
-                continue;
-            }
-
-            if (!seen.Add(id))
-            {
-                GD.PushError($"[Контент] инструмент «{id}» объявлен дважды: {path}");
-                errors++;
-                document.Done();
-                errors += document.Errors;
-                continue;
-            }
-
-            // Читаем и abstract-основу: иначе Done сочтёт непрочитанные ключи ошибкой.
-            // В каталог основа не попадает — как abstract у юнитов.
-            var tool = ReadTool(document);
-            document.Done();
-            errors += document.Errors;
-
-            if (abstractTool || document.Failed || tool == null)
-                continue;
-
-            if (!catalog.AddTool(tool))
-            {
-                GD.PushError($"[Контент] инструмент «{tool.Id}» объявлен дважды: {path}");
-                errors++;
-            }
+            if (IsToolTable(table))
+                errors += RegisterTool(catalog, path, table, seenTools);
+            else
+                errors += RegisterUnit(catalog, path, table, seenUnits);
         }
+
+        return errors;
+    }
+
+    private static bool IsToolTable(TomlTable table)
+    {
+        if (!table.TryGetValue("kind", out object value) || value == null)
+            return false;
+
+        string kind = value.ToString();
+        return kind is "weapon" or "work";
+    }
+
+    private static int RegisterTool(
+        Catalog catalog, string path, TomlTable table, HashSet<string> seen)
+    {
+        int errors = 0;
+        var document = TomlDocument.Wrap(table, path);
+        string id = document.RequiredString("id");
+        bool abstractTool = document.Bool("abstract");
+
+        if (string.IsNullOrEmpty(id))
+        {
+            document.Done();
+            return document.Errors;
+        }
+
+        if (!seen.Add(id))
+        {
+            GD.PushError($"[Контент] инструмент «{id}» объявлен дважды: {path}");
+            errors++;
+            document.Done();
+            return errors + document.Errors;
+        }
+
+        var tool = ReadTool(document);
+        document.Done();
+        errors += document.Errors;
+
+        if (abstractTool || document.Failed || tool == null)
+            return errors;
+
+        if (!catalog.AddTool(tool))
+        {
+            GD.PushError($"[Контент] инструмент «{tool.Id}» объявлен дважды: {path}");
+            errors++;
+        }
+
+        return errors;
+    }
+
+    private static int RegisterUnit(
+        Catalog catalog, string path, TomlTable table, HashSet<string> seen)
+    {
+        int errors = 0;
+        var document = TomlDocument.Wrap(table, path);
+        string id = document.RequiredString("id");
+        bool abstractUnit = document.Bool("abstract");
+
+        if (document.Has("extends"))
+        {
+            document.String("extends");
+            document.Error(
+                "ключ «extends» больше не поддерживается; " +
+                "укажите base = \"/units/.../файл.toml\"");
+        }
+
+        if (string.IsNullOrEmpty(id))
+        {
+            document.Done();
+            return document.Errors;
+        }
+
+        if (!seen.Add(id))
+        {
+            GD.PushError($"[Контент] определение «{id}» объявлено дважды: {path}");
+            errors++;
+            document.Done();
+            return errors + document.Errors;
+        }
+
+        var definition = ReadUnit(document, id, path, catalog.Tags);
+        document.Done();
+        errors += document.Errors;
+
+        if (!abstractUnit && !document.Failed)
+            catalog.AddUnit(definition);
 
         return errors;
     }
@@ -237,98 +300,6 @@ public static class ContentCompiler
         return kinds;
     }
 
-    // ── Определения сущностей ─────────────────────────────────────────────────────
-
-    private static int LoadUnits(Catalog catalog)
-    {
-        var raw = new Dictionary<string, TomlTable>();
-        var unitPaths = new List<string>();
-        int errors = 0;
-
-        foreach (string path in Files(ContentDir))
-        {
-            if (!TomlResolver.IsVars(path))
-                continue;
-
-            var table = TomlDocument.LoadTable(path);
-
-            if (table == null)
-            {
-                errors++;
-                continue;
-            }
-
-            raw[path] = table;
-        }
-
-        foreach (string dir in UnitDirs)
-        foreach (string path in Files(dir))
-        {
-            var table = TomlDocument.LoadTable(path);
-
-            if (table == null)
-            {
-                errors++;
-                continue;
-            }
-
-            raw[path] = table;
-
-            if (!TomlResolver.IsVars(path))
-                unitPaths.Add(path);
-        }
-
-        errors += TomlResolver.Resolve(raw, out var resolved);
-
-        var seen = new HashSet<string>();
-
-        foreach (string path in unitPaths)
-        {
-            if (!resolved.TryGetValue(path, out var table))
-            {
-                errors++;
-                continue;
-            }
-
-            var document = TomlDocument.Wrap(table, path);
-            string id = document.RequiredString("id");
-            bool abstractUnit = document.Bool("abstract");
-
-            if (document.Has("extends"))
-            {
-                document.String("extends");
-                document.Error(
-                    "ключ «extends» больше не поддерживается; " +
-                    "укажите base = \"/units/.../файл.toml\"");
-            }
-
-            if (string.IsNullOrEmpty(id))
-            {
-                document.Done();
-                errors += document.Errors;
-                continue;
-            }
-
-            if (!seen.Add(id))
-            {
-                GD.PushError($"[Контент] определение «{id}» объявлено дважды: {path}");
-                errors++;
-                document.Done();
-                errors += document.Errors;
-                continue;
-            }
-
-            var definition = ReadUnit(document, id, path, catalog.Tags);
-            document.Done();
-            errors += document.Errors;
-
-            if (!abstractUnit && !document.Failed)
-                catalog.AddUnit(definition);
-        }
-
-        return errors;
-    }
-
     /// <summary>
     /// Прочитать определение из уже материализованного документа. Наследование по
     /// <c>base</c> и ссылки на файлы к этому моменту раскрыты: здесь только типизация
@@ -365,7 +336,7 @@ public static class ContentCompiler
             MetalStorage = basis.MetalStorage,
             EnergyStorage = basis.EnergyStorage,
             ApproachHoldFraction = basis.ApproachHoldFraction,
-            ExpansionWeight = basis.ExpansionWeight,
+            ExpansionPowerWeight = basis.ExpansionPowerWeight,
             ArmyPowerWeight = basis.ArmyPowerWeight,
             Hull = basis.Hull,
             HullAspect = basis.HullAspect,
@@ -458,8 +429,8 @@ public static class ContentCompiler
         // ключи читаются только при наличии, а не через Float с запасным значением
         if (document.Section("terror") is { } terror)
         {
-            if (terror.Has("expansion"))
-                definition.ExpansionWeight = terror.Float("expansion");
+            if (terror.Has("expansion_power"))
+                definition.ExpansionPowerWeight = terror.Float("expansion_power");
 
             if (terror.Has("army_power"))
                 definition.ArmyPowerWeight = terror.Float("army_power");
@@ -1009,7 +980,9 @@ public static class ContentCompiler
 
     // ── Общее ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>Пути ко всем .toml каталога. Соседние .md в выборку не попадают.</summary>
+    /// <summary>
+    /// Пути ко всем .toml каталога, включая вложенные. Соседние .md в выборку не попадают.
+    /// </summary>
     private static IEnumerable<string> Files(string dir)
     {
         using var access = DirAccess.Open(dir);
@@ -1023,5 +996,14 @@ public static class ContentCompiler
         foreach (string file in access.GetFiles())
             if (file.EndsWith(".toml"))
                 yield return dir + file;
+
+        foreach (string sub in access.GetDirectories())
+        {
+            if (sub.StartsWith('.'))
+                continue;
+
+            foreach (string path in Files(dir + sub + "/"))
+                yield return path;
+        }
     }
 }

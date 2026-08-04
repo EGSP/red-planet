@@ -1,0 +1,28 @@
+# Dox: массовый дешёвый бот MLA. Быстрый, хрупкий; два ствола PA сведены в один DPS.
+
+id    = "dox"
+base  = "/units/base_unit.toml"
+name  = "Докс"
+color = [0.4, 0.75, 1.0]
+tools = ["dox_smg"]
+
+[footprint]
+rows = ["#"]
+
+[body]
+max_health = 40.0
+radius     = 0.28
+
+[movement]
+speed      = 4.0
+turn_speed = 240.0
+
+[battle]
+approach_hold = 0.8
+
+[assembly]
+cost_metal   = 45.0
+frame_health = 60.0
+
+[terror]
+army_power = 0.6

@@ -67,14 +67,16 @@ public partial class PressureSystem : GameSystem
         if (GM.Playground == null)
             return;
 
+        // Бюджет и занятость считаются каждый шаг: плашка террора читает их между
+        // появлениями, а порождение по-прежнему ждёт таймера
+        Budget = Cap();
+        Used = AmbientPower();
+
         _timer -= (float)dt;
         if (_timer > 0f)
             return;
 
         _timer = Mathf.Max(0.1f, Settings.SpawnInterval);
-
-        Budget = Cap();
-        Used = AmbientPower();
 
         var def = PickType(Available);
 

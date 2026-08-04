@@ -1,0 +1,13 @@
+# Орудие турели: PA dmg 60, RoF 2, range 100, vel 500.
+
+id   = "turret_gun"
+base = "/tools/base_weapon.toml"
+name = "Орудие турели"
+
+range             = 6.7
+damage            = 60.0
+fire_interval     = 0.5
+projectile_speed  = 33.3
+spread_degrees    = 2.0
+projectile_radius = 0.07
+projectile_color  = [0.6, 0.9, 1.0]

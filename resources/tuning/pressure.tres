@@ -4,4 +4,5 @@
 
 [resource]
 script = ExtResource("1_settings")
-PowerPerTerror = 0.2
+PowerPerTerror = 0.5
+SpawnInterval = 5.0

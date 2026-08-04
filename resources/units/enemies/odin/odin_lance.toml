@@ -1,0 +1,14 @@
+# Копьё Одина: PA main dmg 5600, RoF 0.2, range 400, vel 300.
+
+id   = "odin_lance"
+base = "/tools/base_weapon.toml"
+name = "Копьё Одина"
+
+range             = 26.7
+damage            = 5600.0
+fire_interval     = 5.0
+projectile_speed  = 20.0
+spread_degrees    = 3.5
+aim_cone_degrees  = 14.0
+projectile_radius = 0.17
+projectile_color  = [1.0, 0.55, 0.35]

@@ -1,0 +1,28 @@
+# Башня-сборщик: PA fab_tower — HP 1500, cost 400, metal 18 / energy 1000, range 75.
+
+id    = "assembler"
+base  = "/buildings/base_building.toml"
+name  = "Башня-сборщик"
+class = "assembler"
+color = [0.45, 0.85, 0.6]
+tags  = ["structure", "builder", "basic"]
+tools = ["assembler_arm"]
+
+[footprint]
+rows         = ["#"]
+pattern      = "line"
+pattern_alt  = "square"
+pattern_step = "margin"
+
+[body]
+max_health   = 1500.0
+vision_range = 9.0
+
+[terror]
+expansion_power = 8.0
+
+[assembly]
+cost_metal = 400.0
+
+[orders]
+allow = ["build", "repair", "delete"]

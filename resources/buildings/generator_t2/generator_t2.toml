@@ -1,0 +1,25 @@
+# Реактор: PA energy_plant_adv — HP 5000, cost 2000, energy +3750.
+
+id    = "generator_t2"
+base  = "/buildings/base_building.toml"
+name  = "Реактор"
+color = [1.0, 0.62, 0.2]
+tags  = ["structure", "economy", "advanced", "important"]
+
+[footprint]
+rows         = ["##", "##"]
+pattern      = "line"
+pattern_alt  = "square"
+pattern_step = "narrow"
+
+[body]
+max_health = 5000.0
+
+[production]
+energy = 3750.0
+
+[terror]
+expansion_power = 21.0
+
+[assembly]
+cost_metal = 2000.0
