@@ -1,22 +1,24 @@
 using Godot;
 
 /// <summary>
-/// Коммандер игрока: единственный, кто слушает приказы, и единственный, кого нельзя потерять.
-///
-/// Урон он получает и показывает, но не умирает: сессия не должна обрываться от того,
-/// что игрок зазевался. Счётчик полученного — цена ошибки, а не полоска до гибели.
-/// Без приказов коммандер сам ведёт огонь по ближайшему врагу — стрельбу делает WeaponSystem,
-/// здесь только неуязвимость и то, как это выглядит.
+/// Коммандер игрока: единственный, кто слушает приказы. Имеет прочность и может погибнуть;
+/// гибель завершает партию поражением (см. <see cref="VictorySystem"/>).
+/// Без приказов коммандер сам ведёт огонь по ближайшему врагу — стрельбу делает WeaponSystem.
 /// </summary>
 public partial class Commander : Unit
 {
     public override void _Ready()
     {
         base._Ready();
-
-        Health.Invulnerable = true;
-
         GameManager.I.Commander = this;
+    }
+
+    public override void OnDestroyed()
+    {
+        if (GameManager.I?.Commander == this)
+            GameManager.I.Commander = null;
+
+        base.OnDestroyed();
     }
 
     public override void _Draw()
@@ -26,7 +28,6 @@ public partial class Commander : Unit
         if (Definition == null)
             return;
 
-        // Круг руки рисует UnitGizmos в base._Draw — здесь только счётчик урона
         DrawDamageTaken();
     }
 
