@@ -36,6 +36,8 @@
 [ext_resource type="Resource" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
 [ext_resource type="Script" uid="uid://bwl8ipmuljqfq" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
+[ext_resource type="Script" path="res://scripts/ui/HoverSystem.cs" id="44_hover"]
+[ext_resource type="Script" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="40_worldsettings"]
 [ext_resource type="Script" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
 [ext_resource type="Resource" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
@@ -63,6 +65,12 @@ script = ExtResource("5_command")
 BlueprintScene = ExtResource("19_blueprint")
 Phase = 0
 StepOrder = 1
+UpdateCycle = 1
+
+[node name="HoverSystem" type="Node" parent="Systems"]
+script = ExtResource("44_hover")
+Phase = 0
+StepOrder = 2
 UpdateCycle = 1
 
 [node name="PlayerAiSystem" type="Node" parent="Systems" unique_id=1578640243]
@@ -181,6 +189,9 @@ script = ExtResource("32_portalbar")
 
 [node name="SelectionPanel" type="CanvasLayer" parent="View" unique_id=1208466352]
 script = ExtResource("25_selection")
+
+[node name="HoverPanel" type="CanvasLayer" parent="View"]
+script = ExtResource("45_hoverpanel")
 
 [node name="CommandPanel" type="CanvasLayer" parent="View" unique_id=387086853]
 script = ExtResource("26_commands")

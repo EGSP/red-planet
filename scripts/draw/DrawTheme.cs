@@ -12,6 +12,9 @@ public enum VizKind
     Selection,
     Band,
 
+    /// <summary>Сущность под курсором. Отдельно от выделения: это разные сведения.</summary>
+    Hover,
+
     OrderMove,
     OrderBuild,
     OrderAttack,
@@ -74,6 +77,7 @@ public static class DrawTheme
     private static readonly Color ConstructionHue = new(0.28f, 0.92f, 0.38f); // зелёный
     private static readonly Color RepairHue = new(0.28f, 0.55f, 1.00f);         // синий
     private static readonly Color SelectionHue = new(1.00f, 0.90f, 0.22f);     // жёлтый
+    private static readonly Color HoverHue = new(0.92f, 0.97f, 1.00f);         // белёсо-голубой
     private static readonly Color PathAheadHue = new(0.05f, 0.95f, 0.88f);     // cyan
 
     /// <summary>Базовый RGB смысла (A = 1).</summary>
@@ -84,6 +88,7 @@ public static class DrawTheme
         VizKind.Work or VizKind.OrderBuild or VizKind.WorkBeamBuild
             or VizKind.PlacementValid => ConstructionHue,
         VizKind.Selection or VizKind.Band => SelectionHue,
+        VizKind.Hover => HoverHue,
 
         VizKind.OrderMove => new(0.88f, 0.92f, 1.00f),
         VizKind.OrderRepair or VizKind.WorkBeamRepair => RepairHue,

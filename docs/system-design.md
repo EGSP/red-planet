@@ -81,7 +81,7 @@
    → cleanup: Index.Sweep и ClearTransient — только в физическом цикле
 ```
 
-Отдельно планировщик гоняет системы графического цикла (`UpdateCycle.Process`) из `_Process` корня — для представления, которое должно совпадать с отрисовкой (сейчас это `CursorSystem`, затем `CommandSystem`). Отрисовка нод по-прежнему в их собственном `_Process`.
+Отдельно планировщик гоняет системы графического цикла (`UpdateCycle.Process`) из `_Process` корня — для представления, которое должно совпадать с отрисовкой (сейчас это `CursorSystem`, затем `CommandSystem` и `HoverSystem`). Отрисовка нод по-прежнему в их собственном `_Process`.
 
 Ключ развязки: **системы не дёргают друг друга напрямую — они общаются через документы.** Система приказов не знает про мир: она дописывает `BlueprintPlaced`, а кто отреагирует — её не касается.
 
@@ -113,6 +113,7 @@ Root (Node)                     ← приложение: живёт от зап
         ├── Hud             — счёт боя, подсказки и пауза, слева вверху
         ├── ResourceBar     — метал, производительность, энергия; сверху по центру
         ├── SelectionPanel  — состав выделения, слева внизу
+        ├── HoverPanel      — справка о сущности под курсором, ярусом выше выделения
         ├── CommandPanel    — доступные приказы, справа
         ├── Buildbar        — строительная панель, внизу по центру
         ├── ControlGroupBar — полоса боевых групп, у самого низа
@@ -886,7 +887,8 @@ scripts/
 ├─ economy/    EconomyLedger, EconomySystem, Jobs, Repair
 ├─ buildings/  Factory, Turret, Assembler
 └─ ui/         Hud, ResourceBar, SelectionPanel, CommandPanel, Buildbar, BuildbarLayout,
-               ControlGroupBar, MainMenu, PauseMenu, UiFrame, HealthBar, OrderOverlay
+               ControlGroupBar, MainMenu, PauseMenu, UiFrame, HealthBar, OrderOverlay,
+               HoverSystem, HoverOverlay, HoverPanel, HoverFacts — наведение курсора
 
 resources/     всё содержимое — .toml
                content/tags.toml   реестр тегов, единственное место их объявления
