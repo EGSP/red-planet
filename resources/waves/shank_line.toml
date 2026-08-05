@@ -5,7 +5,7 @@ id   = "shank_line"
 name = "Рубеж"
 tags = ["line"]
 
-prefer_next = ["swarm_rush"]
+prefer_next = ["swarm"]
 
 terror_range = [30.0, -1]
 

@@ -1,0 +1,44 @@
+[gd_scene format=3 uid="uid://3ffw81y8ei55"]
+
+[ext_resource type="Script" uid="uid://dcg5cmgawp8y6" path="res://scripts/tools/BuildingsPreview.cs" id="1_preview"]
+[ext_resource type="Script" uid="uid://ce4dufgxum148" path="res://scripts/world/ShadowRenderer.cs" id="2_shadow"]
+[ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="3_world"]
+[ext_resource type="Resource" uid="uid://dj0jlvgwg4ip7" path="res://resources/tuning/nav.tres" id="4_nav"]
+[ext_resource type="Shader" uid="uid://b3gk5gerkytk6" path="res://resources/shaders/shadow_pixel.gdshader" id="5_lk3mf"]
+[ext_resource type="Resource" uid="uid://d0mtud3752ne3" path="res://resources/tuning/shadow.tres" id="5_shadowtuning"]
+
+[sub_resource type="Gradient" id="Gradient_shadow"]
+offsets = PackedFloat32Array(0, 0.47887325, 1)
+colors = PackedColorArray(0, 0, 0, 0.15686275, 0, 0, 0, 0.1254902, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_u6gq2"]
+gradient = SubResource("Gradient_shadow")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_u6gq2"]
+shader = ExtResource("5_lk3mf")
+shader_parameter/ramp = SubResource("GradientTexture1D_u6gq2")
+shader_parameter/width_px = 56.0
+shader_parameter/falloff = 1.2
+shader_parameter/cell_px = 16.0
+shader_parameter/steps_per_cell = 3.0
+
+[node name="BuildingsPreview" type="Node2D" unique_id=430161459]
+
+[node name="Camera" type="Camera2D" parent="." unique_id=1692843385]
+position = Vector2(32, 32)
+zoom = Vector2(0.22, 0.22)
+
+[node name="Preview" type="Node2D" parent="." unique_id=1387731159 node_paths=PackedStringArray("Shadow")]
+texture_filter = 1
+script = ExtResource("1_preview")
+WorldTuning = ExtResource("3_world")
+NavTuning = ExtResource("4_nav")
+ShadowTuning = ExtResource("5_shadowtuning")
+Shadow = NodePath("Shadow")
+
+[node name="Shadow" type="Node2D" parent="Preview" unique_id=567942077]
+z_index = -1
+texture_filter = 1
+material = SubResource("ShaderMaterial_u6gq2")
+script = ExtResource("2_shadow")
+Settings = ExtResource("5_shadowtuning")

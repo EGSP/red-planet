@@ -40,6 +40,8 @@
 [ext_resource type="Script" uid="uid://bgcaq6cgye8l8" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
 [ext_resource type="Resource" uid="uid://byklt06fheqwx" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
 [ext_resource type="Resource" uid="uid://dj0jlvgwg4ip7" path="res://resources/tuning/nav.tres" id="43_navsettings"]
+[ext_resource type="Script" uid="uid://ce4dufgxum148" path="res://scripts/world/ShadowRenderer.cs" id="46_shadow"]
+[ext_resource type="Resource" path="res://resources/tuning/shadow.tres" id="47_shadowsettings"]
 [ext_resource type="Script" uid="uid://dngnl101xo5lo" path="res://scripts/ui/HoverSystem.cs" id="44_hover"]
 [ext_resource type="Script" uid="uid://xosvhvgeak3m" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
 
@@ -148,6 +150,7 @@ StepOrder = 30
 script = ExtResource("3_playground")
 Terrain = NodePath("Terrain")
 Deposits = NodePath("Deposits")
+Shadows = NodePath("Shadows")
 Structures = NodePath("Structures")
 Actors = NodePath("Actors")
 Projectiles = NodePath("Projectiles")
@@ -160,6 +163,12 @@ Effects = NodePath("Effects")
 script = ExtResource("4_grid")
 
 [node name="Deposits" type="Node2D" parent="Playground" unique_id=1266339897]
+
+[node name="Shadows" type="Node2D" parent="Playground" unique_id=1266339898]
+
+[node name="Obstacles" type="Node2D" parent="Playground/Shadows" unique_id=1266339899]
+script = ExtResource("46_shadow")
+Settings = ExtResource("47_shadowsettings")
 
 [node name="Structures" type="Node2D" parent="Playground" unique_id=539201372]
 

@@ -14,23 +14,29 @@ public enum WorldLayer
     /// <summary>Месторождения — лежат под всем, что на них ставят.</summary>
     Deposits = 1,
 
+    /// <summary>
+    /// Тень препятствий. Лежит на земле и на месторождениях, но под тем, что тень отбрасывает,
+    /// и под всем, что ходит: юнит закрывается тенью ни при каких настройках.
+    /// </summary>
+    Shadows = 2,
+
     /// <summary>Постройки и каркасы.</summary>
-    Structures = 2,
+    Structures = 3,
 
     /// <summary>Всё, что ходит: юниты игрока и враги.</summary>
-    Actors = 3,
+    Actors = 4,
 
-    Projectiles = 4,
+    Projectiles = 5,
 
     /// <summary>
     /// Туман войны. Лежит поверх мира, но под служебной графикой: приказы, призрак постройки
     /// и отладочные выкладки закрываться туманом не должны — они принадлежат не миру,
     /// а тому, кто на мир смотрит.
     /// </summary>
-    Fog = 5,
+    Fog = 6,
 
     /// <summary>Служебная графика поверх мира: призрак постройки, отрисовка приказов.</summary>
-    Effects = 6,
+    Effects = 7,
 }
 
 /// <summary>
@@ -46,6 +52,7 @@ public partial class Playground : Node2D
 {
     [Export] public Node2D Terrain;
     [Export] public Node2D Deposits;
+    [Export] public Node2D Shadows;
     [Export] public Node2D Structures;
     [Export] public Node2D Actors;
     [Export] public Node2D Projectiles;
@@ -79,12 +86,13 @@ public partial class Playground : Node2D
     {
         Terrain ??= GetNodeOrNull<Node2D>(nameof(Terrain));
         Deposits ??= GetNodeOrNull<Node2D>(nameof(Deposits));
+        Shadows ??= GetNodeOrNull<Node2D>(nameof(Shadows));
         Structures ??= GetNodeOrNull<Node2D>(nameof(Structures));
         Actors ??= GetNodeOrNull<Node2D>(nameof(Actors));
         Projectiles ??= GetNodeOrNull<Node2D>(nameof(Projectiles));
         Fog ??= GetNodeOrNull<Node2D>(nameof(Fog));
         Effects ??= GetNodeOrNull<Node2D>(nameof(Effects));
 
-        _layers = new[] { Terrain, Deposits, Structures, Actors, Projectiles, Fog, Effects };
+        _layers = new[] { Terrain, Deposits, Shadows, Structures, Actors, Projectiles, Fog, Effects };
     }
 }

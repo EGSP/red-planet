@@ -15,8 +15,8 @@ using Godot;
 /// только кнопка паузы, и та ушла в правый нижний угол.
 ///
 /// Содержимое разложено по вертикальным вкладкам-доменам (<c>nav</c>, <c>boi</c>,
-/// <c>vis</c>, <c>giz</c>, <c>wav</c>, <c>dia</c>), чтобы растущие блоки не сдвигали
-/// чужие секции.
+/// <c>vis</c>, <c>gfx</c>, <c>giz</c>, <c>wav</c>, <c>dia</c>), чтобы растущие блоки
+/// не сдвигали чужие секции.
 ///
 /// Панель показывается по F3 и на симуляцию не влияет: она читает состояние и правит
 /// только <see cref="DebugFlags"/>.
@@ -136,7 +136,7 @@ public partial class DebugPanel : CanvasLayer
         var stack = new VBoxContainer { CustomMinimumSize = new Vector2(PanelWidth, 0) };
         panel.AddChild(stack);
 
-        _pages = new Control[7];
+        _pages = new Control[8];
 
         for (int i = 0; i < _pages.Length; i++)
             _pages[i] = Page(stack);
@@ -144,19 +144,21 @@ public partial class DebugPanel : CanvasLayer
         FillNav(_pages[0]);
         FillBoi(_pages[1]);
         FillVis(_pages[2]);
-        FillGiz(_pages[3]);
-        FillWav(_pages[4]);
-        FillDia(_pages[5]);
-        FillPrf(_pages[6]);
+        FillGfx(_pages[3]);
+        FillGiz(_pages[4]);
+        FillWav(_pages[5]);
+        FillDia(_pages[6]);
+        FillPrf(_pages[7]);
 
         var group = new ButtonGroup();
         Tab(tabs, group, 0, "nav", "Навигация", IconNav());
         Tab(tabs, group, 1, "boi", "Локальный обход", IconBoi());
         Tab(tabs, group, 2, "vis", "Зрение", IconVis());
-        Tab(tabs, group, 3, "giz", "Области юнитов", IconGiz());
-        Tab(tabs, group, 4, "wav", "Волны", IconWav());
-        Tab(tabs, group, 5, "dia", "Диагностика", IconDia());
-        Tab(tabs, group, 6, "prf", "Замеры систем", IconPrf());
+        Tab(tabs, group, 3, "gfx", "Графика", IconGfx());
+        Tab(tabs, group, 4, "giz", "Области юнитов", IconGiz());
+        Tab(tabs, group, 5, "wav", "Волны", IconWav());
+        Tab(tabs, group, 6, "dia", "Диагностика", IconDia());
+        Tab(tabs, group, 7, "prf", "Замеры систем", IconPrf());
 
         ShowPage(0);
     }
@@ -338,6 +340,54 @@ public partial class DebugPanel : CanvasLayer
             "«Источников» — сколько зрячих сущностей участвовало в последней пересборке. " +
             "«Скрыто» — сколько сущностей противника сейчас не рисуется. " +
             "«Пересборка» — во что обходится растр: она идёт по таймеру, а не каждый кадр.");
+    }
+
+    /// <summary>
+    /// Графика мира. Пока здесь одна тень препятствий; вкладка заведена отдельно от зрения
+    /// потому, что туман есть часть правил видимости, а тень не влияет ни на что, кроме вида.
+    /// </summary>
+    private void FillGfx(Node box)
+    {
+        Section(box, "Тень препятствий",
+            "Затенение вокруг всего, что попадает в растр навигации, — построек и каркасов. " +
+            "Плотность выводится из chamfer-расстояния, то есть из той же величины, по " +
+            "которой навигация судит о проходимости. Отсюда и чтение картинки: узкий проход " +
+            "затенён по всей ширине, а у отдельно стоящего здания тень ограничена каймой.");
+
+        Check(box, "показывать", "Рисовать ли тень препятствий.",
+            () => Shade()?.Enabled ?? false, on => SetShade(settings => settings.Enabled = on));
+
+        Check(box, "ступенчатая подача",
+            "Плотность меняется ступенями по ячейкам растра вместо плавного спада. Ступень " +
+            "проходит там же, где меняется решение навигации о проходимости, поэтому такая " +
+            "подача честнее к устройству растра; плавная выглядит мягче.",
+            () => Shade()?.Pixelated ?? false,
+            on => SetShade(settings => settings.Pixelated = on));
+
+        Slide(box, "ширина полосы", 0f, 64f, 1f,
+            "Насколько далеко тень уходит от края препятствия, пикселей. Меряется свободным " +
+            "местом: на границе полосы вокруг точки помещается круг такого радиуса. Сверху " +
+            "ограничена насыщением растра — при нынешних настройках навигации это " +
+            $"{ShadowSettings.MaxWidthPx:0} px, и большее значение ничего не изменит.",
+            () => Shade()?.WidthPx ?? 0f,
+            value => SetShade(settings => settings.WidthPx = value));
+
+        Slide(box, "угасание", 0f, 8f, 0.1f,
+            "Насколько быстро плотность сходит на нет к границе полосы. Ноль оставляет " +
+            "плотность целиком за цветовой шкалой, единица гасит её равномерно, большие " +
+            "значения держат тень плотной почти до конца полосы и роняют у самого края.",
+            () => Shade()?.Falloff ?? 1f,
+            value => SetShade(settings => settings.Falloff = value));
+
+        Colour(box, "цвет у постройки",
+            "Крайняя левая точка цветовой шкалы: цвет и плотность вплотную к краю препятствия.",
+            () => Ramp(false), value => SetRamp(false, value));
+
+        Colour(box, "цвет на границе",
+            "Крайняя правая точка шкалы. Промежуточные точки правятся в ресурсе " +
+            "resources/tuning/shadow.tres: здесь их редактировать нечем, а трогать вслепую " +
+            "нельзя.",
+            () => Ramp(true), value => SetRamp(true, value));
     }
 
     private void FillGiz(Node box)
@@ -556,6 +606,22 @@ public partial class DebugPanel : CanvasLayer
         }
     });
 
+    /// <summary>Заполненный квадрат в рамке — постройка и её тень.</summary>
+    private static Texture2D IconGfx() => Paint(image =>
+    {
+        for (int x = 6; x <= 9; x++)
+            for (int y = 6; y <= 9; y++)
+                Dot(image, x, y);
+
+        for (int i = 3; i <= 12; i++)
+        {
+            Dot(image, i, 3);
+            Dot(image, i, 12);
+            Dot(image, 3, i);
+            Dot(image, 12, i);
+        }
+    });
+
     /// <summary>Три столбика разной высоты — счётчики диагностики.</summary>
     private static Texture2D IconDia() => Paint(image =>
     {
@@ -702,10 +768,106 @@ public partial class DebugPanel : CanvasLayer
     }
 
     /// <summary>
+    /// Ползунок величины с показом текущего значения. Отличается от <see cref="Check"/> тем,
+    /// что правит не признак, а число: ширина тени и сила угасания подбираются на глаз,
+    /// и вводить их с клавиатуры значило бы перебирать значения вслепую.
+    /// </summary>
+    private static void Slide(Node parent, string title, float min, float max, float step,
+        string tooltip, Func<float> read, Action<float> write)
+    {
+        var row = new HBoxContainer();
+        parent.AddChild(row);
+
+        var label = new Label { Text = title, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        row.AddChild(label);
+
+        float current = read();
+
+        var readout = new Label { Text = $"{current:0.##}" };
+        readout.AddThemeFontSizeOverride("font_size", 11);
+        readout.AddThemeColorOverride("font_color", Numbers);
+        row.AddChild(readout);
+
+        var slider = new HSlider
+        {
+            MinValue = min,
+            MaxValue = max,
+            Step = step,
+            Value = current,
+            CustomMinimumSize = new Vector2(PanelWidth, 16),
+        };
+
+        slider.ValueChanged += value =>
+        {
+            write((float)value);
+            readout.Text = $"{value:0.##}";
+        };
+
+        parent.AddChild(slider);
+
+        Explain(label, tooltip);
+        Explain(slider, tooltip);
+    }
+
+    /// <summary>
     /// Настройки тумана берутся у системы зрения, а не хранятся снимком: ресурс живёт
     /// столько же, сколько сессия, а панель переживает её пересборку.
     /// </summary>
     private static FogSettings Fog() => GameManager.I?.System<VisionSystem>()?.Settings;
+
+    /// <summary>
+    /// Настройки тени берутся у отрисовщика на слое теней — по тем же основаниям, по каким
+    /// настройки тумана берутся у системы зрения.
+    /// </summary>
+    private static ShadowSettings Shade()
+    {
+        var layer = GameManager.I?.Playground?.Layer(WorldLayer.Shadows);
+
+        if (layer == null)
+            return null;
+
+        foreach (var child in layer.GetChildren())
+        {
+            if (child is ShadowRenderer renderer)
+                return renderer.Settings;
+        }
+
+        return null;
+    }
+
+    /// <summary>Правка настроек тени, безопасная к отсутствию слоя в сцене.</summary>
+    private static void SetShade(Action<ShadowSettings> change)
+    {
+        var settings = Shade();
+
+        if (settings != null)
+            change(settings);
+    }
+
+    /// <summary>
+    /// Крайняя точка цветовой шкалы тени. Правятся только края: промежуточные точки задают
+    /// форму спада, и менять их парой выборов цвета нельзя, не разрушив замысел шкалы.
+    /// </summary>
+    private static Color Ramp(bool outer)
+    {
+        var gradient = Shade()?.Tint;
+
+        if (gradient == null || gradient.GetPointCount() == 0)
+            return Colors.Transparent;
+
+        return gradient.GetColor(outer ? gradient.GetPointCount() - 1 : 0);
+    }
+
+    private static void SetRamp(bool outer, Color color)
+    {
+        var gradient = Shade()?.Tint;
+
+        if (gradient == null || gradient.GetPointCount() == 0)
+            return;
+
+        gradient.SetColor(outer ? gradient.GetPointCount() - 1 : 0, color);
+    }
 
     /// <summary>Правка настроек тумана, безопасная к отсутствию системы в сцене.</summary>
     private static void Set(Action<FogSettings> change)
