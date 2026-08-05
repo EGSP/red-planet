@@ -44,6 +44,7 @@
 [ext_resource type="Resource" path="res://resources/tuning/shadow.tres" id="47_shadowsettings"]
 [ext_resource type="Script" uid="uid://dngnl101xo5lo" path="res://scripts/ui/HoverSystem.cs" id="44_hover"]
 [ext_resource type="Script" uid="uid://xosvhvgeak3m" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
+[ext_resource type="Script" path="res://scripts/ui/EventBar.cs" id="48_eventbar"]
 
 [node name="Session" type="Node2D" unique_id=716196635]
 script = ExtResource("1_session")
@@ -187,6 +188,9 @@ script = ExtResource("16_camera")
 
 [node name="Hud" type="CanvasLayer" parent="View" unique_id=1862778630]
 script = ExtResource("17_hud")
+
+[node name="EventBar" type="CanvasLayer" parent="View" unique_id=730705347]
+script = ExtResource("48_eventbar")
 
 [node name="ResourceBar" type="CanvasLayer" parent="View" unique_id=730705346]
 script = ExtResource("24_resources")
