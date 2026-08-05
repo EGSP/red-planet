@@ -35,9 +35,8 @@ public partial class Assembler : Building, IWorker
 
     public override void _Process(double delta) => QueueRedraw();
 
-    /// <summary>Башня стоит на месте, поэтому ходить ей некуда — только работать.</summary>
-    public override OrderSet AllowedOrders =>
-        OrderSet.None.With(OrderKind.Build).With(OrderKind.Repair);
+    /// <summary>Башня стоит на месте, поэтому её якорь внимания — она сама.</summary>
+    public Vector2 Anchor => GlobalPosition;
 
     public override void RunOrder(Order order, double dt)
     {
@@ -45,14 +44,50 @@ public partial class Assembler : Building, IWorker
         {
             case OrderKind.Build:
                 _repairTarget = null;
-                Attach(order.Target);
+                Work(order);
                 return;
 
             case OrderKind.Repair:
                 Detach();
                 _repairTarget = order.Entity;
                 return;
+
+            case OrderKind.Delete:
+                Detach();
+                _repairTarget = null;
+                Demolish();
+                return;
         }
+    }
+
+    /// <summary>
+    /// Стройка в пределах манипулятора. Дальнее башне недоступно вовсе: дойти она не может,
+    /// и приказ на далёкое место просто снимается — иначе он висел бы в очереди вечно.
+    ///
+    /// План башня ставит так же, как это делает фабрикатор: превращает в каркас, а цель
+    /// приказа переезжает с плана на каркас сама, поэтому подключиться к нему можно тем же
+    /// кадром — цель приказа читается заново, а не берётся из прежней переменной.
+    /// </summary>
+    private void Work(Order order)
+    {
+        var site = order.Target;
+
+        if (site == null
+            || GlobalPosition.DistanceTo(site.GlobalPosition) > Definition.WorkRangePx)
+        {
+            Detach();
+            Orders.DropCurrent();
+            return;
+        }
+
+        if (site is BuildPlan plan)
+        {
+            Detach();
+            plan.Realize();
+        }
+
+        if (order.Target is WorkNode node)
+            Attach(node);
     }
 
     public override void OnIdle(double dt)

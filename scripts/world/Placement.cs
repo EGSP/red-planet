@@ -6,10 +6,26 @@ using Godot;
 /// и единственное требование к нему — не пересекаться с чужими, соблюдая зазор.
 ///
 /// ЗАЧЕМ ОТДЕЛЬНЫЙ КЛАСС. Правило спрашивают трое, и все с разных сторон: призрак под
-/// курсором — каждый кадр, постановка каркаса — по щелчку, раскладка точек метала —
+/// курсором — каждый кадр, постановка плана — по щелчку, раскладка точек метала —
 /// при создании мира. Раньше их обслуживал WorldGrid.CanPlace; лишившись сетки,
 /// правило должно было куда-то переехать, и складывать его в одного из потребителей
 /// значило бы, что остальные двое ходят за правилом в чужой дом.
+///
+/// ЗАНЯТОСТЬ ЗДЕСЬ ШИРЕ, ЧЕМ В КАРТЕ ПРЕПЯТСТВИЙ. Место держат не только твёрдые тела,
+/// но и планы застройки (<see cref="BuildPlan"/>), которых в карте препятствий нет
+/// и быть не может: ходьбе они не мешают. Поэтому правило спрашивает два источника.
+///
+/// ПОМЕТКА НА БУДУЩЕЕ — ВТОРАЯ КАРТА ПРЕПЯТСТВИЙ.
+/// Причина: планы берутся линейным обходом разреза индекса, и обход этот идёт из
+/// прилипания, то есть каждый кадр и по нескольку раз (см. <see cref="Cling"/>). Пока
+/// планов десятки, это дешевле любой раскладки; на сотнях цена станет заметной.
+/// Решение: завести второй экземпляр <see cref="ObstacleMap"/> под планы и спрашивать
+/// его отсюда. Класть планы в основную карту нельзя ни при каких обстоятельствах —
+/// по ней пересобирается растр навигации и выталкиваются юниты, а план неосязаем.
+/// Есть и вторая причина завести карту: состав индекса меняется на границе кадра,
+/// поэтому только что поставленный план виден остальным лишь со следующего кадра.
+/// Сейчас это безобидно (партия планов сверяется со списком принятых мест внутри себя),
+/// но при постановке планов из нескольких источников за кадр станет ошибкой.
 /// </summary>
 public static class Placement
 {
@@ -69,12 +85,12 @@ public static class Placement
         // между двумя соседями, которое возможно в тесном промежутке
         for (int step = 0; step < ClingSteps; step++)
         {
-            var blocker = gm.Obstacles.Blocker(area);
-
-            if (blocker == null)
+            // Прилипать нужно и к планам: ряд размечают по краю уже размеченного,
+            // и требовать от игрока попадания в полосу шириной в зазор нельзя
+            if (!Occupant(gm, area, out var taken))
                 break;
 
-            if (!area.Escape(gm.Obstacles.ShapeOf(blocker), out var push))
+            if (!area.Escape(taken, out var push))
                 break;
 
             // Выход считается до касания краями, а его хватает не всегда: то же округление,
@@ -106,7 +122,7 @@ public static class Placement
     /// означало бы разрешить двум местам одной партии встать друг на друга.
     /// </summary>
     public static bool CanPlace(GameManager gm, UnitDefinition def, Vector2 center,
-        float facing = 0f, IReadOnlyList<Obb> taken = null)
+        float facing = 0f, IReadOnlyList<Obb> taken = null, BuildPlan ignorePlan = null)
     {
         if (gm == null || def == null)
             return false;
@@ -121,12 +137,55 @@ public static class Placement
         if (gm.Obstacles.Overlaps(claim))
             return false;
 
+        // Размеченное место занято так же, как застроенное. Собственный план из проверки
+        // исключается: он спрашивает правило ровно затем, чтобы поставить на своё место
+        // каркас, и упереться в самого себя обязан не был
+        if (PlanAt(gm, claim, ignorePlan) != null)
+            return false;
+
         if (taken != null)
             foreach (var other in taken)
                 if (other.Intersects(claim))
                     return false;
 
         return CoversMetal(gm, area) == def.RequiresMetalSpot;
+    }
+
+    /// <summary>
+    /// Чем занято место — телом или планом. Прилипанию безразлично, чем именно:
+    /// ему нужна форма, из которой предстоит выйти.
+    /// </summary>
+    private static bool Occupant(GameManager gm, in Obb area, out Obb shape)
+    {
+        if (gm.Obstacles.Blocker(area) is { } blocker)
+        {
+            shape = gm.Obstacles.ShapeOf(blocker);
+            return true;
+        }
+
+        if (PlanAt(gm, area, null) is { } plan)
+        {
+            shape = plan.Footprint;
+            return true;
+        }
+
+        shape = new Obb();
+        return false;
+    }
+
+    /// <summary>План, чьё место пересекается с областью. Израсходованные не считаются.</summary>
+    private static BuildPlan PlanAt(GameManager gm, in Obb area, BuildPlan except)
+    {
+        foreach (var plan in gm.Index.All<BuildPlan>())
+        {
+            if (plan == except || !plan.NeedsWork)
+                continue;
+
+            if (plan.Footprint.Intersects(area))
+                return plan;
+        }
+
+        return null;
     }
 
     /// <summary>Накрывает ли прямоугольник хоть одну точку метала.</summary>

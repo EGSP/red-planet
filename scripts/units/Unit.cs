@@ -42,7 +42,52 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>Сколько осталось до переигровки цели. Ведёт мозговая система, она же и решает.</summary>
     private float _retarget;
 
+    /// <summary>
+    /// Якорь внимания — см. <see cref="IWorker.Anchor"/>. Ставится при рождении и меняется
+    /// только приказом игрока: занятие, выбранное самостоятельно, якоря не сдвигает,
+    /// иначе отлучка за целью переносила бы участок вслед за юнитом.
+    /// </summary>
+    private Vector2 _anchor;
+
+    /// <summary>
+    /// Чужой приказ, в котором юнит помогает ведущему прямо сейчас. Своей очереди
+    /// не принадлежит и в неё не попадает: помощь длится ровно пока идёт сопровождение.
+    /// </summary>
+    private Order _assisted;
+
+    /// <summary>
+    /// Направление инструмента в мировых радианах: ствол или манипулятор.
+    /// Корпус при этом смотрит по <see cref="Node2D.Rotation"/> — туда, куда едет.
+    /// </summary>
+    private float _toolFacing;
+
+    /// <summary>
+    /// В этом физическом кадре инструмент уже доворачивали к цели. Без признака
+    /// графический шаг снова тянул бы его к корпусу и гасил наведение.
+    /// </summary>
+    private bool _toolAimed;
+
     public Unit() => Orders = new OrderQueue(this);
+
+    public Vector2 Anchor => _anchor;
+
+    /// <summary>
+    /// Юнита уже посылали. Признак нужен единственному правилу: приставленный к месту
+    /// не бросает его ради коммандера, а тот, кому ничего не приказывали, идёт за ним,
+    /// как и раньше. Без этого различия отряд, оставленный держать рубеж, уходил бы
+    /// с него сам, едва закончив дело, — и якорь внимания не значил бы ничего.
+    /// </summary>
+    public bool Posted { get; private set; }
+
+    /// <summary>
+    /// Перенести якорь внимания. Зовёт тот, кто отдаёт приказ по воле игрока:
+    /// <see cref="CommandSystem"/> и завод, раздающий новорождённым точку сбора.
+    /// </summary>
+    public void SetAnchor(Vector2 point)
+    {
+        _anchor = point;
+        Posted = true;
+    }
 
     /// <summary>
     /// Пора ли искать цель заново. Прежняя может быть и жива — просто рядом выросло что-то
@@ -89,23 +134,35 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     public PressureOrigin Origin { get; set; } = PressureOrigin.Ambient;
 
     /// <summary>
-    /// Что юниту можно приказать. Выводится из того, чем он снабжён, а не задаётся списком:
-    /// нет руки — нет приказа строить, нет ствола — нет атаки. Поэтому набор не может
-    /// разойтись с тем, что юнит на самом деле умеет.
+    /// Приказы, которые очередь принимает. Состав задаёт секция <c>[orders]</c> определения
+    /// в пересечении с тем, что юнит умеет по снабжению и классу.
     /// </summary>
-    public virtual OrderSet AllowedOrders => Definition == null
-        ? OrderSet.None
-        : OrderSet.None
-            .With(OrderKind.Move, Definition.IsMobile)
-            .With(OrderKind.Follow, Definition.IsMobile)
-            .With(OrderKind.Attack, Definition.Weapon != null)
-            .With(OrderKind.Build, Definition.CanBuild)
-            .With(OrderKind.Repair, Definition.CanRepair);
+    public virtual OrderSet AllowedOrders => Definition?.AcceptedOrders ?? OrderSet.None;
+
+    /// <summary>
+    /// Умеет, но в определении не разрешено — для панели со звёздочкой на время проверки
+    /// полноты <c>[orders]</c>.
+    /// </summary>
+    public OrderSet SoftOrders => Definition?.SoftOrders ?? OrderSet.None;
 
     public SelectionGroup SelectionGroup => Definition?.SelectionGroup ?? SelectionGroup.Bots;
 
-    /// <summary>Ось «вперёд» подвижной сущности — это поворот самой ноды.</summary>
-    public float Facing => Rotation;
+    /// <summary>
+    /// Ось прицеливания: независимый инструмент, если умение это допускает,
+    /// иначе направление корпуса.
+    /// </summary>
+    public float Facing => AimsIndependently ? _toolFacing : Rotation;
+
+    /// <summary>Куда смотрит ствол или манипулятор прямо сейчас.</summary>
+    public float ToolFacing => AimsIndependently ? _toolFacing : Rotation;
+
+    /// <summary>
+    /// Инструмент наводится отдельно от корпуса на ходу. Берётся из умения:
+    /// ствол с <c>aim_while_moving</c> или рабочая рука с тем же признаком.
+    /// </summary>
+    private bool AimsIndependently =>
+        Definition?.Weapon is { AimWhileMoving: true }
+        || Definition?.BuildTool is { AimWhileMoving: true };
 
     public float HitRadius => Definition?.RadiusPx ?? Const.Unit * 0.35f;
 
@@ -124,10 +181,20 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     public WeaponDefinition Weapon => Definition?.Weapon;
 
     /// <summary>
-    /// Огонь без приказов — по ближайшему, по приказу «атака» — по назначенному.
-    /// На работе не стреляем: занятый юнит делом занят.
+    /// Занят делом: подключён к узлу работы или чинит. Такому не до стрельбы.
     /// </summary>
-    public virtual bool CanFire => Idle || Current?.Kind == OrderKind.Attack;
+    private bool Busy => Alive.Is(_attached) || RepairTarget != null;
+
+    /// <summary>
+    /// Стреляем всегда, кроме как за работой. Прежде огонь вели только без приказов,
+    /// и сопровождающий отряд молча шёл мимо противника, потому что приказ у него был.
+    /// Сопровождение и движение стрельбе не мешают: прикрытие строителей — не отдельная
+    /// задача, а то, что вооружённый делает попутно.
+    ///
+    /// Приказ атаки стреляет и на работе — но работать и атаковать одновременно нельзя,
+    /// поэтому случай этот вырожденный и оставлен ради ясности правила.
+    /// </summary>
+    public virtual bool CanFire => Current?.Kind == OrderKind.Attack || !Busy;
 
     /// <summary>
     /// По приказу бьём именно назначенную жертву, даже если рядом мельтешит другая:
@@ -140,7 +207,22 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     {
         Health ??= new Health(Definition?.MaxHealth ?? 80f);
 
+        // Якорь ставится сразу: юнит, которому ещё ничего не приказывали, обязан
+        // держаться места своего появления, а не расползаться за целями от него
+        _anchor = GlobalPosition;
+        _toolFacing = Rotation;
+
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// Выровнять инструмент по корпусу без доворота. Нужен после внешней установки
+    /// <see cref="Node2D.Rotation"/> при рождении: иначе ствол остаётся на старом угле.
+    /// </summary>
+    public void SnapToolToBody()
+    {
+        _toolFacing = Rotation;
+        _toolAimed = false;
     }
 
     /// <summary>
@@ -196,13 +278,54 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float desired = Heading.AngleTo(GlobalPosition, point);
         float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
+
+        if (AimsIndependently)
+        {
+            _toolFacing = Heading.TurnToward(_toolFacing, desired, step);
+            _toolAimed = true;
+            return;
+        }
+
+        // Корпусный инструмент: на ходу корпус крутит движение, стоя — наведение
+        if (Movement.Velocity.LengthSquared() > 0.0001f)
+            return;
+
         Rotation = Heading.TurnToward(Rotation, desired, step);
+        _toolFacing = Rotation;
+        _toolAimed = true;
     }
 
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        if (!_toolAimed)
+            AlignTool(delta);
+
+        _toolAimed = false;
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// Без цели инструмент возвращается к направлению корпуса. У корпусного оружия
+    /// ось всегда совпадает с корпусом.
+    /// </summary>
+    private void AlignTool(double dt)
+    {
+        if (!AimsIndependently)
+        {
+            _toolFacing = Rotation;
+            return;
+        }
+
+        float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
+        _toolFacing = Heading.TurnToward(_toolFacing, Rotation, step);
+    }
 
     /// <summary>Приказов нет — отпускаем узел работы и стоим.</summary>
-    public void OnIdle(double dt) => Detach();
+    public void OnIdle(double dt)
+    {
+        _assisted = null;
+        Detach();
+    }
 
     /// <summary>
     /// Отработать приказ за кадр. Снимать невыполнимое с головы очереди не наше дело —
@@ -213,8 +336,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (Definition == null)
             return;
 
+        // Помощь ведущему живёт ровно один кадр и подтверждается заново: приказ
+        // сопровождения мог смениться, а ведущий — закончить работу
+        _assisted = null;
+
         switch (order.Kind)
         {
+            case OrderKind.Move:
+                RunMove(order, dt);
+                return;
+
             case OrderKind.Attack:
                 RunAttack(order, dt);
                 return;
@@ -227,6 +358,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
                 RunFollow(order, dt);
                 return;
 
+            case OrderKind.Delete:
+                Demolish();
+                return;
+
             default:
                 RunWork(order, dt);
                 return;
@@ -234,7 +369,62 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Движение и стройка: дойти, а дойдя — подключиться к узлу работы.
+    /// Снос через тот же канал, что и гибель от урона: документ DamageDealt разбирает
+    /// DamageSystem в React. Прямой QueueFree из Simulate оставил бы журнал без следа.
+    /// </summary>
+    private void Demolish()
+    {
+        if (Health == null || Health.IsDead || IsQueuedForDeletion())
+            return;
+
+        float amount = Mathf.Max(Health.Current, 1f);
+        GameManager.I.Events.Append(new DamageDealt
+        {
+            TargetId = Id,
+            SourceId = Id,
+            Amount = amount,
+            Pos = GlobalPosition,
+        });
+    }
+
+    /// <summary>
+    /// Движение с ожиданием отставших.
+    ///
+    /// ОТРЯД СОБИРАЕТСЯ, А НЕ РАСТЯГИВАЕТСЯ. Приказ движения, отданный нескольким, снимается
+    /// только тогда, когда дошли все его участники: дошедший первым стоит и ждёт. Иначе
+    /// быстрый юнит уходил бы к следующему приказу цепочки в одиночку, и отряд, посланный
+    /// в две точки подряд, прибывал бы во вторую по частям.
+    ///
+    /// Ждать не приходится тому, кто получил приказ один: он сам себе весь состав. Копии
+    /// приказа, которые завод раздаёт новорождённым, состав тоже не разделяют — см.
+    /// <see cref="Order"/>.
+    ///
+    /// Приказ считается исполненным и тогда, когда ближе не пройти из-за своих: всему отряду
+    /// в одну точку не поместиться, и ждать этого бессмысленно.
+    /// </summary>
+    private void RunMove(Order order, double dt)
+    {
+        Detach();
+
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        {
+            Movement.Seek(order.Pos, reach);
+            return;
+        }
+
+        order.Arrive(Id);
+
+        // Стоим на месте: неподтверждённое намерение движения гаснет само,
+        // и юнит удерживает позицию, пока подтягиваются остальные
+        if (order.PartyReady)
+            Orders.DropCurrent();
+    }
+
+    /// <summary>
+    /// Стройка: дойти до места работы, а дойдя — поставить каркас, если это план,
+    /// или подключиться к нему инструментом, если это уже каркас.
     ///
     /// Приказ объявляет намерение и проверяет, дошли ли. Сам ход и доворот корпуса
     /// на ходу делает система движения: обходя препятствие, юнит едет не туда, куда
@@ -242,22 +432,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     private void RunWork(Order order, double dt)
     {
-        var target = order.Kind == OrderKind.Move ? order.Pos : order.Target.GlobalPosition;
+        var target = order.Target.GlobalPosition;
 
         // Дальность принадлежит инструменту, а не юниту: раньше одно число служило всем
         // занятиям сразу, хотя тянутся они на разное
         var tool = Definition.BuildTool;
+        float reach = tool?.RangePx ?? Const.Unit;
 
-        float reach = order.Kind == OrderKind.Move
-            ? Const.Unit * 0.2f
-            : tool?.RangePx ?? Const.Unit;
-
-        // Приказ «идти» считается исполненным и тогда, когда ближе не пройти из-за своих:
-        // всему отряду в одну точку не поместиться, и ждать этого бессмысленно. К работе
-        // это не относится — там нужна не точка, а дальность инструмента до цели
-        bool settled = order.Kind == OrderKind.Move && Movement.Settled;
-
-        if (!settled && GlobalPosition.DistanceTo(target) > reach)
+        if (GlobalPosition.DistanceTo(target) > reach)
         {
             Detach();
             Movement.Seek(target, reach);
@@ -266,12 +448,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         // Дошли: разворачиваемся к тому, с чем работаем
         AimAt(target, dt);
-
-        if (order.Kind == OrderKind.Move)
-        {
-            Orders.DropCurrent();
-            return;
-        }
+        order.Arrive(Id);
 
         if (tool == null)
         {
@@ -279,14 +456,26 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        if (_attached != order.Target)
+        // План неосязаем и мощности не принимает: его нужно превратить в каркас.
+        //
+        // Раннего выхода здесь нет намеренно: воплотившись, план объявляет о смене, и цель
+        // приказа к следующей строке — уже каркас, к которому можно подключиться тем же
+        // кадром. Если же место оказалось занято и план тихо отменился, целью остался он сам,
+        // и подключаться не к чему — проверка ниже отработает вхолостую
+        if (order.Target is BuildPlan plan)
+        {
+            Detach();
+            plan.Realize();
+        }
+
+        if (order.Target is WorkNode node && _attached != node)
         {
             Detach();
 
             // Узлу сообщаем и мощность, и прожорливость: энергию тратит инструмент,
             // а сколько именно — записано в нём же
-            order.Target.AttachWorker(Id, tool.Power, tool.EnergyDrain);
-            _attached = order.Target;
+            node.AttachWorker(Id, tool.Power, tool.EnergyDrain);
+            _attached = node;
         }
     }
 
@@ -294,8 +483,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Приказ атаковать: подойти на дальность своего ствола и держаться. Сам выстрел —
     /// дело WeaponSystem, сюда попадает только подход.
     ///
-    /// В пределах дальности корпус крутит система стрельбы, на подходе — система движения.
-    /// Своего доворота здесь нет: два доворота за кадр удвоили бы скорость вращения.
+    /// В пределах дальности инструмент крутит система стрельбы; корпус на ходу
+    /// по-прежнему доворачивает система движения. Своего доворота здесь нет.
     /// </summary>
     private void RunAttack(Order order, double dt)
     {
@@ -305,12 +494,20 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         var target = victim as IDamageable;
         var to = victim.GlobalPosition;
 
+        // Поводок: цель, которую юнит выбрал себе сам, не уводит его дальше внимания
+        // от якоря. Прямое указание игрока поводка не имеет и ведёт куда угодно
+        if (order.Leashed && _anchor.DistanceTo(to) > Definition.AttentionRadiusPx)
+        {
+            Orders.DropCurrent();
+            return;
+        }
+
         // Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
         // границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
         // откуда любое смещение цели или толчок соседа выводили его из радиуса.
         // Безоружный подходит на длину инструмента: приказ хотя бы не зависает
         float stop = Weapon != null
-            ? Targeting.ApproachDistance(Weapon, target, Definition.StandoffFraction)
+            ? Targeting.ApproachDistance(Weapon, target, Definition.ApproachHoldFraction)
             : Definition.WorkRangePx;
 
         if (GlobalPosition.DistanceTo(to) > stop)
@@ -335,40 +532,204 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Сопровождение: держаться рядом, но не наступать на пятки. Приказ не завершается сам —
-    /// его вытесняет работа, как только она появится.
+    /// Сопровождение: держаться рядом, но не наступать на пятки.
+    ///
+    /// СОПРОВОЖДЕНИЕ ВКЛЮЧАЕТ ПОМОЩЬ. Строитель, приставленный к строителю, берётся
+    /// за то же дело, что и ведущий, — в том числе когда ведущий сам сопровождает
+    /// другого строителя: помощь идёт по цепочке Follow вглубь.
+    ///
+    /// ОЧЕРЕДЬ ПОСЛЕ FOLLOW. Пока помощь или прикрытие заняты делом, сопровождение
+    /// держится. Иначе, если за Follow уже стоит следующий приказ, сопровождение
+    /// снимается, как только исполнитель дошёл до ведущего или ведущий без дела:
+    /// иначе Shift-цепочка после Follow никогда бы не началась.
     /// </summary>
     private void RunFollow(Order order, double dt)
     {
+        if (Assist(order, dt) || Guard(order))
+            return;
+
         Detach();
 
-        var to = order.Entity.GlobalPosition;
+        if (Orders.HasMore && FollowDone(order))
+        {
+            Orders.DropCurrent();
+            return;
+        }
 
-        if (GlobalPosition.DistanceTo(to) > Const.FollowDistancePx)
-            Movement.Seek(to, Const.FollowDistancePx);
+        var to = order.Entity.GlobalPosition;
+        float range = FollowRange;
+
+        if (GlobalPosition.DistanceTo(to) > range)
+            Movement.Seek(to, range);
     }
 
-    /// <summary>Кого чиним прямо сейчас: приказ ремонта, цель в пределах инструмента.</summary>
-    private IRepairable RepairTarget
+    /// <summary>
+    /// Дистанция сопровождения: 2.5 собственных размера. Размер — диаметр корпуса
+    /// (два радиуса), поэтому стоп = <c>5 · HitRadius</c>.
+    /// </summary>
+    private float FollowRange => HitRadius * 5f;
+
+    /// <summary>
+    /// Сопровождение исчерпано для очереди с хвостом: либо уже рядом с ведущим,
+    /// либо ведущему нечего делать и ждать больше нечего.
+    /// </summary>
+    private bool FollowDone(Order order)
     {
-        get
+        if (!Alive.Is(order.Entity))
+            return true;
+
+        if (GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= FollowRange)
+            return true;
+
+        return order.Entity is IOrderable { Orders.Idle: true };
+    }
+
+    /// <summary>
+    /// Прикрытие ведущего: подойти к противнику на дистанцию огня и держаться, пока тот
+    /// не уйдёт. Приказ сопровождения при этом не тратится и не отменяется, поэтому
+    /// сопровождающий возвращается к ведущему сам, как только стрелять станет не в кого.
+    ///
+    /// ЗОНА ИНТЕРЕСА ОТСЧИТЫВАЕТСЯ ОТ ВЕДУЩЕГО, А НЕ ОТ СЕБЯ. Отсчёт от себя означал бы, что
+    /// каждый шаг за целью расширяет область поиска, и охранение утягивалось бы за одиночкой
+    /// через всю карту — ровно то, ради чего заведён якорь внимания.
+    ///
+    /// Стрельбу отсюда никто не ведёт: она разрешена самим фактом сопровождения
+    /// (см. <see cref="CanFire"/>), а стреляет <see cref="WeaponSystem"/>.
+    /// </summary>
+    private bool Guard(Order order)
+    {
+        if (Weapon == null || !Alive.Is(order.Entity))
+            return false;
+
+        var center = order.Entity.GlobalPosition;
+
+        if (Targeting.Nearest(center, Faction.Opposite(), Definition.AttentionRadiusPx)
+            is not Node2D victim)
+            return false;
+
+        Detach();
+
+        float stop = Targeting.ApproachDistance(Weapon, victim as IDamageable,
+            Definition.ApproachHoldFraction);
+
+        if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
+            Movement.Seek(victim.GlobalPosition, stop);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Помощь ведущему: делать то же, что делает он, пока это в пределах внимания.
+    ///
+    /// ЧУЖОЙ ПРИКАЗ НЕ ПОПАДАЕТ В СВОЮ ОЧЕРЕДЬ. Помощь — не приказ, а поведение внутри
+    /// сопровождения: ведущий бросит работу, и помощник тут же вернётся к нему, ничего
+    /// не отменяя. Попади приказ в очередь — его пришлось бы оттуда вынимать, а до тех пор
+    /// помощник считался бы занятым и сопровождение бы потерял.
+    ///
+    /// ЦЕПОЧКА СОПРОВОЖДЕНИЯ. Ведущий, который сам идёт по <see cref="OrderKind.Follow"/>,
+    /// считается занятым тем же делом, что и его ведущий: иначе помощник смотрел бы
+    /// только на приказ сопровождения и к стройке не подключался. Искать «исходного»
+    /// строителя снаружи не нужно — разбор идёт по ссылкам Follow вглубь.
+    ///
+    /// Предел внимания отсчитывается от непосредственного ведущего: помощник ходит за
+    /// ним, а не за его работой, и уходить от него дальше, чем видит, не должен.
+    /// </summary>
+    private bool Assist(Order order, double dt)
+    {
+        if (Definition.BuildTool == null || order.Entity is not IOrderable leader)
+            return false;
+
+        var work = AssistedWork(leader);
+
+        if (work == null || !Orders.Allows(work.Kind))
+            return false;
+
+        var point = work.Point;
+
+        if (order.Entity.GlobalPosition.DistanceTo(point) > Definition.AttentionRadiusPx)
+            return false;
+
+        _assisted = work;
+
+        float reach = Definition.BuildTool.RangePx;
+
+        if (GlobalPosition.DistanceTo(point) > reach)
         {
-            var order = Current;
-
-            if (order?.Kind != OrderKind.Repair || Definition == null || !Definition.CanRepair)
-                return null;
-
-            if (order.Entity is not IRepairable repairable || !Targeting.IsValid(order.Entity))
-                return null;
-
-            if (order.Entity is Unit && !Definition.CanRepairUnits)
-                return null;
-
-            float reach = Definition.BuildTool.RangePx;
-            return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
-                ? repairable
-                : null;
+            Detach();
+            Movement.Seek(point, reach);
+            return true;
         }
+
+        AimAt(point, dt);
+
+        // Ремонт идёт через RepairTarget, а каркас ставит сам ведущий: помощнику
+        // остаётся подключиться к тому, что уже стоит
+        if (work.Target is WorkNode node && _attached != node)
+        {
+            Detach();
+            node.AttachWorker(Id, Definition.BuildTool.Power, Definition.BuildTool.EnergyDrain);
+            _attached = node;
+        }
+        else if (work.Kind == OrderKind.Repair)
+        {
+            Detach();
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Стройка или ремонт, которым занят ведущий, в том числе через цепочку Follow.
+    /// Предел глубины отсекает циклы A→B→A без выделения списка на каждый кадр.
+    /// </summary>
+    private Order AssistedWork(IOrderable leader)
+    {
+        const int depthLimit = 16;
+
+        for (int i = 0; i < depthLimit; i++)
+        {
+            var work = leader.Orders.Current;
+
+            if (work == null)
+                return null;
+
+            if (work.Kind is OrderKind.Build or OrderKind.Repair)
+                return work;
+
+            if (work.Kind != OrderKind.Follow || work.Entity is not IOrderable next)
+                return null;
+
+            // Цикл, вернувшийся к помощнику, или сопровождение самого себя
+            if (ReferenceEquals(next, this) || ReferenceEquals(next, leader))
+                return null;
+
+            leader = next;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Кого чиним прямо сейчас: свой приказ ремонта либо чужой, в котором помогаем.
+    /// Цель обязана быть в пределах инструмента — иначе чинить нечего.
+    /// </summary>
+    private IRepairable RepairTarget => Repairing(Current) ?? Repairing(_assisted);
+
+    private IRepairable Repairing(Order order)
+    {
+        if (order?.Kind != OrderKind.Repair || Definition == null || !Definition.CanRepair)
+            return null;
+
+        if (order.Entity is not IRepairable repairable || !Targeting.IsValid(order.Entity))
+            return null;
+
+        if (order.Entity is Unit && !Definition.CanRepairUnits)
+            return null;
+
+        float reach = Definition.BuildTool.RangePx;
+        return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
+            ? repairable
+            : null;
     }
 
     private void Detach()
@@ -410,11 +771,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float radius = Definition.RadiusPx;
 
+        float toolLocal = ToolFacing - Rotation;
+
         UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
-            selected: GizmoGate.IsSelected(this));
+            selected: GizmoGate.IsSelected(this),
+            facingOffset: toolLocal);
 
         DrawHull(radius);
-        DrawForwardMark(radius);
+        DrawMoveMark(radius);
+        DrawToolMark(radius, toolLocal);
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
 
@@ -424,47 +789,35 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
                 DrawTheme.Line(VizKind.WorkBeamBuild));
     }
 
-    /// <summary>Корпус по силуэту из определения: круг, прямоугольник или шестиугольник.</summary>
+    /// <summary>
+    /// Корпус по силуэту из определения. Простые силуэты рисуются одной фигурой, составные
+    /// — набором выпуклых частей из <see cref="HullGeometry"/>.
+    /// </summary>
     private void DrawHull(float radius)
     {
         var fill = ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f,
             WidthMode.Screen);
 
-        switch (Definition.Hull)
-        {
-            case HullShape.Rect:
-                DrawRectHull(radius, fill);
-                break;
+        DrawHullShape(radius, fill);
 
-            case HullShape.Hex:
-                DrawPolygonHull(radius, 6, fill);
-                break;
+        // Дополнительные контуры брони. У составных силуэтов повтор самого силуэта дал бы
+        // обводку по каждой части, то есть ту же сетку по стыкам, ради снятия которой корпус
+        // и рисуется без обводки. Поэтому там броня выражена окружностью, а цвет ей берётся
+        // от корпуса затемнением: чёрная линия поверх крупной машины читается как грязь
+        bool composite = HullGeometry.Composite(Definition.Hull);
+        var armour = composite
+            ? Definition.Color.Darkened(0.45f) with { A = 0.7f }
+            : new Color(0f, 0f, 0f, 0.55f);
 
-            default:
-                ShapeDraw.Circle(this, Vector2.Zero, radius, fill, 24);
-                break;
-        }
-
-        // Дополнительные контуры брони
         for (int ring = 1; ring <= Definition.ArmorRings; ring++)
         {
             float gap = radius * 0.12f * ring;
-            var outline = ShapeStyle.Outline(new Color(0f, 0f, 0f, 0.55f), 1.5f, WidthMode.Screen);
+            var outline = ShapeStyle.Outline(armour, 1.5f, WidthMode.Screen);
 
-            switch (Definition.Hull)
-            {
-                case HullShape.Rect:
-                    DrawRectHull(radius + gap, outline);
-                    break;
-
-                case HullShape.Hex:
-                    DrawPolygonHull(radius + gap, 6, outline);
-                    break;
-
-                default:
-                    ShapeDraw.Circle(this, Vector2.Zero, radius + gap, outline, 24);
-                    break;
-            }
+            if (composite)
+                ShapeDraw.Circle(this, Vector2.Zero, radius + gap, outline, 28);
+            else
+                DrawHullShape(radius + gap, outline);
         }
 
         // Ближний бой: заливка передней трети поверх корпуса. Признак берётся из
@@ -474,6 +827,46 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             float tip = radius * 0.55f;
             ShapeDraw.Rect(this, new Rect2(radius * 0.15f, -tip * 0.7f, tip, tip * 1.4f),
                 ShapeStyle.Solid(Definition.Color.Lightened(0.15f)));
+        }
+    }
+
+    /// <summary>Один силуэт заданным стилем. Общее место для корпуса и контуров брони.</summary>
+    private void DrawHullShape(float radius, in ShapeStyle style)
+    {
+        if (HullGeometry.Composite(Definition.Hull))
+        {
+            var parts = HullGeometry.Parts(Definition.Hull, radius);
+            var accents = HullGeometry.Accents(Definition.Hull);
+
+            // Обводка снимается: она проходила бы по стыкам частей, а разложение
+            // на выпуклые куски продиктовано заливкой и показывать его незачем.
+            // Части различаются оттенком — см. HullGeometry.Accents
+            var accent = ShapeStyle.Solid(style.Fill.Lightened(0.22f));
+            var plain = ShapeStyle.Solid(style.Fill);
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                bool lighten = i < accents.Length && accents[i];
+
+                ShapeDraw.Polygon(this, parts[i], lighten ? accent : plain);
+            }
+
+            return;
+        }
+
+        switch (Definition.Hull)
+        {
+            case HullShape.Rect:
+                DrawRectHull(radius, style);
+                break;
+
+            case HullShape.Hex:
+                DrawPolygonHull(radius, 6, style);
+                break;
+
+            default:
+                ShapeDraw.Circle(this, Vector2.Zero, radius, style, 24);
+                break;
         }
     }
 
@@ -499,24 +892,56 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Ствол или манипулятор. Длина ствола растёт с дальностью оружия;
-    /// у ремонтника без ствола — дуга спереди.
+    /// Треугольник на корпусе: нос совпадает с направлением движения
+    /// (<see cref="Node2D.Rotation"/>), а не с инструментом.
     /// </summary>
-    private void DrawForwardMark(float radius)
+    private void DrawMoveMark(float radius)
     {
-        if (Definition.CanRepair && Definition.Weapon == null)
+        float nose = radius * 0.62f;
+        float back = radius * 0.12f;
+        float half = radius * 0.32f;
+        var tip = new[]
+        {
+            new Vector2(nose, 0f),
+            new Vector2(back, -half),
+            new Vector2(back, half),
+        };
+
+        ShapeDraw.Polygon(this, tip,
+            ShapeStyle.Filled(Definition.Color.Lightened(0.25f), new Color(0f, 0f, 0f, 0.55f), 1.5f,
+                WidthMode.Screen));
+    }
+
+    /// <summary>
+    /// Передняя часть инструмента: ствол или дуга манипулятора. Рисуется в локальных
+    /// координатах со сдвигом на угол инструмента относительно корпуса.
+    /// </summary>
+    private void DrawToolMark(float radius, float toolLocal)
+    {
+        bool hasWeapon = Definition.Weapon != null;
+        bool hasArm = Definition.BuildTool != null;
+
+        if (!hasWeapon && !hasArm)
+            return;
+
+        DrawSetTransform(Vector2.Zero, toolLocal, Vector2.One);
+
+        if (!hasWeapon && hasArm)
         {
             ShapeDraw.Arc(this, Vector2.Zero, radius * 1.15f, -0.7f, 0.7f,
                 ShapeStyle.Outline(new Color(0.45f, 0.85f, 1f, 0.85f), 2.5f, WidthMode.Screen));
-            return;
+        }
+        else
+        {
+            float barrel = radius * 1.2f;
+            if (hasWeapon)
+                barrel = radius + Mathf.Clamp(Definition.Weapon.RangePx * 0.12f, radius * 0.4f,
+                    radius * 2.2f);
+
+            ShapeDraw.Line(this, Vector2.Zero, new Vector2(barrel, 0f),
+                ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
         }
 
-        float barrel = radius * 1.2f;
-        if (Definition.Weapon != null)
-            barrel = radius + Mathf.Clamp(Definition.Weapon.RangePx * 0.12f, radius * 0.4f,
-                radius * 2.2f);
-
-        ShapeDraw.Line(this, Vector2.Zero, new Vector2(barrel, 0f),
-            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
     }
 }

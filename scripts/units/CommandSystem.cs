@@ -11,8 +11,8 @@ using Godot;
 /// Мировые координаты мыши считаются только в <see cref="CursorSystem"/>.
 ///
 /// ЧТО ПРИКАЗАТЬ, РЕШАЕТ ЦЕЛЬ ПОД КУРСОРОМ, а не заранее выбранный режим: щёлкнули по врагу —
-/// атака, по каркасу — стройка, по повреждённому — ремонт, по месторождению — копка, по земле —
-/// движение. Одна кнопка на всё, как в PA.
+/// атака, по каркасу или плану — стройка, по повреждённому своему — ремонт, по здоровому
+/// своему — сопровождение с помощью, по земле — движение. Одна кнопка на всё, как в PA.
 ///
 /// КОМУ приказ уйдёт, решает выделение, а вид приказа отсеет набор самой сущности: копателю
 /// не уйдёт атака, турели — движение. Поэтому здесь не нужно разбираться, кто выделен, —
@@ -221,7 +221,7 @@ public partial class CommandSystem : GameSystem
         var anchor = _dragging ? _buildAnchor : visual;
         bool alt = Input.IsKeyPressed(Key.Alt);
 
-        BuildPlan.Compute(GM, Pending, anchor, visual, alt, _plan);
+        BuildLayout.Compute(GM, Pending, anchor, visual, alt, _plan);
         UpdateStretchGhost(anchor, visual, alt);
 
         _ghost.QueueRedraw();
@@ -229,19 +229,19 @@ public partial class CommandSystem : GameSystem
 
     /// <summary>
     /// Круг охвата залежей у призрака. Радиус и центр совпадают с тем, что считает
-    /// <see cref="BuildPlan"/> для <see cref="BuildPattern.MetalArea"/>: иначе игрок
+    /// <see cref="BuildLayout"/> для <see cref="BuildPattern.MetalArea"/>: иначе игрок
     /// видел бы помеченные экстракторы, но не границу, по которой они отобраны.
     /// </summary>
     private void UpdateStretchGhost(Vector2 anchor, Vector2 cursor, bool alt)
     {
         _ghost.StretchRadius = 0f;
 
-        if (BuildPlan.PatternOf(Pending, alt) != BuildPattern.MetalArea)
+        if (BuildLayout.PatternOf(Pending, alt) != BuildPattern.MetalArea)
             return;
 
         float radius = anchor.DistanceTo(cursor);
 
-        if (radius < BuildPlan.AngleThreshold || _plan.Count == 0)
+        if (radius < BuildLayout.AngleThreshold || _plan.Count == 0)
             return;
 
         _ghost.StretchCenter = _plan[0].Center;
@@ -258,6 +258,13 @@ public partial class CommandSystem : GameSystem
             if (key.Keycode == Key.C)
             {
                 ShowAllOrders = !ShowAllOrders;
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode == Key.Delete)
+            {
+                IssueDelete();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -441,13 +448,14 @@ public partial class CommandSystem : GameSystem
     }
 
     /// <summary>
-    /// Выделяем только то, чем можно управлять: свой и с непустым набором приказов.
-    /// Месторождение и склад в рамку не попадут — приказать им всё равно нечего.
-    /// Юнит, ещё выезжающий из корпуса завода, некликабелен.
+    /// Выделяем своё с непустым видимым набором приказов: принятые плюс мягкие
+    /// (умеет, но в определении не разрешено). Мягкие нужны, чтобы сущность с забытым
+    /// <c>[orders]</c> оставалась доступной для проверки в панели. Юнит, ещё выезжающий
+    /// из корпуса завода, некликабелен.
     /// </summary>
     private static bool Commandable(IOrderable actor) =>
         actor.Faction == Faction.Player
-        && actor.AllowedOrders.Any
+        && (actor.AllowedOrders.Any || actor.SoftOrders.Any)
         && !Targeting.Leaving(actor);
 
     private IOrderable ActorAt(Vector2 point) =>
@@ -475,6 +483,22 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private List<IOrderable> Recipients() => _selected;
 
+    /// <summary>
+    /// Приказ по точке всему выделению.
+    ///
+    /// ОЧЕРЕДЬ ОДНА НА ВСЕХ, КТО ПРИКАЗ ПРИНЯЛ. Список приказов заводится здесь и общий
+    /// для получателей: отряд видит работу друг друга — подошедший вторым включается
+    /// в начатое, а приказ движения дожидается отставших. Видов при одном щелчке бывает
+    /// несколько: вооружённые атакуют, строитель идёт строить, безоружный просто идёт, —
+    /// поэтому очередей заводится ровно столько, сколько видов нашло себе получателя.
+    ///
+    /// ПОРЯДОК РАЗБОРА — ОТ САМОГО ОПРЕДЕЛЁННОГО К САМОМУ ОБЩЕМУ, и сопровождение стоит
+    /// предпоследним, перед движением. Щелчок по подбитому своему означает «почини», а не
+    /// «иди за ним», поэтому ремонт разбирается раньше; тот, кто чинить не умеет, ветку
+    /// ремонта не примет и дойдёт до сопровождения сам — фильтр набора приказов устроен
+    /// именно так. Сопровождение включает помощь: строитель, приставленный к строителю,
+    /// берётся за то же дело — этим занят сам юнит, а не раздача приказов.
+    /// </summary>
     private void IssueOrder(Vector2 point)
     {
         var recipients = Recipients();
@@ -486,66 +510,196 @@ public partial class CommandSystem : GameSystem
         // Цель разбираем один раз на всех: она общая, а вид приказа у каждого свой
         var victim = EnemyAt(point);
         var occupant = GM.Obstacles.At(point) as Node;
-        var damagedUnit = DamagedUnitAt(point);
+        IWorkSite site = occupant is Blueprint { NeedsWork: true } frame
+            ? frame
+            : PlanAt(point);
+        var damaged = Repairable(occupant as Node2D) ?? DamagedUnitAt(point);
+        var leader = Leader(point, recipients);
+
+        var attack = new Assignment(recipients, queue);
+        var build = new Assignment(recipients, queue);
+        var repair = new Assignment(recipients, queue);
+        var follow = new Assignment(recipients, queue);
+        var move = new Assignment(recipients, queue);
 
         foreach (var actor in recipients)
-            Send(actor, victim, occupant, damagedUnit, queue, point);
+        {
+            if (victim != null && attack.Give(actor, () => Order.Attack(victim)))
+                continue;
+
+            if (site != null && build.Give(actor, () => Order.Work(OrderKind.Build, site)))
+                continue;
+
+            if (damaged != null && repair.Give(actor, () => Order.Repair(damaged)))
+                continue;
+
+            if (leader != null && follow.Give(actor, () => Order.Follow(leader)))
+                continue;
+
+            move.Give(actor, () => Order.MoveTo(point));
+        }
     }
 
     /// <summary>
-    /// Один приказ по цели в указанной точке. Порядок разбора — от самого определённого
-    /// к самому общему: враг, каркас, повреждённое, и только потом голая земля.
+    /// Снос выделенных: приказ Delete вместо прежней цепочки.
+    ///
+    /// Shift здесь не читается намеренно — снос всегда заменяет очередь, а не дописывается
+    /// в хвост. Иначе Del после цепочки движения оставил бы снос на потом, и постройка
+    /// ещё успела бы отработать шаги, которые игрок уже отменил намерением снести.
     /// </summary>
-    private void Send(IOrderable actor, Node2D victim, Node occupant, Node2D damagedUnit,
-        bool queue, Vector2 point)
+    private void IssueDelete()
     {
-        if (victim != null && Give(actor, queue, Order.Attack(victim)))
+        var recipients = Recipients();
+        if (recipients.Count == 0)
             return;
 
-        if (occupant is Blueprint { NeedsWork: true } blueprint
-            && GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint))
-            return;
+        var demolish = new Assignment(recipients, queue: false);
 
-        // Ремонт: сначала постройка на клетке, потом юнит в точке приказа
-        var damaged = Repairable(occupant as Node2D) ?? damagedUnit;
-
-        if (damaged != null && GiveWork(actor, queue, Order.Repair(damaged), damaged))
-            return;
-
-        Give(actor, queue, Order.MoveTo(point));
+        foreach (var actor in recipients)
+            demolish.Give(actor, Order.Delete);
     }
 
     /// <summary>
-    /// Рабочий приказ с подходом: далеко — сначала дойти, потом работать. Цепочка нужна
-    /// не механике (юнит дошёл бы и сам), а игроку — чтобы путь и работа были видны
-    /// в очереди двумя отдельными шагами.
+    /// Раздача одного вида приказа: заводит общую очередь на первом получателе и подписывает
+    /// на неё остальных.
+    ///
+    /// ЧТО ДЕЛАЕТ ДОПИСЫВАНИЕ ПО SHIFT. Получатели заняты разным: у одного своя очередь,
+    /// у второго своя, третий свободен. Приказ заводится ОДИН и в одной ветке, а хвосты
+    /// разных очередей к ней пристёгиваются: каждый доделывает своё и переходит в общую.
+    /// Так одно намерение хранится один раз, сколько бы очередей в него ни сошлось, —
+    /// а значит и вставка в него потом будет одна (см. <see cref="BuildPlan"/>).
+    ///
+    /// Приказ создаётся отложенно: видов разбирается четыре, а находит получателя не всякий,
+    /// и заводить ветку под несостоявшийся вид незачем.
     /// </summary>
-    private static bool GiveWork(IOrderable actor, bool queue, Order order, Node2D target)
+    private sealed class Assignment
     {
-        if (actor is not Unit { Definition: not null } unit)
-            return Give(actor, queue, order);
+        private readonly List<IOrderable> _recipients;
+        private readonly bool _queue;
 
-        // Считаем от конца очереди, если дописываем: подход должен вести оттуда,
-        // где юнит окажется, а не оттуда, где он стоит сейчас
-        var from = queue && unit.Orders.Count > 0
-            ? unit.Orders.Items[^1].Point
-            : unit.GlobalPosition;
+        /// <summary>Хвосты, уже приведённые в общую ветку. Пристёгивать второй раз нечего.</summary>
+        private readonly HashSet<OrderList> _linked = new();
 
-        float range = unit.Definition.WorkRangePx;
-        var to = target.GlobalPosition;
+        private OrderList _branch;
+        private Order _order;
 
-        if (from.DistanceTo(to) <= range)
-            return Give(actor, queue, order);
+        public Assignment(List<IOrderable> recipients, bool queue)
+        {
+            _recipients = recipients;
+            _queue = queue;
+        }
 
-        var direction = (from - to).Normalized();
-        if (direction == Vector2.Zero)
-            direction = Vector2.Right;
+        public bool Give(IOrderable actor, System.Func<Order> compose)
+        {
+            _order ??= compose();
 
-        return Give(actor, queue, Order.MoveTo(to + direction * range * 0.8f), order);
+            if (!actor.Orders.Allows(_order.Kind))
+                return false;
+
+            bool taken = _queue ? Enqueue(actor) : Adopt(actor);
+
+            if (taken && actor is Unit unit)
+                unit.SetAnchor(_order.Point);
+
+            return taken;
+        }
+
+        /// <summary>
+        /// Приказ вместо прежних: получатель подписывается на общую ветку, бросая свою.
+        /// Ветка заводится на первом получателе и достаётся всем остальным той же самой.
+        /// </summary>
+        private bool Adopt(IOrderable actor)
+        {
+            actor.Orders.Adopt(Branch());
+            return true;
+        }
+
+        /// <summary>
+        /// Приказ в дополнение к прежним: хвост очереди получателя ПРИСТЁГИВАЕТСЯ к общей
+        /// ветке. Получатель доделывает своё и переходит в неё, а само намерение хранится
+        /// один раз — сколько бы разных очередей ни сошлось в эту ветку.
+        ///
+        /// Свободному пристёгивать нечего, и он подписывается на ветку напрямую.
+        ///
+        /// Если конец цепочки общий с теми, кого игрок не выделял, получатель сперва
+        /// забирает свой остаток себе (<see cref="OrderQueue.Fork"/>): приказ, отданный
+        /// части отряда, делает из неё другой отряд, и навязывать его остальным нельзя.
+        /// </summary>
+        private bool Enqueue(IOrderable actor)
+        {
+            if (actor.Orders.List == null)
+                return Adopt(actor);
+
+            if (!Within(actor.Orders.List.Tail))
+                actor.Orders.Fork();
+
+            var tail = actor.Orders.List.Tail;
+
+            // Хвост уже ведёт в эту ветку — второй раз его пристёгивать нечем и незачем
+            if (tail == Branch() || !_linked.Add(tail))
+                return true;
+
+            tail.LinkNext(Branch());
+            return true;
+        }
+
+        /// <summary>
+        /// Следующий приказ той же раздачи. Ложится в ту же ветку, что и предыдущий:
+        /// партия планов, размеченная одним протаскиванием, — это одна задача из многих
+        /// шагов, а не сотня отдельных веток, сцепленных в цепочку.
+        /// </summary>
+        public void Continue() => _order = null;
+
+        /// <summary>Общая ветка раздачи. Приказ ложится в неё при первом же получателе.</summary>
+        private OrderList Branch()
+        {
+            _branch ??= OrderList.Open();
+
+            if (_branch.IndexOf(_order) < 0)
+                _branch.Add(_order);
+
+            return _branch;
+        }
+
+        /// <summary>Все ли, кто способен дойти до ветки, — из числа получателей приказа.</summary>
+        private bool Within(OrderList list) => list.Within(_recipients);
     }
 
-    private static bool Give(IOrderable actor, bool queue, params Order[] orders) =>
-        queue ? actor.Orders.TryEnqueue(orders) : actor.Orders.TrySet(orders);
+    /// <summary>
+    /// За кем идти: своя сущность под курсором, не входящая в само выделение.
+    ///
+    /// ВЫДЕЛЕННЫЙ ВЕДУЩИМ НЕ БЫВАЕТ. Щелчок по своему же отряду — обычное указание идти
+    /// туда, где он стоит, и превращать его в сопровождение нельзя: отряд принялся бы ходить
+    /// сам за собой, а половина его при этом получила бы приказ, которого игрок не отдавал.
+    /// Поэтому проверка стоит здесь, у разбора цели, а не у раздачи: приказ сопровождения
+    /// либо есть у всех получателей, либо его нет вовсе.
+    /// </summary>
+    private Node2D Leader(Vector2 point, List<IOrderable> recipients) =>
+        ActorAt(point) is { } found && !recipients.Contains(found) ? found as Node2D : null;
+
+    /// <summary>
+    /// План под курсором. Спрашивается отдельно от карты препятствий, потому что план
+    /// в ней не значится: место он держит только для правила постановки.
+    /// </summary>
+    private BuildPlan PlanAt(Vector2 point)
+    {
+        foreach (var plan in GM.Index.All<BuildPlan>())
+            if (plan.NeedsWork && plan.Footprint.HasPoint(point))
+                return plan;
+
+        return null;
+    }
+
+    // ПОДХОД ОТДЕЛЬНЫМ ПРИКАЗОМ БОЛЬШЕ НЕ СТАВИТСЯ.
+    //
+    // Прежде рабочий приказ раздавался цепочкой «дойти, потом работать», и точка подхода
+    // считалась для каждого исполнителя своя. Списку, общему на весь отряд, такой приказ
+    // принадлежать не может: в нём место одно, а точек подхода столько же, сколько юнитов.
+    //
+    // Потери в этом нет. Подход механике никогда и не был нужен — исполнитель доходит
+    // до места работы сам (Unit.RunWork), — а нужен он был игроку, чтобы путь читался
+    // в очереди отдельным шагом. Теперь очередь содержит ровно то, что игрок приказал,
+    // а путь по-прежнему виден: линия приказа тянется от юнита к месту работы.
 
     /// <summary>
     /// Враг в указанной точке. Корпус небольшой, поэтому даём припуск —
@@ -575,11 +729,15 @@ public partial class CommandSystem : GameSystem
             : null;
 
     /// <summary>
-    /// Поставить всю размеченную партию. Негодные места пропускаются молча: игрок видел их
-    /// красными всё протаскивание, и отказывать за всю партию из-за одного занятого места
-    /// значило бы требовать безошибочного ведения мыши.
+    /// Разметить всю размеченную партию планами. Негодные места пропускаются молча: игрок
+    /// видел их красными всё протаскивание, и отказывать за всю партию из-за одного занятого
+    /// места значило бы требовать безошибочного ведения мыши.
     ///
-    /// План считается заново по точной позиции отпускания кнопки, а не по визуальному
+    /// СТАВИТСЯ ПЛАН, А НЕ КАРКАС. Каркас появится на месте плана, когда до него дойдёт
+    /// исполнитель, — см. <see cref="BuildPlan"/>. Поэтому щелчок больше не создаёт
+    /// препятствий на другом конце карты и ничего не даёт противнику под обстрел.
+    ///
+    /// Раскладка считается заново по точной позиции отпускания кнопки, а не по визуальному
     /// прогнозу и не по последнему кадру представления: между кадром и отпусканием курсор
     /// успевает сдвинуться, и поставить нужно то, куда игрок ткнул фактически.
     /// </summary>
@@ -592,44 +750,46 @@ public partial class CommandSystem : GameSystem
         if (def == null || BlueprintScene == null)
             return;
 
-        BuildPlan.Compute(GM, def, _buildAnchor, point, Input.IsKeyPressed(Key.Alt), _plan);
+        BuildLayout.Compute(GM, def, _buildAnchor, point, Input.IsKeyPressed(Key.Alt), _plan);
 
         // Строить пойдут выделенные — как и с любым другим приказом. Без выделения
-        // каркасы просто встанут на места и будут ждать, пока за них возьмутся
-        // свободные боты: те ищут работу сами
-        bool queue = Input.IsKeyPressed(Key.Shift);
+        // планы просто останутся размеченными и будут ждать, пока за них возьмутся:
+        // подвижный сам за стройку не берётся, а башня-сборщик берётся в своём радиусе
+        //
+        // Раздача на всю партию одна: размеченное одним протаскиванием — это одна задача,
+        // и ветка приказов у неё одна. Поэтому Shift здесь решает только то, заменяет ли
+        // партия прежние дела или пристёгивается к ним
+        var assignment = new Assignment(Recipients(), Input.IsKeyPressed(Key.Shift));
 
         foreach (var spot in _plan)
         {
             if (!spot.Valid)
                 continue;
 
-            var blueprint = PlaceOne(def, spot);
+            var plan = PlaceOne(def, spot);
+
+            assignment.Continue();
 
             foreach (var actor in Recipients())
-                GiveWork(actor, queue, Order.Work(OrderKind.Build, blueprint), blueprint);
-
-            // Первый каркас партии приказывается по нынешнему состоянию Shift, остальные —
-            // всегда в очередь: иначе каждый следующий стирал бы приказ на предыдущий
-            queue = true;
+                assignment.Give(actor, () => Order.Work(OrderKind.Build, plan));
 
             _placed = true;
         }
     }
 
-    private Blueprint PlaceOne(UnitDefinition def, BuildSpot spot)
+    private BuildPlan PlaceOne(UnitDefinition def, BuildSpot spot)
     {
-        var blueprint = GM.Spawn.SpawnBlueprint(BlueprintScene, def, spot.Center, spot.Facing);
+        var plan = GM.Spawn.SpawnPlan(def, spot.Center, spot.Facing, BlueprintScene);
 
-        GM.Events.Append(new BlueprintPlaced
+        GM.Events.Append(new BuildPlanned
         {
-            EntityId = blueprint.Id,
+            EntityId = plan.Id,
             DefinitionId = def.Id,
             Pos = spot.Center,
             Facing = spot.Facing,
         });
 
-        return blueprint;
+        return plan;
     }
 
     private void EnsureNodes()

@@ -1,0 +1,26 @@
+# Stitch: боевой ремонтник. Чинит юнитов и постройки, сам не строит.
+
+id    = "stitch"
+base  = "/units/base_unit.toml"
+name  = "Стич"
+color = [0.45, 0.85, 0.95]
+tags  = ["mobile", "builder"]
+tools = ["stitch_arm"]
+
+[footprint]
+rows = ["#"]
+
+[body]
+max_health = 50.0
+radius     = 0.3
+
+[movement]
+speed      = 2.4
+turn_speed = 220.0
+
+[assembly]
+cost_metal   = 250.0
+frame_health = 80.0
+
+[terror]
+army_power = 0.0

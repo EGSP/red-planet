@@ -33,12 +33,15 @@
 [ext_resource type="Script" uid="uid://bnkead8a2t11f" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
 [ext_resource type="Script" uid="uid://3fhl61arlssd" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
 [ext_resource type="Script" uid="uid://bpyei10ejuqti" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
-[ext_resource type="Resource" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
+[ext_resource type="Resource" uid="uid://dpydcpt1gpoip" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
 [ext_resource type="Script" uid="uid://bwl8ipmuljqfq" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="40_worldsettings"]
-[ext_resource type="Script" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
-[ext_resource type="Resource" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
+[ext_resource type="Script" uid="uid://bgcaq6cgye8l8" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
+[ext_resource type="Resource" uid="uid://byklt06fheqwx" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
+[ext_resource type="Resource" uid="uid://dj0jlvgwg4ip7" path="res://resources/tuning/nav.tres" id="43_navsettings"]
+[ext_resource type="Script" uid="uid://dngnl101xo5lo" path="res://scripts/ui/HoverSystem.cs" id="44_hover"]
+[ext_resource type="Script" uid="uid://xosvhvgeak3m" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
 
 [node name="Session" type="Node2D" unique_id=716196635]
 script = ExtResource("1_session")
@@ -50,6 +53,7 @@ StartingMetal = 250.0
 script = ExtResource("2_manager")
 Playground = NodePath("../Playground")
 WorldTuning = ExtResource("40_worldsettings")
+NavTuning = ExtResource("43_navsettings")
 
 [node name="CursorSystem" type="Node" parent="Systems" unique_id=926610412]
 script = ExtResource("5_cursor")
@@ -61,6 +65,13 @@ script = ExtResource("5_command")
 BlueprintScene = ExtResource("19_blueprint")
 Phase = 0
 StepOrder = 1
+UpdateCycle = 1
+
+[node name="HoverSystem" type="Node" parent="Systems" unique_id=696345219]
+script = ExtResource("44_hover")
+OutlineColor = Color(0.92, 0.97066665, 1, 0.16862746)
+Phase = 0
+StepOrder = 2
 UpdateCycle = 1
 
 [node name="PlayerAiSystem" type="Node" parent="Systems" unique_id=1578640243]
@@ -179,6 +190,9 @@ script = ExtResource("32_portalbar")
 
 [node name="SelectionPanel" type="CanvasLayer" parent="View" unique_id=1208466352]
 script = ExtResource("25_selection")
+
+[node name="HoverPanel" type="CanvasLayer" parent="View" unique_id=867170570]
+script = ExtResource("45_hoverpanel")
 
 [node name="CommandPanel" type="CanvasLayer" parent="View" unique_id=387086853]
 script = ExtResource("26_commands")

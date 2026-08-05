@@ -1,0 +1,14 @@
+# Скорострел Peacekeeper: PA dmg 18, RoF 1.0, range 70, vel 130.
+
+id   = "peacekeeper_smg"
+base = "/tools/base_weapon.toml"
+name = "Скорострел Миротворца"
+
+range             = 4.7
+damage            = 18.0
+fire_interval     = 1.0
+projectile_speed  = 8.7
+spread_degrees    = 7.0
+aim_cone_degrees  = 16.0
+projectile_radius = 0.05
+projectile_color  = [1.0, 0.7, 0.3]

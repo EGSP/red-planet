@@ -1,0 +1,15 @@
+# Огнемёт Inferno: PA dmg 100, RoF 4, range 20.
+
+id   = "inferno_flamer"
+base = "/tools/base_weapon.toml"
+name = "Огнемёт Инферно"
+
+range             = 1.3
+damage            = 100.0
+fire_interval     = 0.25
+projectile_speed  = 10.0
+spread_degrees    = 12.0
+aim_cone_degrees  = 28.0
+projectile_radius = 0.12
+projectile_color  = [1.0, 0.55, 0.2]
+aim_while_moving  = false

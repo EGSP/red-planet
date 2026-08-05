@@ -1,0 +1,11 @@
+# Строительная рука коммандера. PA Titans construction_demand: metal 30 / energy 1750.
+
+id   = "commander_arm"
+name = "Строительная рука коммандера"
+kind = "work"
+
+range            = 2.0
+power            = 30.0
+energy_per_power = 58.333
+works            = ["build"]
+repairs_units    = true

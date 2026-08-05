@@ -1,0 +1,33 @@
+# Арес: титан-крепость MLA. PA HP 50000 / cost 30000; main 800×4 @ RoF 0.3, range 400.
+
+id    = "ares"
+base  = "/units/base_unit.toml"
+name  = "Арес"
+color = [0.45, 0.72, 0.95]
+tags  = ["mobile", "titan", "important"]
+tools = ["ares_battery"]
+
+[footprint]
+rows = ["##", "##"]
+
+[body]
+max_health   = 50000.0
+radius       = 0.9
+vision_range = 14.0
+hull         = "fortress"
+armor_rings  = 1
+
+[movement]
+speed      = 2.0
+turn_speed = 30.0
+brake      = 3.0
+
+[battle]
+approach_hold = 0.85
+
+[assembly]
+cost_metal   = 30000.0
+frame_health = 50000.0
+
+[terror]
+army_power = 700.0

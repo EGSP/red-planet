@@ -15,8 +15,8 @@ prefer_next = ["heavy_group"]
 
 terror_range = [-1, -1]
 
-army_power_budget     = 8.0
-army_power_per_terror = 0.0
+army_power_budget     = 2.0
+army_power_per_terror = 0.1
 
 chill_interval_multiplier = 0.6
 

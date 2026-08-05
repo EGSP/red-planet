@@ -36,6 +36,13 @@ public partial class DebugPanel : CanvasLayer
     /// <summary>Во сколько знаков укладывается строка подсказки.</summary>
     private const int TooltipWidth = 64;
 
+    /// <summary>Цвета выделения последнего замера при превышении медианы.</summary>
+    private const string WarnInk = "#ffd24a";
+
+    private const string AlertInk = "#ff9a3c";
+
+    private const string AlarmInk = "#ff5a4a";
+
     private Control _frame;
     private Control[] _pages;
     private Label _combat;
@@ -43,6 +50,13 @@ public partial class DebugPanel : CanvasLayer
     private Label _paths;
     private Label _waves;
     private Label _fog;
+    private RichTextLabel _profile;
+
+    /// <summary>
+    /// Поколение замеров, по которому уже собран текст. Сравнение с текущим избавляет
+    /// от пересборки списка каждый кадр: интервал закрывается четыре раза в секунду.
+    /// </summary>
+    private int _profileShown = -1;
 
     public override void _Ready()
     {
@@ -122,13 +136,10 @@ public partial class DebugPanel : CanvasLayer
         var stack = new VBoxContainer { CustomMinimumSize = new Vector2(PanelWidth, 0) };
         panel.AddChild(stack);
 
-        _pages = new Control[6];
-        _pages[0] = Page(stack);
-        _pages[1] = Page(stack);
-        _pages[2] = Page(stack);
-        _pages[3] = Page(stack);
-        _pages[4] = Page(stack);
-        _pages[5] = Page(stack);
+        _pages = new Control[7];
+
+        for (int i = 0; i < _pages.Length; i++)
+            _pages[i] = Page(stack);
 
         FillNav(_pages[0]);
         FillBoi(_pages[1]);
@@ -136,6 +147,7 @@ public partial class DebugPanel : CanvasLayer
         FillGiz(_pages[3]);
         FillWav(_pages[4]);
         FillDia(_pages[5]);
+        FillPrf(_pages[6]);
 
         var group = new ButtonGroup();
         Tab(tabs, group, 0, "nav", "Навигация", IconNav());
@@ -144,6 +156,7 @@ public partial class DebugPanel : CanvasLayer
         Tab(tabs, group, 3, "giz", "Области юнитов", IconGiz());
         Tab(tabs, group, 4, "wav", "Волны", IconWav());
         Tab(tabs, group, 5, "dia", "Диагностика", IconDia());
+        Tab(tabs, group, 6, "prf", "Замеры систем", IconPrf());
 
         ShowPage(0);
     }
@@ -414,6 +427,33 @@ public partial class DebugPanel : CanvasLayer
         box.AddChild(hints);
     }
 
+    private void FillPrf(Node box)
+    {
+        Section(box, "Замеры систем",
+            "Время шага каждой системы в порядке вызова: сначала физический цикл, затем " +
+            "графический. Под названием системы стоят три последних значения, от старого " +
+            "к новому, в миллисекундах.");
+
+        Check(box, "вести замеры",
+            "Измерять время шага. Пока признак снят, планировщик вызывает системы без " +
+            "обёртки, а накопленные ряды сброшены: сравнивать текущее время с давно " +
+            $"устаревшим было бы бессмысленно. Окно хранения {StepProfiler.WindowSeconds:0} с.",
+            () => DebugFlags.Profile, on => DebugFlags.Profile = on);
+
+        _profile = Report(box,
+            "Каждое число — среднее время шага за четверть секунды: значение отдельного " +
+            "кадра скачет от уборки мусора и планировщика операционной системы, и читать " +
+            "его, обновляемое шестьдесят раз в секунду, невозможно. Последнее значение " +
+            "выделяется цветом, когда превышает медиану окна: жёлтым от " +
+            $"{Percent(StepProfiler.WarnRatio)}, оранжевым от {Percent(StepProfiler.AlertRatio)}, " +
+            $"красным от {Percent(StepProfiler.AlarmRatio)}. У систем быстрее " +
+            $"{StepProfiler.NoiseFloorMs:0.00} мс раскраска не ведётся: там относительный " +
+            "разброс говорит только о погрешности измерения.");
+    }
+
+    /// <summary>Порог превышения как проценты — так он и назван в подсказке.</summary>
+    private static string Percent(double ratio) => $"{(ratio - 1.0) * 100.0:0}%";
+
     // ── иконки вкладок ────────────────────────────────────────────────────────────
 
     /// <summary>Сетка 3×3 — навигационный растр.</summary>
@@ -538,6 +578,27 @@ public partial class DebugPanel : CanvasLayer
         }
     });
 
+    /// <summary>Ломаная с выбросом — ряд замеров.</summary>
+    private static Texture2D IconPrf() => Paint(image =>
+    {
+        int[] path =
+        {
+            2, 11, 3, 11, 4, 10, 5, 11, 6, 11, 7, 8, 8, 4, 9, 8, 10, 11, 11, 11, 12, 10, 13, 11,
+        };
+
+        for (int i = 0; i < path.Length; i += 2)
+            Dot(image, path[i], path[i + 1]);
+
+        for (int y = 5; y <= 7; y++)
+            Dot(image, 8, y);
+
+        for (int y = 9; y <= 10; y++)
+        {
+            Dot(image, 7, y);
+            Dot(image, 9, y);
+        }
+    });
+
     private static ImageTexture Paint(Action<Image> draw)
     {
         var image = Image.CreateEmpty(16, 16, false, Image.Format.Rgba8);
@@ -570,6 +631,31 @@ public partial class DebugPanel : CanvasLayer
         };
         label.AddThemeFontSizeOverride("font_size", 11);
         label.AddThemeColorOverride("font_color", Numbers);
+        parent.AddChild(label);
+
+        Explain(label, tooltip);
+        return label;
+    }
+
+    /// <summary>
+    /// Поле для текста с разметкой. Отличается от <see cref="Readout"/> тем, что part
+    /// строки можно выделить цветом, а обычная надпись красится только целиком.
+    /// Перенос выключен намеренно: список замеров выровнен по столбцам, и перенос
+    /// длинного названия системы разбил бы выравнивание.
+    /// </summary>
+    private static RichTextLabel Report(Node parent, string tooltip)
+    {
+        var label = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            FitContent = true,
+            ScrollActive = false,
+            AutowrapMode = TextServer.AutowrapMode.Off,
+            CustomMinimumSize = new Vector2(PanelWidth, 0),
+        };
+
+        label.AddThemeFontSizeOverride("normal_font_size", 11);
+        label.AddThemeColorOverride("default_color", Numbers);
         parent.AddChild(label);
 
         Explain(label, tooltip);
@@ -696,11 +782,15 @@ public partial class DebugPanel : CanvasLayer
 
         _navigation.Text =
             $"поле {NavGrid.Width}×{NavGrid.Width} по {NavGrid.Cell} px, зазор {Const.BuildMarginPx:0} px\n" +
-            $"препятствий {gm.Obstacles.Count}   ревизия {gm.Nav.Revision}\n" +
-            $"последняя пересборка {gm.Nav.LastBuildMs:0.00} мс";
+            $"препятствий {gm.Obstacles.Count}   ревизия {gm.Nav.Revision} " +
+            $"(снимок {gm.Nav.ActiveRevision}, ждут {gm.Nav.RequestedRevision})\n" +
+            $"пересчёт {gm.Nav.LastBuildMs:0.00} мс, тайлов {gm.Nav.LastRebuiltTiles}" +
+            (gm.Nav.BuildPending ? ", фон занят" : "");
 
         _waves.Text = Waves(gm.System<WaveSystem>());
         _fog.Text = Vision(gm.System<VisionSystem>());
+
+        RefreshProfile(gm);
 
         var pathfinding = gm.System<PathfindingSystem>();
         var movement = gm.System<MovementSystem>();
@@ -773,6 +863,138 @@ public partial class DebugPanel : CanvasLayer
         return $"поле {field.Width}×{field.Width} по {field.Cell} px\n" +
                $"источников {field.Sources}   скрыто {vision.Hidden}\n" +
                $"последняя пересборка {field.LastBuildMs:0.00} мс, {rate}";
+    }
+
+    /// <summary>
+    /// Список замеров. Пересобирается не каждый кадр, а при закрытии очередного интервала:
+    /// сборка текста на несколько десятков систем сама стоит времени, и вести её кадр
+    /// за кадром значило бы вносить в измеряемый кадр ту нагрузку, которую мы измеряем.
+    /// </summary>
+    private void RefreshProfile(GameManager gm)
+    {
+        var profiler = gm.Scheduler.Profiler;
+
+        if (!DebugFlags.Profile)
+        {
+            if (_profileShown == -1)
+                return;
+
+            _profile.Text = "замеры выключены";
+            _profileShown = -1;
+            return;
+        }
+
+        if (profiler.Generation == _profileShown)
+            return;
+
+        _profileShown = profiler.Generation;
+        _profile.Text = Profile(profiler);
+    }
+
+    private static string Profile(StepProfiler profiler)
+    {
+        var text = new System.Text.StringBuilder();
+
+        double process = Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000.0;
+        double physics = Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000.0;
+
+        text.Append($"кадр {Engine.GetFramesPerSecond():0} к/с\n" +
+                    $"движок: process {process:0.00} мс, physics {physics:0.00} мс");
+
+        var tracks = profiler.Tracks;
+
+        if (tracks.Count == 0)
+        {
+            text.Append("\n\nзамеров ещё нет");
+            return text.ToString();
+        }
+
+        double inPhysics = 0f;
+        double inProcess = 0f;
+
+        foreach (var track in tracks)
+        {
+            double last = track.Value(0);
+
+            if (double.IsNaN(last))
+                continue;
+
+            if (track.Cycle == UpdateCycle.PhysicsProcess)
+                inPhysics += last;
+            else
+                inProcess += last;
+        }
+
+        // Итог по циклу — сумма последних значений: сравнение её со временем движка выше
+        // показывает, сколько кадра приходится на системы, а сколько на всё остальное
+        text.Append($"\nсистемы: физика {inPhysics:0.000} мс, графика {inProcess:0.000} мс");
+
+        UpdateCycle? shown = null;
+
+        foreach (var track in tracks)
+        {
+            if (shown != track.Cycle)
+            {
+                shown = track.Cycle;
+                string title = shown == UpdateCycle.PhysicsProcess
+                    ? "физический цикл"
+                    : "графический цикл";
+
+                text.Append($"\n\n[color=#{Heading.ToHtml(false)}]{title}[/color]");
+            }
+
+            text.Append($"\n{track.Name}\n    {Samples(track)}");
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>
+    /// Три последних значения, от старого к новому. Цветом выделяется только последнее:
+    /// вопрос стоит «выросла ли задержка сейчас», и подсветка предыдущих на него не отвечает.
+    /// </summary>
+    private static string Samples(StepProfiler.Track track)
+    {
+        var text = new System.Text.StringBuilder();
+        double median = track.Median();
+
+        for (int back = StepProfiler.Shown - 1; back >= 0; back--)
+        {
+            double value = track.Value(back);
+
+            if (double.IsNaN(value))
+                continue;
+
+            if (text.Length > 0)
+                text.Append("   ");
+
+            string ink = back == 0 ? Alarm(value, median) : null;
+
+            text.Append(ink == null ? $"{value:0.000}" : $"[color={ink}]{value:0.000}[/color]");
+        }
+
+        return text.Length == 0 ? "—" : text.ToString();
+    }
+
+    /// <summary>
+    /// Цвет последнего значения по превышению медианы окна. Пустой ответ означает,
+    /// что выделять нечего: либо окно ещё не набрано, либо система слишком быстра,
+    /// чтобы относительный разброс что-то значил.
+    /// </summary>
+    private static string Alarm(double value, double median)
+    {
+        if (double.IsNaN(median) || median < StepProfiler.NoiseFloorMs)
+            return null;
+
+        double ratio = value / median;
+
+        if (ratio >= StepProfiler.AlarmRatio)
+            return AlarmInk;
+
+        if (ratio >= StepProfiler.AlertRatio)
+            return AlertInk;
+
+        return ratio >= StepProfiler.WarnRatio ? WarnInk : null;
     }
 
     /// <summary>Время партии как «минуты:секунды»: по секундам от начала считать неудобно.</summary>

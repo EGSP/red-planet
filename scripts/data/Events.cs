@@ -31,6 +31,38 @@ public struct ResourceSpent : IEventRecord
     public float Amount;
 }
 
+/// <summary>
+/// Размечен план постройки — намерение игрока, из которого потом вырастет каркас.
+///
+/// Отдельно от <see cref="BlueprintPlaced"/> намеренно: план и каркас появляются в разное
+/// время и по разным поводам. План — по щелчку игрока, каркас — когда исполнитель дошёл
+/// до места. План может не стать каркасом вовсе, если место к тому времени заняли.
+/// </summary>
+[TransientEvent]
+public struct BuildPlanned : IEventRecord
+{
+    public int SequenceId { get; set; }
+    public int EntityId;
+    public string DefinitionId;
+    public Vector2 Pos;
+    public float Facing;
+}
+
+/// <summary>
+/// План снят: место к приходу исполнителя оказалось занято, либо игрок отказался от
+/// приказа строить и план остался без нацеленных. Очередь идёт дальше сама, а след
+/// остаётся здесь: молчаливое исчезновение размеченного иначе выглядело бы отказом
+/// без причины.
+/// </summary>
+[TransientEvent]
+public struct BuildPlanCancelled : IEventRecord
+{
+    public int SequenceId { get; set; }
+    public int EntityId;
+    public string DefinitionId;
+    public Vector2 Pos;
+}
+
 /// <summary>Поставлен каркас будущей постройки.</summary>
 [TransientEvent]
 public struct BlueprintPlaced : IEventRecord

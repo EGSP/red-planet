@@ -16,4 +16,23 @@ public static class NodeExtensions
 
         return null;
     }
+
+    /// <summary>
+    /// Соседний узел нужного рода — под тем же родителем. Нужен элементам интерфейса,
+    /// которые встают друг над другом: ярус стопки обязан знать высоту нижнего яруса,
+    /// но привязываться к имени узла в сцене не должен.
+    /// </summary>
+    public static T Sibling<T>(this Node node) where T : Node
+    {
+        var parent = node?.GetParent();
+
+        if (parent == null)
+            return null;
+
+        foreach (var child in parent.GetChildren())
+            if (child is T found && !ReferenceEquals(found, node))
+                return found;
+
+        return null;
+    }
 }

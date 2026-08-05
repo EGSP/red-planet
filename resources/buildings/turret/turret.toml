@@ -1,0 +1,30 @@
+# Турель: PA laser_defense_single — HP 400, cost 225, dmg 60, RoF 2, range 100.
+
+id    = "turret"
+base  = "/buildings/base_building.toml"
+name  = "Турель"
+class = "turret"
+color = [0.6, 0.85, 1.0]
+tags  = ["structure", "defense", "t1"]
+tools = ["turret_gun"]
+
+[footprint]
+rows         = ["#"]
+pattern      = "line"
+pattern_alt  = "diamond"
+pattern_step = "margin"
+
+[body]
+max_health = 400.0
+
+[movement]
+turn_speed = 90.0
+
+[terror]
+expansion_power = 8.0
+
+[assembly]
+cost_metal = 225.0
+
+[orders]
+allow = ["attack", "delete"]

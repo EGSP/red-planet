@@ -1,0 +1,17 @@
+# Общий предок стволов. Числа совпадают с умолчаниями WeaponDefinition в коде;
+# конкретный файл перекрывает только отличия. Сам в каталог не попадает.
+
+id       = "base_weapon"
+abstract = true
+name     = "Оружие"
+kind     = "weapon"
+
+range             = 3.0
+damage            = 10.0
+fire_interval     = 1.0
+projectile_speed  = 14.0
+spread_degrees    = 1.5
+aim_cone_degrees  = 8.0
+projectile_radius = 0.08
+projectile_color  = [1.0, 0.85, 0.4]
+aim_while_moving  = true

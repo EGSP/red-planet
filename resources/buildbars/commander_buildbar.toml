@@ -22,6 +22,7 @@ cells = [
 	{ x = 1, y = 0, build = "metal_maker" },
 	{ x = 2, y = 0, build = "extractor" },
 	{ x = 3, y = 0, build = "bot_factory" },
+	{ x = 4, y = 0, build = "vehicle_factory" },
 ]
 
 [[sections]]
@@ -32,13 +33,9 @@ cells = [
 	{ x = 0, y = 0, build = "turret" },
 ]
 
-[[sections]]
-id = "units"
-title = "Юниты"
-order = 2
-cells = [
-	{ x = 0, y = 0, build = "fabricator" },
-]
+# Секции юнитов у коммандера нет намеренно: строители выпускаются только заводом.
+# Отсюда следует, что первый завод коммандер ставит сам, и до него у игрока
+# нет никого, кроме него самого.
 
 [[sections]]
 id = "special"

@@ -1,0 +1,11 @@
+# Манипулятор башни-сборщика. PA fab_tower: metal 18 / energy 1000, range 75.
+
+id   = "assembler_arm"
+name = "Манипулятор сборщика"
+kind = "work"
+
+range            = 5.0
+power            = 18.0
+energy_per_power = 55.556
+works            = ["build"]
+repairs_units    = true

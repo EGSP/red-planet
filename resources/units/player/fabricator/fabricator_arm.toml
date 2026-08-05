@@ -1,0 +1,11 @@
+# Рука фабрикатора. PA fabrication_bot: metal 8 / energy 600.
+
+id   = "fabricator_arm"
+name = "Строительная рука"
+kind = "work"
+
+range            = 2.0
+power            = 8.0
+energy_per_power = 75.0
+works            = ["build"]
+repairs_units    = true

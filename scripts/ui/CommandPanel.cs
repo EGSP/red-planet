@@ -4,14 +4,10 @@ using Godot;
 /// <summary>
 /// Панель приказов у правого края: что доступно текущему выделению.
 ///
-/// Набор берём у самих сущностей — <c>AllowedOrders</c> работает и справкой, и фильтром,
-/// поэтому показанное здесь и принятое на деле разойтись не могут. Приказы объединяются:
-/// если в отряде есть хоть один умеющий копать, «копать» в списке будет, хотя уйдёт
-/// он только копателям. Так и должно быть — приказ отдаётся отряду, а разбирают его
-/// по себе сами исполнители.
-///
-/// Кнопок здесь нет намеренно: приказ отдаётся правым щелчком по цели, и вид приказа
-/// выбирает сама цель. Список — подсказка, а не пульт.
+/// Принятые приказы (<see cref="IOrderable.AllowedOrders"/>) и мягкие
+/// (<see cref="IOrderable.SoftOrders"/>) объединяются по выделению. Мягкий приказ
+/// помечается звёздочкой: умение есть, в allow и deny его нет. Явный deny в список
+/// не входит вовсе. Кнопок здесь нет: приказ отдаётся правым щелчком; список — подсказка.
 /// </summary>
 public partial class CommandPanel : CanvasLayer
 {
@@ -75,43 +71,68 @@ public partial class CommandPanel : CanvasLayer
             return;
         }
 
-        var kinds = KindsOf(selected);
-        string key = string.Join('|', kinds);
+        var lines = LinesOf(selected);
+        string key = string.Join('|', lines);
 
-        _frame.Visible = kinds.Count > 0;
+        _frame.Visible = lines.Count > 0;
 
         if (key == _key)
             return;
 
         _key = key;
-        Rebuild(kinds);
+        Rebuild(lines);
     }
 
-    /// <summary>Объединение наборов выделенных, в порядке объявления видов приказов.</summary>
-    private static List<OrderKind> KindsOf(IReadOnlyList<IOrderable> selected)
+    /// <summary>
+    /// Объединение наборов выделенных. Если хотя бы у одного приказ принят — строка
+    /// без звёздочки; если у всех он только мягкий — со звёздочкой.
+    /// </summary>
+    private static List<(OrderKind Kind, bool Soft)> LinesOf(IReadOnlyList<IOrderable> selected)
     {
-        var union = OrderSet.None;
+        var accepted = OrderSet.None;
+        var soft = OrderSet.None;
 
         foreach (var actor in selected)
-            foreach (var kind in actor.AllowedOrders.Kinds)
-                union = union.With(kind);
+        {
+            accepted = accepted.Union(actor.AllowedOrders);
+            soft = soft.Union(actor.SoftOrders);
+        }
 
-        return new List<OrderKind>(union.Kinds);
+        soft = soft.Except(accepted);
+
+        var lines = new List<(OrderKind, bool)>();
+
+        foreach (OrderKind kind in System.Enum.GetValues<OrderKind>())
+        {
+            if (accepted.Allows(kind))
+                lines.Add((kind, false));
+            else if (soft.Allows(kind))
+                lines.Add((kind, true));
+        }
+
+        return lines;
     }
 
-    private void Rebuild(List<OrderKind> kinds)
+    private void Rebuild(List<(OrderKind Kind, bool Soft)> lines)
     {
         foreach (var child in _list.GetChildren())
             child.QueueFree();
 
-        foreach (var kind in kinds)
+        foreach (var (kind, soft) in lines)
         {
-            var line = new Label { Text = Order.Name(kind) };
+            var line = new Label
+            {
+                Text = soft ? $"{Order.Name(kind)} *" : Order.Name(kind),
+            };
             line.AddThemeFontSizeOverride("font_size", 14);
 
-            // Тот же цвет, что у линии приказа на карте: подсказка и очередь читаются вместе
-            line.AddThemeColorOverride("font_color", Order.Tint(kind));
+            // Тот же цвет, что у линии приказа на карте: подсказка и очередь читаются вместе.
+            // Мягкий приказ чуть бледнее — видно, что к исполнению он не принимается.
+            var tint = Order.Tint(kind);
+            if (soft)
+                tint = new Color(tint.R, tint.G, tint.B, 0.55f);
 
+            line.AddThemeColorOverride("font_color", tint);
             _list.AddChild(line);
         }
     }

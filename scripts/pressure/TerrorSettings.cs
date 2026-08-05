@@ -47,23 +47,17 @@ public partial class TerrorSettings : Resource
 
     /// <summary>
     /// Сколько энергии стоит единица метала при приведении потоков к одному знаменателю.
-    /// Курс — отношение генератора к экстрактору (6 энергии / 7 металла), как у пары
+    /// Курс — отношение генератора к экстрактору (600 энергии / 7 металла), как у пары
     /// energy_plant / metal_extractor в celestial. Курс синтезатора сюда не годится —
     /// он намеренно невыгоден и означает сброс излишков, а не обмен.
     /// </summary>
-    [Export] public float EnergyPerMetal = 0.86f;
+    [Export] public float EnergyPerMetal = 85.71f;
 
     // ── Зоны удалённости ──────────────────────────────────────────────────────────
-
-    /// <summary>Радиус зоны высадки в клетках: всё внутри считается ближним.</summary>
-    [Export] public float NearRadiusCells = 8f;
-
-    /// <summary>Внешний радиус средней зоны в клетках. Дальше — фронтир.</summary>
-    [Export] public float MidRadiusCells = 15f;
-
-    [Export] public float NearZone = 0.2f;
-    [Export] public float MidZone = 1f;
-    [Export] public float FarZone = 2.5f;
+    //
+    // Раньше здесь жили Near/Mid/Far. Множитель экспансии теперь берётся из колец
+    // WorldSettings: TerrorMultiplierAt. Поля ниже оставлены пустыми, чтобы старые
+    // .tres не ссылались на отсутствующие свойства при загрузке — в подсчёт не входят.
 
     // ── Производство ──────────────────────────────────────────────────────────────
 
@@ -122,15 +116,6 @@ public partial class TerrorSettings : Resource
     /// подсчёт целиком, а так игра запускается и ведёт себя предсказуемо.
     /// </summary>
     [Export] public float FallbackExponent = 0.6f;
-
-    /// <summary>Коэффициент постройки по расстоянию от точки высадки, в клетках.</summary>
-    public float ZoneCoefficient(float distanceCells)
-    {
-        if (distanceCells <= NearRadiusCells)
-            return NearZone;
-
-        return distanceCells <= MidRadiusCells ? MidZone : FarZone;
-    }
 
     public float Production(float raw) =>
         Shape(ProductionCurve, raw, ProductionReference, ProductionWeight, ProductionTail);

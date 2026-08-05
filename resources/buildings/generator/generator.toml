@@ -1,0 +1,22 @@
+# Генератор: PA energy_plant — HP 1000, cost 400, energy +600.
+
+id    = "generator"
+base  = "/buildings/base_building.toml"
+name  = "Генератор"
+color = [0.95, 0.85, 0.35]
+tags  = ["structure", "economy", "t1"]
+
+[footprint]
+rows         = ["#"]
+pattern      = "line"
+pattern_alt  = "square"
+pattern_step = "narrow"
+
+[body]
+max_health = 1000.0
+
+[production]
+energy = 600.0
+
+[assembly]
+cost_metal = 400.0

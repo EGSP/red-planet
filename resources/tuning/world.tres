@@ -1,7 +1,52 @@
 [gd_resource type="Resource" script_class="WorldSettings" format=3 uid="uid://dxh016jrpgobj"]
 
 [ext_resource type="Script" uid="uid://y5qf2c1v7038" path="res://scripts/world/WorldSettings.cs" id="1_settings"]
+[ext_resource type="Script" uid="uid://khtidk4wx0ji" path="res://scripts/world/WorldRingDefinition.cs" id="2_ring"]
+
+[sub_resource type="Curve" id="Curve_gy6v8"]
+_data = [Vector2(0, 0), 0.0, -0.07657546, 0, 0, Vector2(0.2631579, 0.6629214), 3.3920095, 3.3920095, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Resource" id="ring_start"]
+script = ExtResource("2_ring")
+Radius = 12
+TerrorMultiplier = 0.55
+ClusterCountMax = 3
+SpotsInClusterMin = 2
+SpotsInClusterMax = 3
+ClusterProbabilityCurve = SubResource("Curve_gy6v8")
+
+[sub_resource type="Curve" id="Curve_2keds"]
+_data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(0.50717705, 0.9887641), 0.0, 0.0, 0, 0, Vector2(0.98086125, 0), 0.0, 1.4, 0, 0]
+point_count = 3
+
+[sub_resource type="Resource" id="ring_mid"]
+script = ExtResource("2_ring")
+Radius = 26
+ClusterCountMin = 5
+ClusterCountMax = 8
+SpotsInClusterMin = 2
+SpotsInClusterMax = 4
+ClusterProbabilityCurve = SubResource("Curve_2keds")
+
+[sub_resource type="Curve" id="Curve_k7r1i"]
+_data = [Vector2(0, 0), 0.0, 1.4, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Resource" id="ring_far"]
+script = ExtResource("2_ring")
+Radius = 13
+TerrorMultiplier = 2.5
+ClusterCountMin = 4
+ClusterCountMax = 6
+SpotsInClusterMin = 8
+SpotsInClusterMax = 13
+ClusterProbabilityCurve = SubResource("Curve_k7r1i")
 
 [resource]
 script = ExtResource("1_settings")
-Seed = 4076502051
+Radius = 64
+Rings = [SubResource("ring_start"), SubResource("ring_mid"), SubResource("ring_far")]
+SpotSpacing = 2
+PlacementAttempts = 63
+EnemySpawnRadius = 78

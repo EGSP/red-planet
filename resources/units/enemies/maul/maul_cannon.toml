@@ -1,0 +1,14 @@
+# Дробовик Maul: PA 35×8 @ RoF 1.0, range 50, vel 200 → один снаряд 280.
+
+id   = "maul_cannon"
+base = "/tools/base_weapon.toml"
+name = "Дробовик Молота"
+
+range             = 3.3
+damage            = 280.0
+fire_interval     = 1.0
+projectile_speed  = 13.3
+spread_degrees    = 8.0
+aim_cone_degrees  = 20.0
+projectile_radius = 0.14
+projectile_color  = [1.0, 0.45, 0.25]

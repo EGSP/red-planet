@@ -55,13 +55,14 @@ public static class Targeting
     /// что огонь прекращается от любого из этих смещений.
     /// </summary>
     public static float ApproachDistance(WeaponDefinition weapon, IDamageable target,
-        float standoffFraction)
+        float approachHoldFraction)
     {
         if (weapon == null)
             return 0f;
 
         float reach = weapon.RangePx;
-        float slack = Mathf.Max(reach * (1f - Mathf.Clamp(standoffFraction, 0f, 1f)), ApproachMargin);
+        float slack = Mathf.Max(
+            reach * (1f - Mathf.Clamp(approachHoldFraction, 0f, 1f)), ApproachMargin);
 
         return Mathf.Max(reach - slack, 0f) + (target?.HitRadius ?? 0f);
     }

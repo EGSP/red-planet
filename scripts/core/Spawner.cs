@@ -123,6 +123,27 @@ public sealed class Spawner
         return unit;
     }
 
+    /// <summary>
+    /// План застройки: намерение, а не строение. Места на карте препятствий НЕ занимает —
+    /// ходьбе он не мешает и обстрелу не подлежит, — но в индекс входит, потому что
+    /// правило постановки обязано его видеть (см. <see cref="Placement"/>).
+    /// </summary>
+    public BuildPlan SpawnPlan(UnitDefinition def, Vector2 center, float facing,
+        PackedScene frameScene)
+    {
+        var plan = new BuildPlan();
+
+        int id = _gm.NewId();
+        plan.Init(id, def, center, facing, frameScene);
+
+        _gm.Playground.Add(WorldLayer.Structures, plan);
+        _gm.Entities.Add(id, plan);
+        _gm.Index.Add(plan);
+        Enroll(plan, id, null);
+
+        return plan;
+    }
+
     /// <summary>Каркас занимает место на время стройки — его нельзя перекрыть.</summary>
     public Blueprint SpawnBlueprint(PackedScene scene, UnitDefinition def, Vector2 center,
         float facing)
@@ -239,8 +260,9 @@ public sealed class Spawner
     };
 
     /// <summary>
-    /// Какой узел поднять. Отдельный класс есть только у коммандера — из-за неуязвимости
-    /// и собственной отрисовки; всё прочее подвижное, включая противника, это Unit.
+    /// Какой узел поднять. Отдельный класс есть только у коммандера — из-за регистрации
+    /// в GameManager и собственной отрисовки счётчика урона; всё прочее подвижное,
+    /// включая противника, это Unit.
     /// </summary>
     private static Unit NewUnit(UnitClass kind) => kind switch
     {

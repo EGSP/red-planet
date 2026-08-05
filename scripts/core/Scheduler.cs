@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Godot;
 
 /// <summary>Фазы кадра. Порядок фаз фиксирован, внутри фазы — по полю Order.</summary>
@@ -50,10 +51,17 @@ public sealed class Scheduler
     /// <summary>Состав систем в порядке регистрации — по нему идёт вторая фаза инициализации.</summary>
     public IReadOnlyList<GameSystem> Systems => _systems;
 
+    /// <summary>
+    /// Замеры времени шага. Держатся здесь потому, что здесь единственное место вызова
+    /// систем: измерять их снаружи пришлось бы правкой каждой из них.
+    /// </summary>
+    public StepProfiler Profiler { get; } = new();
+
     public void Add(GameSystem system)
     {
         _systems.Add(system);
         _dirty = true;
+        Profiler.Reset();
 
         var type = system.GetType();
 
@@ -73,6 +81,7 @@ public sealed class Scheduler
     {
         _systems.Remove(system);
         Forget(system);
+        Profiler.Reset();
     }
 
     /// <summary>
@@ -121,12 +130,25 @@ public sealed class Scheduler
             Forget(system);
         }
 
+        // Признак читаем один раз на прогон: внутри цикла он не меняется, а обращение
+        // к статическому полю на каждую систему было бы платой ни за что
+        bool profiling = DebugFlags.Profile;
+        Profiler.Tick(profiling);
+
         foreach (var system in _systems)
         {
             if (system.UpdateCycle != cycle)
                 continue;
 
+            if (!profiling)
+            {
+                system.Step(dt);
+                continue;
+            }
+
+            long started = Stopwatch.GetTimestamp();
             system.Step(dt);
+            Profiler.Record(system, Stopwatch.GetTimestamp() - started);
         }
     }
 

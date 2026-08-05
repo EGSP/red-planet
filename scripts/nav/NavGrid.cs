@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 
 /// <summary>
@@ -6,17 +9,18 @@ using Godot;
 ///
 /// НЕ СИСТЕМА И НЕ ПРОЕКЦИЯ. Проекции впитывают документы из журнала, а навигация выводится
 /// из положений живых сущностей — то есть из <see cref="ObstacleMap"/>. Поэтому карта просто
-/// объект на композиционном корне, а пересобирается лениво: перед любым запросом сверяется
-/// ревизия источника, и работа делается один раз на изменение, а не раз в кадр.
+/// объект на композиционном корне.
+///
+/// ТАЙЛЫ И ФОН. Поле делится на тайлы <see cref="NavBuilder.TileSize"/> ячеек. Пересчёт
+/// изменённой области и глобальная связность выполняются одним фоновым заданием; главный
+/// поток публикует готовый <see cref="NavSnapshot"/> по ревизии. Пока снимок не готов,
+/// добавленные препятствия учитываются временной маской непроходимости, а снятые остаются
+/// непроходимыми по прежнему снимку.
 ///
 /// КЛИРЕНС ВМЕСТО ШИРИНЫ КОРИДОРА. Задача юнитов разного размера решается одним сравнением:
-/// ячейка годится, если расстояние до ближайшего препятствия не меньше радиуса. На навмеше
-/// то же самое требует вычисления ширины треугольника и построения расширенных вершин.
-/// Это и есть главный довод в пользу растра для этого проекта.
-///
-/// РАССТОЯНИЕ СЧИТАЕТСЯ ЧЕМФЕРОМ 3-4, в третях ячейки: шаг по стороне стоит 3, по диагонали 4.
-/// Приближение к евклидову расстоянию всегда снизу (4/3 меньше корня из двух), поэтому
-/// ошибка идёт в сторону осторожности: коридор скорее сочтётся узким, чем широким.
+/// ячейка годится, если расстояние до ближайшего препятствия не меньше радиуса.
+/// Расстояние считается чемфером 3-4 и насыщается <see cref="NavSettings.MaxClearance"/>,
+/// поэтому влияние правки конечно.
 /// </summary>
 public sealed class NavGrid
 {
@@ -26,51 +30,71 @@ public sealed class NavGrid
     /// Ячеек по стороне. Величина перестала быть константой вместе с тем, как размер мира
     /// переехал в настройки: растр покрывает поле целиком, поэтому его сторона есть
     /// следствие размера поля, а не самостоятельное число.
-    ///
-    /// Массивы под неё выделяются при создании карты и пересоздаются, если размер поля
-    /// изменился, — см. <see cref="Fit"/>. По ходу партии этого не происходит: настройки
-    /// правятся между партиями и в редакторе.
     /// </summary>
     public static int Width => World.NavWidth;
 
     public static int Area => Width * Width;
 
     /// <summary>Расстояние в третях ячейки: шаг по стороне.</summary>
-    private const int Straight = 3;
-
-    /// <summary>Расстояние в третях ячейки: шаг по диагонали.</summary>
-    private const int Diagonal = 4;
-
-    /// <summary>Заведомо больше любого расстояния на этой карте: 164 ячейки по 4 трети.</summary>
-    private const int Far = 30000;
+    public const int Straight = NavBuilder.Straight;
 
     private readonly ObstacleMap _obstacles;
+    private readonly List<Obb> _pendingAdds = new();
+    private readonly HashSet<int> _pendingBlocked = new();
+    private readonly List<int> _componentThresholds = new();
+    private readonly object _exceptionLock = new();
 
-    private bool[] _blocked = new bool[Area];
+    private NavSnapshot _active;
+    private Task<NavSnapshot> _task;
+    private CancellationTokenSource _cancel;
 
-    /// <summary>Расстояние до ближайшей непроходимой ячейки, в третях ячейки.</summary>
-    private int[] _distance = new int[Area];
+    private int _activeSourceRevision = -1;
+    private int _requestedRevision = -1;
+    private int _buildingRevision = -1;
+    private int _pendingMaskObstacleRevision = int.MinValue;
+    private int _pendingMaskActiveRevision = int.MinValue;
+    private int _fittedWidth = -1;
+
+    private Exception _backgroundError;
 
     /// <summary>
-    /// Метки связных областей, своя раскладка на каждый порог клиренса. Считаются лениво:
-    /// разных радиусов у сущностей мало, и заводить раскладку под неспрошенный порог незачем.
+    /// Ревизия эффективной карты для кеша путей: растёт при изменении препятствий
+    /// и при публикации нового снимка.
     /// </summary>
-    private readonly Dictionary<int, int[]> _components = new();
-
-    private readonly Queue<int> _flood = new();
-
-    private int _sourceRevision = -1;
-
-    /// <summary>Сколько раз карта пересобиралась. По нему устаревают кешированные пути.</summary>
     public int Revision { get; private set; }
 
-    /// <summary>Сколько заняла последняя пересборка, миллисекунд. Показывает панель отладки.</summary>
+    /// <summary>Ревизия источника у опубликованного снимка; −1, если снимка ещё нет.</summary>
+    public int ActiveRevision => _activeSourceRevision;
+
+    /// <summary>Ревизия источника, на которую сейчас идёт или запрошен пересчёт.</summary>
+    public int RequestedRevision => _requestedRevision;
+
+    /// <summary>Сколько занял последний фоновый пересчёт, миллисекунд.</summary>
     public double LastBuildMs { get; private set; }
+
+    /// <summary>Сколько тайлов пересчитано в последнем задании.</summary>
+    public int LastRebuiltTiles { get; private set; }
+
+    /// <summary>Есть ли незавершённое фоновое задание.</summary>
+    public bool BuildPending => _task != null && !_task.IsCompleted;
+
+    /// <summary>Опубликованный снимок; может быть null до первого завершения задания.</summary>
+    public NavSnapshot Active => _active;
 
     /// <summary>Прямоугольник последнего изменения источника.</summary>
     public Rect2 LastChange => _obstacles.LastChange;
 
-    public NavGrid(ObstacleMap obstacles) => _obstacles = obstacles;
+    /// <summary>
+    /// Текущие настройки навигации. Назначает <see cref="GameManager"/> из
+    /// <c>resources/tuning/nav.tres</c>; без назначения действует экземпляр по умолчанию.
+    /// </summary>
+    public static NavSettings Settings { get; set; } = new();
+
+    public NavGrid(ObstacleMap obstacles)
+    {
+        _obstacles = obstacles;
+        _cancel = new CancellationTokenSource();
+    }
 
     // ── координаты ────────────────────────────────────────────────────────────────
 
@@ -94,16 +118,23 @@ public sealed class NavGrid
     /// <summary>
     /// Какое расстояние в третях ячейки требуется, чтобы поместился радиус.
     ///
-    /// Половина ячейки вычитается потому, что расстояние меряется до ЦЕНТРА непроходимой
+    /// Половина ячейки учитывается потому, что расстояние меряется до ЦЕНТРА непроходимой
     /// ячейки, а препятствие занимает её целиком: ближняя граница на полклетки ближе центра.
+    /// <see cref="NavSettings.ClearanceFactor"/> масштабирует радиус до сравнения: меньше
+    /// единицы — мягче проходимость, больше — строже. На поле расстояний не влияет.
     /// </summary>
-    public static int Required(float radiusPx) =>
-        Mathf.Max(1, Mathf.CeilToInt((radiusPx / Cell + 0.5f) * Straight));
+    public static int Required(float radiusPx)
+    {
+        float factor = Mathf.Max(Settings?.ClearanceFactor ?? 1f, 0.01f);
+        int required = Mathf.Max(1, Mathf.CeilToInt((radiusPx * factor / Cell + 0.5f) * Straight));
+        int cap = Mathf.Max(Settings?.MaxClearance ?? 12, Straight);
+        return Mathf.Min(required, cap);
+    }
 
     public bool Blocked(Vector2I cell)
     {
         Fresh();
-        return !InBounds(cell) || _blocked[IndexOf(cell)];
+        return !InBounds(cell) || IsBlocked(IndexOf(cell));
     }
 
     /// <summary>Сколько свободного места вокруг центра ячейки, пикселей.</summary>
@@ -114,21 +145,21 @@ public sealed class NavGrid
         if (!InBounds(cell))
             return 0f;
 
-        return (_distance[IndexOf(cell)] / (float)Straight - 0.5f) * Cell;
+        return (DistanceOf(IndexOf(cell)) / (float)Straight - 0.5f) * Cell;
     }
 
     public bool Passable(Vector2I cell, float radiusPx)
     {
         Fresh();
-        return InBounds(cell) && _distance[IndexOf(cell)] >= Required(radiusPx);
+        return InBounds(cell) && DistanceOf(IndexOf(cell)) >= Required(radiusPx);
     }
 
     public bool Passable(Vector2 world, float radiusPx) => Passable(ToCell(world), radiusPx);
 
     /// <summary>
-    /// Лежат ли точки в одной связной области. Отсекает недостижимую цель ДО поиска:
-    /// иначе запрос к запертой точке разворачивает A* на всё поле и стоит максимума
-    /// из возможного. При свободной постановке игрок запирает области регулярно.
+    /// Лежат ли точки в одной связной области. Отсекает недостижимую цель ДО поиска.
+    /// Пока опубликованный снимок отстаёт от источника, проверка пропускается: иначе
+    /// устаревшие метки могли бы отвергнуть ещё достижимый маршрут.
     /// </summary>
     public bool Connected(Vector2I a, Vector2I b, float radiusPx)
     {
@@ -137,10 +168,17 @@ public sealed class NavGrid
         if (!InBounds(a) || !InBounds(b))
             return false;
 
-        var labels = Components(Required(radiusPx));
-        int first = labels[IndexOf(a)];
+        if (_active == null || _activeSourceRevision != _obstacles.Revision)
+            return true;
 
-        return first != 0 && first == labels[IndexOf(b)];
+        int required = Required(radiusPx);
+        RememberThreshold(required);
+
+        if (_active.Components == null || !_active.Components.ContainsKey(required))
+            return true;
+
+        int first = _active.ComponentAt(IndexOf(a), required);
+        return first != 0 && first == _active.ComponentAt(IndexOf(b), required);
     }
 
     /// <summary>
@@ -169,7 +207,7 @@ public sealed class NavGrid
         {
             var cell = new Vector2I(x, y);
 
-            if (!InBounds(cell) || _distance[IndexOf(cell)] < required)
+            if (!InBounds(cell) || DistanceOf(IndexOf(cell)) < required)
                 return false;
 
             if (x == b.X && y == b.Y)
@@ -194,13 +232,12 @@ public sealed class NavGrid
     /// <summary>
     /// Ближайшая проходимая ячейка. Нужна там, где цель оказалась внутри препятствия:
     /// приказ «идти сюда» по зданию не должен зависать, юнит обязан подойти к краю.
-    /// Поиск идёт кольцами наружу и ограничен: за пределами возвращается сама ячейка.
     /// </summary>
     public Vector2I NearestPassable(Vector2I cell, float radiusPx, int maxRings = 24)
     {
         Fresh();
 
-        if (Passable(cell, radiusPx))
+        if (PassableWithoutFresh(cell, radiusPx))
             return cell;
 
         for (int ring = 1; ring <= maxRings; ring++)
@@ -221,82 +258,215 @@ public sealed class NavGrid
     private bool TryRing(Vector2I center, int dx, int dy, float radiusPx, out Vector2I found)
     {
         found = new Vector2I(center.X + dx, center.Y + dy);
-        return Passable(found, radiusPx);
+        return PassableWithoutFresh(found, radiusPx);
     }
 
-    // ── пересборка ────────────────────────────────────────────────────────────────
+    private bool PassableWithoutFresh(Vector2I cell, float radiusPx) =>
+        InBounds(cell) && DistanceOf(IndexOf(cell)) >= Required(radiusPx);
+
+    // ── жизненный цикл ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Сверить ревизию источника и пересобрать, если он менялся. Зовётся из каждого запроса:
-    /// так карта не может ответить по устаревшему состоянию, и следить за этим никому не надо.
+    /// Сверить ревизию источника, принять готовое фоновое задание и при необходимости
+    /// запустить следующее. Зовут перед запросами и из шага поиска пути.
     /// </summary>
-    public void Fresh()
+    public void Fresh() => Poll();
+
+    public void Poll()
     {
-        if (_sourceRevision == _obstacles.Revision && _blocked.Length == Area)
-            return;
-
+        ReportBackgroundError();
         Fit();
-        Rebuild();
+        SyncRequest();
+        CompleteTask();
+        RefreshPendingMask();
+        TryStartBuild();
     }
 
-    /// <summary>
-    /// Подогнать массивы под текущий размер поля.
-    ///
-    /// Нужно потому, что размер мира стал настройкой: карта создаётся раньше, чем сцена
-    /// успевает назначить настройки, и в редакторе поле правят прямо во время работы.
-    /// Проверка стоит одно сравнение длины на запрос, а без неё изменённый размер означал бы
-    /// обращение за границы массива.
-    /// </summary>
+    /// <summary>Остановить фоновое задание при разборке сессии. Обычный кадр не вызывает.</summary>
+    public void Dispose()
+    {
+        _cancel.Cancel();
+
+        try
+        {
+            _task?.Wait(100);
+        }
+        catch (AggregateException)
+        {
+        }
+
+        _cancel.Dispose();
+        _cancel = new CancellationTokenSource();
+        _task = null;
+    }
+
     private void Fit()
     {
-        if (_blocked.Length == Area)
+        if (_fittedWidth == Width)
             return;
 
-        _blocked = new bool[Area];
-        _distance = new int[Area];
-        _components.Clear();
-    }
+        _fittedWidth = Width;
 
-    /// <summary>
-    /// Полная пересборка. Инкрементальность сознательно не делается: поле в 27 тысяч ячеек
-    /// пересчитывается за доли миллисекунды, а меняется несколько раз в секунду в самом
-    /// плотном случае. Инкрементальный пересчёт по области требует аккуратной обработки
-    /// границы и даёт выигрыш, которого никто не заметит.
-    /// </summary>
-    private void Rebuild()
-    {
-        ulong started = Time.GetTicksUsec();
+        if (_task != null)
+        {
+            _cancel.Cancel();
+            _cancel.Dispose();
+            _cancel = new CancellationTokenSource();
+            _task = null;
+        }
 
-        _sourceRevision = _obstacles.Revision;
-        _components.Clear();
-
-        System.Array.Clear(_blocked);
-
-        foreach (var obstacle in _obstacles.All)
-            Rasterize(_obstacles.ShapeOf(obstacle));
-
-        Chamfer();
-
+        _active = null;
+        _activeSourceRevision = -1;
+        _requestedRevision = -1;
+        _buildingRevision = -1;
+        _pendingBlocked.Clear();
+        _pendingMaskObstacleRevision = int.MinValue;
+        _pendingMaskActiveRevision = int.MinValue;
         Revision++;
-        LastBuildMs = (Time.GetTicksUsec() - started) / 1000.0;
     }
 
-    /// <summary>
-    /// Растеризация консервативная: ячейка, задетая прямоугольником хотя бы краем,
-    /// помечается целиком. Ошибка идёт в пользу безопасности — юнит не пройдёт там,
-    /// где формально помещался бы на пару пикселей.
-    ///
-    /// Обход идёт по осепараллельным границам, а помечается ячейка по пересечению с самим
-    /// прямоугольником: у повёрнутого границы прихватывают углы, где его нет вовсе,
-    /// и без второй проверки диагональная стена перегораживала бы вдвое больше места.
-    /// </summary>
-    private void Rasterize(in Obb shape)
+    private void SyncRequest()
+    {
+        int source = _obstacles.Revision;
+
+        if (source == _requestedRevision)
+            return;
+
+        _requestedRevision = source;
+        Revision++;
+    }
+
+    private void CompleteTask()
+    {
+        if (_task == null || !_task.IsCompleted)
+            return;
+
+        Task<NavSnapshot> finished = _task;
+        _task = null;
+
+        if (finished.IsCanceled)
+        {
+            _buildingRevision = -1;
+            return;
+        }
+
+        if (finished.IsFaulted)
+        {
+            lock (_exceptionLock)
+                _backgroundError = finished.Exception?.GetBaseException();
+
+            _buildingRevision = -1;
+            return;
+        }
+
+        NavSnapshot snapshot = finished.Result;
+
+        // Устаревший результат не заменяет более новую опубликованную карту
+        if (snapshot.SourceRevision < _activeSourceRevision)
+        {
+            _buildingRevision = -1;
+            return;
+        }
+
+        _active = snapshot;
+        _activeSourceRevision = snapshot.SourceRevision;
+        _buildingRevision = -1;
+        LastBuildMs = snapshot.BuildMs;
+        LastRebuiltTiles = snapshot.RebuiltTiles;
+        _pendingMaskObstacleRevision = int.MinValue;
+        _pendingMaskActiveRevision = int.MinValue;
+        Revision++;
+    }
+
+    private void TryStartBuild()
+    {
+        if (_task != null || _requestedRevision < 0)
+            return;
+
+        if (_activeSourceRevision == _requestedRevision && _active != null && _active.Width == Width)
+            return;
+
+        if (_buildingRevision == _requestedRevision)
+            return;
+
+        StartBuild(_requestedRevision);
+    }
+
+    private void StartBuild(int targetRevision)
+    {
+        _buildingRevision = targetRevision;
+
+        var previous = _active;
+        bool rebuildAll = previous == null || previous.Width != Width;
+        var dirty = rebuildAll
+            ? World.Bounds
+            : _obstacles.ChangesSince(previous.SourceRevision);
+
+        // Если журнал уже не помнит промежуток, безопаснее пересчитать всё поле
+        if (!rebuildAll && (dirty.Size.X <= 0f || dirty.Size.Y <= 0f) &&
+            targetRevision != previous.SourceRevision)
+        {
+            rebuildAll = true;
+            dirty = World.Bounds;
+        }
+
+        int[] thresholds = _componentThresholds.Count > 0
+            ? _componentThresholds.ToArray()
+            : new[] { Required(Const.Unit * 0.35f) };
+
+        var request = new NavBuilder.Request
+        {
+            SourceRevision = targetRevision,
+            Width = Width,
+            WorldMin = World.Min,
+            Cell = Cell,
+            MaxClearance = Mathf.Max(Settings?.MaxClearance ?? 12, Straight),
+            Shapes = _obstacles.SnapshotShapes(),
+            DirtyWorld = dirty,
+            RebuildAll = rebuildAll,
+            Previous = previous,
+            ComponentThresholds = thresholds,
+        };
+
+        CancellationToken token = _cancel.Token;
+
+        _task = Task.Run(() =>
+        {
+            token.ThrowIfCancellationRequested();
+            return NavBuilder.Build(request);
+        }, token);
+    }
+
+    private void RefreshPendingMask()
+    {
+        int obstacleRevision = _obstacles.Revision;
+        int active = _activeSourceRevision;
+
+        if (_pendingMaskObstacleRevision == obstacleRevision &&
+            _pendingMaskActiveRevision == active)
+            return;
+
+        _pendingBlocked.Clear();
+        _pendingAdds.Clear();
+
+        if (_active == null || active != obstacleRevision)
+        {
+            _obstacles.CopyAddsSince(active, _pendingAdds);
+
+            foreach (var shape in _pendingAdds)
+                RasterizePending(shape);
+        }
+
+        _pendingMaskObstacleRevision = obstacleRevision;
+        _pendingMaskActiveRevision = active;
+    }
+
+    private void RasterizePending(in Obb shape)
     {
         if (shape.IsEmpty)
             return;
 
         var bounds = shape.Bounds;
-
         var min = ToCell(bounds.Position);
         var max = ToCell(bounds.End - new Vector2(0.001f, 0.001f));
 
@@ -305,8 +475,6 @@ public sealed class NavGrid
         int x1 = Mathf.Min(max.X, Width - 1);
         int y1 = Mathf.Min(max.Y, Width - 1);
 
-        // Осепараллельному хватает и обхода: пересечение с ячейкой у него заведомо есть,
-        // а проверять его заново значило бы платить за поворот там, где поворота нет
         bool square = Mathf.IsZeroApprox(Mathf.Sin(shape.Angle * 2f));
 
         for (int y = y0; y <= y1; y++)
@@ -316,147 +484,64 @@ public sealed class NavGrid
                 if (!square && !shape.Intersects(CellShape(x, y)))
                     continue;
 
-                _blocked[y * Width + x] = true;
+                _pendingBlocked.Add(y * Width + x);
             }
         }
     }
 
-    /// <summary>Ячейка растра как прямоугольник мира — для точной проверки пересечения.</summary>
     private static Obb CellShape(int x, int y) => Obb.FromRect(new Rect2(
         World.Min + new Vector2(x, y) * Cell,
         new Vector2(Cell, Cell)));
 
-    /// <summary>
-    /// Расстояние до ближайшего препятствия за два прохода. Соседи за краем мира считаются
-    /// непроходимыми: граница карты и есть стена, и юнит не должен планировать путь наружу.
-    /// </summary>
-    private void Chamfer()
+    private void RememberThreshold(int required)
     {
-        for (int i = 0; i < Area; i++)
-            _distance[i] = _blocked[i] ? 0 : Far;
+        if (_componentThresholds.Contains(required))
+            return;
 
-        for (int y = 0; y < Width; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                int i = y * Width + x;
-                if (_distance[i] == 0)
-                    continue;
-
-                int best = _distance[i];
-                best = Mathf.Min(best, Read(x - 1, y) + Straight);
-                best = Mathf.Min(best, Read(x, y - 1) + Straight);
-                best = Mathf.Min(best, Read(x - 1, y - 1) + Diagonal);
-                best = Mathf.Min(best, Read(x + 1, y - 1) + Diagonal);
-                _distance[i] = best;
-            }
-        }
-
-        for (int y = Width - 1; y >= 0; y--)
-        {
-            for (int x = Width - 1; x >= 0; x--)
-            {
-                int i = y * Width + x;
-                if (_distance[i] == 0)
-                    continue;
-
-                int best = _distance[i];
-                best = Mathf.Min(best, Read(x + 1, y) + Straight);
-                best = Mathf.Min(best, Read(x, y + 1) + Straight);
-                best = Mathf.Min(best, Read(x + 1, y + 1) + Diagonal);
-                best = Mathf.Min(best, Read(x - 1, y + 1) + Diagonal);
-                _distance[i] = best;
-            }
-        }
+        _componentThresholds.Add(required);
     }
 
-    /// <summary>Расстояние соседа. За краем мира — ноль, то есть стена.</summary>
-    private int Read(int x, int y) =>
-        x < 0 || y < 0 || x >= Width || y >= Width ? 0 : _distance[y * Width + x];
-
-    /// <summary>
-    /// Раскладка связных областей под порог клиренса. Заливка в ширину, метки с единицы:
-    /// ноль означает «ячейка не годится под этот порог».
-    /// </summary>
-    private int[] Components(int required)
+    private void ReportBackgroundError()
     {
-        if (_components.TryGetValue(required, out var cached))
-            return cached;
+        Exception error;
 
-        var labels = new int[Area];
-        int label = 0;
-
-        for (int start = 0; start < Area; start++)
+        lock (_exceptionLock)
         {
-            if (labels[start] != 0 || _distance[start] < required)
-                continue;
-
-            label++;
-            labels[start] = label;
-            _flood.Clear();
-            _flood.Enqueue(start);
-
-            while (_flood.Count > 0)
-            {
-                int at = _flood.Dequeue();
-                int cx = at % Width;
-                int cy = at / Width;
-
-                for (int dy = -1; dy <= 1; dy++)
-                {
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        if (dx == 0 && dy == 0)
-                            continue;
-
-                        int nx = cx + dx;
-                        int ny = cy + dy;
-
-                        if (nx < 0 || ny < 0 || nx >= Width || ny >= Width)
-                            continue;
-
-                        // Диагональ без срезания угла: иначе связность нашлась бы
-                        // там, где путь протекает между двумя углами зданий
-                        if (dx != 0 && dy != 0 &&
-                            (_distance[cy * Width + nx] < required ||
-                             _distance[ny * Width + cx] < required))
-                            continue;
-
-                        int next = ny * Width + nx;
-
-                        if (labels[next] != 0 || _distance[next] < required)
-                            continue;
-
-                        labels[next] = label;
-                        _flood.Enqueue(next);
-                    }
-                }
-            }
+            error = _backgroundError;
+            _backgroundError = null;
         }
 
-        _components[required] = labels;
-        return labels;
+        if (error != null)
+            GD.PushError($"[NavGrid] фоновый пересчёт: {error.Message}");
+    }
+
+    private bool IsBlocked(int index) =>
+        _pendingBlocked.Contains(index) || (_active != null && _active.BlockedAt(index));
+
+    private int DistanceOf(int index)
+    {
+        if (_pendingBlocked.Contains(index))
+            return 0;
+
+        if (_active != null)
+            return _active.DistanceAt(index);
+
+        // До первого снимка открытое поле считается свободным; здания закрыты маской
+        return Mathf.Max(Settings?.MaxClearance ?? 12, Straight);
     }
 
     // ── чтение для отрисовки ──────────────────────────────────────────────────────
 
-    /// <summary>Непроходимость по номеру ячейки. Отрисовщику нужен весь массив разом.</summary>
-    public bool BlockedAt(int index)
-    {
-        Fresh();
-        return _blocked[index];
-    }
+    /// <summary>Непроходимость по номеру ячейки. Перед массовым чтением нужен <see cref="Fresh"/>.</summary>
+    public bool BlockedAt(int index) => IsBlocked(index);
 
-    public int DistanceAt(int index)
-    {
-        Fresh();
-        return _distance[index];
-    }
+    public int DistanceAt(int index) => DistanceOf(index);
 
     /// <summary>Метка связной области для отрисовки. Порог берётся у типового юнита.</summary>
     public int ComponentAt(int index, float radiusPx)
     {
-        Fresh();
-        return Components(Required(radiusPx))[index];
+        int required = Required(radiusPx);
+        RememberThreshold(required);
+        return _active != null ? _active.ComponentAt(index, required) : 0;
     }
 }

@@ -73,15 +73,11 @@ public static class Const
     // остались лишь те числа, от которых зависят размеры массивов растра навигации,
     // а они объявлены как const и ползунком не меняются.
 
-    /// <summary>На каком расстоянии бот держится от коммандера, когда идёт следом.</summary>
-    public static float FollowDistancePx => Unit * 3f;
-
-    // Врождённый запас коммандера, как storage у base_commander в celestial / PA Titans.
-    // Энергия на сжатой шкале (÷100): 45000 → 450. Дальше потолок поднимают склады
-    // (metal_storage / energy_storage) — без демпфера любой всплеск спроса мгновенно
-    // роняет производительность базы
+    // Врождённый запас коммандера, как storage у base_commander в celestial / PA Titans
+    // (metal 1500, energy 45000). Дальше потолок поднимают склады — без демпфера любой
+    // всплеск спроса мгновенно роняет производительность базы.
     public const float BaseMetalCapacity = 1500f;
-    public const float BaseEnergyCapacity = 450f;
+    public const float BaseEnergyCapacity = 45000f;
 
     // Темп восполнения потерь противника. Объём давления числом здесь больше не задаётся:
     // он выводится из террора бюджетом мощи — см. PressureSettings

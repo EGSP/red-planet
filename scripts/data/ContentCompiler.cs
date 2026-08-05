@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using Tomlyn.Model;
 
 /// <summary>Вид инструмента. Определяет, какие ключи у него читаются.</summary>
 public enum ToolKind
@@ -14,17 +15,17 @@ public enum ToolKind
 /// ЧТО ЗДЕСЬ ПРОИСХОДИТ, ПОМИМО ЧТЕНИЯ. Сборка — не просто разбор файлов подряд, у неё
 /// четыре обязанности, и ни одна не сводится к чтению одного файла:
 ///
-/// 1. РАЗВЁРТЫВАНИЕ НАСЛЕДОВАНИЯ. Определение с ключом extends берёт запасные значения
-///    не из констант кода, а из указанного предка. Так виды противника перестают повторять
-///    одни и те же числа, как это сделано в PA через base_spec.
+/// 1. РАЗВЁРТЫВАНИЕ НАСЛЕДОВАНИЯ TOML. Ключ <c>base</c> на корне и в секциях, а также
+///    пути к файлам в значениях полей, раскрывает <see cref="TomlResolver"/> до чтения
+///    типизированных полей. Справочники констант — файлы <c>*.vars.toml</c>.
 /// 2. РАЗРЕШЕНИЕ ССЫЛОК. В файле лежат строки: tools = ["commander_gun"], tags = ["mobile"].
 ///    Здесь они однократно превращаются в объекты и маски, и дальше игра работает
 ///    со ссылками, а не ищет по словарю каждый кадр.
 /// 3. ПРОВЕРКА СВЯЗНОСТИ. Ячейка панели, ссылающаяся на несуществующую постройку,
 ///    раньше обнаруживалась при попытке нарисовать кнопку — то есть могла не обнаружиться
 ///    вовсе. Теперь это ошибка на первом кадре, с именем файла и секции.
-/// 4. ВЫВОД СЛЕДСТВИЙ. Род при выделении, ствол и рабочие инструменты вычисляются один раз
-///    и ложатся полями определения, чтобы игра не перебирала список инструментов в цикле.
+/// 4. ВЫВОД СЛЕДСТВИЙ. Род при выделении, ствол, рабочие инструменты и наборы приказов
+///    вычисляются один раз и ложатся полями определения.
 ///
 /// ПОЧЕМУ СБОРКА В ПАМЯТИ, А НЕ ГЕНЕРАЦИЯ ФАЙЛОВ. Генерация дала бы два представления одних
 /// и тех же данных, и на вопрос, какое из них главное, пришлось бы отвечать соглашением,
@@ -34,15 +35,18 @@ public enum ToolKind
 public static class ContentCompiler
 {
     private const string TagsPath = "res://resources/content/tags.toml";
-    private const string ToolsDir = "res://resources/tools/";
+    private const string ContentDir = "res://resources/content/";
     private const string BuildbarsDir = "res://resources/buildbars/";
     private const string WavesDir = "res://resources/waves/";
 
-    /// <summary>Каталоги с определениями сущностей. Вид задаётся ключом class, а не папкой.</summary>
-    private static readonly string[] UnitDirs =
+    /// <summary>
+    /// Корни определений сущностей и инструментов. Вид задаётся ключом class / kind,
+    /// а не папкой; обход рекурсивный, чтобы юнит и его ствол жили в одной подпапке.
+    /// </summary>
+    private static readonly string[] DefinitionRoots =
     {
+        "res://resources/tools/",
         "res://resources/units/",
-        "res://resources/units/enemies/",
         "res://resources/buildings/",
     };
 
@@ -52,8 +56,7 @@ public static class ContentCompiler
         int errors = 0;
 
         errors += LoadTags(catalog.Tags);
-        errors += LoadTools(catalog);
-        errors += LoadUnits(catalog);
+        errors += LoadDefinitions(catalog);
         errors += LoadBuildbars(catalog);
         errors += LoadWaves(catalog);
         errors += Link(catalog);
@@ -79,35 +82,156 @@ public static class ContentCompiler
         return registry.Declare(names, TagsPath) ? 0 : 1;
     }
 
-    // ── Инструменты ───────────────────────────────────────────────────────────────
+    // ── Инструменты и сущности ────────────────────────────────────────────────────
 
-    private static int LoadTools(Catalog catalog)
+    /// <summary>
+    /// Один мешок на tools + units + buildings: наследование идёт между соседними
+    /// файлами в подпапке юнита, а после Resolve файлы делятся по ключу kind.
+    /// </summary>
+    private static int LoadDefinitions(Catalog catalog)
     {
+        var raw = new Dictionary<string, TomlTable>();
+        var definitionPaths = new List<string>();
         int errors = 0;
 
-        foreach (string path in Files(ToolsDir))
+        foreach (string path in Files(ContentDir))
         {
-            var document = TomlDocument.Load(path);
+            if (!TomlResolver.IsVars(path))
+                continue;
 
-            if (document == null)
+            var table = TomlDocument.LoadTable(path);
+
+            if (table == null)
             {
                 errors++;
                 continue;
             }
 
-            var tool = ReadTool(document);
-            document.Done();
-            errors += document.Errors;
-
-            if (document.Failed || string.IsNullOrEmpty(tool?.Id))
-                continue;
-
-            if (!catalog.AddTool(tool))
-            {
-                GD.PushError($"[Контент] инструмент «{tool.Id}» объявлен дважды: {path}");
-                errors++;
-            }
+            raw[path] = table;
         }
+
+        foreach (string root in DefinitionRoots)
+        foreach (string path in Files(root))
+        {
+            var table = TomlDocument.LoadTable(path);
+
+            if (table == null)
+            {
+                errors++;
+                continue;
+            }
+
+            raw[path] = table;
+
+            if (!TomlResolver.IsVars(path))
+                definitionPaths.Add(path);
+        }
+
+        errors += TomlResolver.Resolve(raw, out var resolved);
+
+        var seenTools = new HashSet<string>();
+        var seenUnits = new HashSet<string>();
+
+        foreach (string path in definitionPaths)
+        {
+            if (!resolved.TryGetValue(path, out var table))
+            {
+                errors++;
+                continue;
+            }
+
+            if (IsToolTable(table))
+                errors += RegisterTool(catalog, path, table, seenTools);
+            else
+                errors += RegisterUnit(catalog, path, table, seenUnits);
+        }
+
+        return errors;
+    }
+
+    private static bool IsToolTable(TomlTable table)
+    {
+        if (!table.TryGetValue("kind", out object value) || value == null)
+            return false;
+
+        string kind = value.ToString();
+        return kind is "weapon" or "work";
+    }
+
+    private static int RegisterTool(
+        Catalog catalog, string path, TomlTable table, HashSet<string> seen)
+    {
+        int errors = 0;
+        var document = TomlDocument.Wrap(table, path);
+        string id = document.RequiredString("id");
+        bool abstractTool = document.Bool("abstract");
+
+        if (string.IsNullOrEmpty(id))
+        {
+            document.Done();
+            return document.Errors;
+        }
+
+        if (!seen.Add(id))
+        {
+            GD.PushError($"[Контент] инструмент «{id}» объявлен дважды: {path}");
+            errors++;
+            document.Done();
+            return errors + document.Errors;
+        }
+
+        var tool = ReadTool(document);
+        document.Done();
+        errors += document.Errors;
+
+        if (abstractTool || document.Failed || tool == null)
+            return errors;
+
+        if (!catalog.AddTool(tool))
+        {
+            GD.PushError($"[Контент] инструмент «{tool.Id}» объявлен дважды: {path}");
+            errors++;
+        }
+
+        return errors;
+    }
+
+    private static int RegisterUnit(
+        Catalog catalog, string path, TomlTable table, HashSet<string> seen)
+    {
+        int errors = 0;
+        var document = TomlDocument.Wrap(table, path);
+        string id = document.RequiredString("id");
+        bool abstractUnit = document.Bool("abstract");
+
+        if (document.Has("extends"))
+        {
+            document.String("extends");
+            document.Error(
+                "ключ «extends» больше не поддерживается; " +
+                "укажите base = \"/units/.../файл.toml\"");
+        }
+
+        if (string.IsNullOrEmpty(id))
+        {
+            document.Done();
+            return document.Errors;
+        }
+
+        if (!seen.Add(id))
+        {
+            GD.PushError($"[Контент] определение «{id}» объявлено дважды: {path}");
+            errors++;
+            document.Done();
+            return errors + document.Errors;
+        }
+
+        var definition = ReadUnit(document, id, path, catalog.Tags);
+        document.Done();
+        errors += document.Errors;
+
+        if (!abstractUnit && !document.Failed)
+            catalog.AddUnit(definition);
 
         return errors;
     }
@@ -119,12 +243,15 @@ public static class ContentCompiler
         var kind = document.Enum("kind", ToolKind.Work);
         float range = document.Float("range", 3f);
 
+        bool aimWhileMoving = document.Bool("aim_while_moving", true);
+
         if (kind == ToolKind.Weapon)
             return new WeaponDefinition
             {
                 Id = id,
                 DisplayName = name,
                 Range = range,
+                AimWhileMoving = aimWhileMoving,
                 Damage = document.Float("damage", 10f),
                 FireInterval = document.Float("fire_interval", 1f),
                 ProjectileSpeed = document.Float("projectile_speed", 14f),
@@ -139,6 +266,7 @@ public static class ContentCompiler
             Id = id,
             DisplayName = name,
             Range = range,
+            AimWhileMoving = aimWhileMoving,
             Power = document.Float("power", 1f),
             EnergyPerPower = document.Float("energy_per_power", 5f),
             Kinds = ReadWorkKinds(document),
@@ -172,125 +300,19 @@ public static class ContentCompiler
         return kinds;
     }
 
-    // ── Определения сущностей ─────────────────────────────────────────────────────
-
-    /// <summary>Разобранный, но ещё не связанный файл определения.</summary>
-    private sealed class Source
-    {
-        public string Id;
-        public string Extends;
-        public bool Abstract;
-        public TomlDocument Document;
-        public string Path;
-    }
-
-    private static int LoadUnits(Catalog catalog)
-    {
-        var sources = new Dictionary<string, Source>();
-        int errors = 0;
-
-        foreach (string dir in UnitDirs)
-        foreach (string path in Files(dir))
-        {
-            var document = TomlDocument.Load(path);
-
-            if (document == null)
-            {
-                errors++;
-                continue;
-            }
-
-            var source = new Source
-            {
-                Id = document.RequiredString("id"),
-                Extends = document.String("extends"),
-                Abstract = document.Bool("abstract"),
-                Document = document,
-                Path = path,
-            };
-
-            if (string.IsNullOrEmpty(source.Id))
-            {
-                errors += document.Errors;
-                continue;
-            }
-
-            if (!sources.TryAdd(source.Id, source))
-            {
-                GD.PushError($"[Контент] определение «{source.Id}» объявлено дважды: {path}");
-                errors++;
-            }
-        }
-
-        return errors + Resolve(catalog, sources);
-    }
-
     /// <summary>
-    /// Разобрать в порядке наследования: предок раньше потомка. Порядок файлов в каталоге
-    /// произволен, поэтому идём проходами, пока хоть что-то разрешается. Остаток —
-    /// это либо ссылка в никуда, либо кольцо, и то и другое надо назвать вслух.
+    /// Прочитать определение из уже материализованного документа. Наследование по
+    /// <c>base</c> и ссылки на файлы к этому моменту раскрыты: здесь только типизация
+    /// полей и запасные значения из умолчаний <see cref="UnitDefinition"/>.
     /// </summary>
-    private static int Resolve(Catalog catalog, Dictionary<string, Source> sources)
+    private static UnitDefinition ReadUnit(
+        TomlDocument document, string id, string path, TagRegistry tags)
     {
-        var ready = new Dictionary<string, UnitDefinition>();
-        var pending = new List<Source>(sources.Values);
-        int errors = 0;
-
-        while (pending.Count > 0)
-        {
-            int before = pending.Count;
-
-            for (int i = pending.Count - 1; i >= 0; i--)
-            {
-                var source = pending[i];
-                UnitDefinition parent = null;
-
-                if (!string.IsNullOrEmpty(source.Extends))
-                {
-                    if (!ready.TryGetValue(source.Extends, out parent))
-                        continue;
-                }
-
-                var definition = ReadUnit(source, parent, catalog.Tags);
-                source.Document.Done();
-                errors += source.Document.Errors;
-
-                ready[source.Id] = definition;
-                pending.RemoveAt(i);
-
-                if (!source.Abstract && !source.Document.Failed)
-                    catalog.AddUnit(definition);
-            }
-
-            if (pending.Count == before)
-                break;
-        }
-
-        foreach (var source in pending)
-        {
-            GD.PushError(sources.ContainsKey(source.Extends)
-                ? $"[Контент] кольцо наследования вокруг «{source.Id}»: {source.Path}"
-                : $"[Контент] «{source.Id}» наследует несуществующее «{source.Extends}»: {source.Path}");
-
-            errors++;
-        }
-
-        return errors;
-    }
-
-    /// <summary>
-    /// Прочитать определение. Запасные значения берутся у предка, а если предка нет —
-    /// из чистого определения с его умолчаниями. Поэтому наследование не требует
-    /// отдельного кода слияния: незаполненный ключ просто остаётся предковым.
-    /// </summary>
-    private static UnitDefinition ReadUnit(Source source, UnitDefinition parent, TagRegistry tags)
-    {
-        var document = source.Document;
-        var basis = parent ?? new UnitDefinition();
+        var basis = new UnitDefinition();
 
         var definition = new UnitDefinition
         {
-            Id = source.Id,
+            Id = id,
             DisplayName = document.String("name", basis.DisplayName),
             Class = document.Enum("class", basis.Class),
             Color = document.Color("color", basis.Color),
@@ -313,9 +335,10 @@ public static class ContentCompiler
             MetalProduction = basis.MetalProduction,
             MetalStorage = basis.MetalStorage,
             EnergyStorage = basis.EnergyStorage,
-            StandoffFraction = basis.StandoffFraction,
-            ExpansionWeight = basis.ExpansionWeight,
+            ApproachHoldFraction = basis.ApproachHoldFraction,
+            ExpansionPowerWeight = basis.ExpansionPowerWeight,
             ArmyPowerWeight = basis.ArmyPowerWeight,
+            IgnoreTerrorModifiers = basis.IgnoreTerrorModifiers,
             Hull = basis.Hull,
             HullAspect = basis.HullAspect,
             ArmorRings = basis.ArmorRings,
@@ -327,7 +350,7 @@ public static class ContentCompiler
         {
             string[] names = document.Strings("tags");
 
-            if (!tags.TryParse(names, $"«{source.Id}» ({source.Path})", out var parsed))
+            if (!tags.TryParse(names, $"«{id}» ({path})", out var parsed))
                 document.Error("набор тегов не собран");
 
             definition.Tags = parsed;
@@ -407,18 +430,22 @@ public static class ContentCompiler
         // ключи читаются только при наличии, а не через Float с запасным значением
         if (document.Section("terror") is { } terror)
         {
-            if (terror.Has("expansion"))
-                definition.ExpansionWeight = terror.Float("expansion");
+            if (terror.Has("expansion_power"))
+                definition.ExpansionPowerWeight = terror.Float("expansion_power");
 
             if (terror.Has("army_power"))
                 definition.ArmyPowerWeight = terror.Float("army_power");
+
+            definition.IgnoreTerrorModifiers =
+                terror.Bool("ignore_modifiers", basis.IgnoreTerrorModifiers);
         }
 
         // Раздел боя описывает то, как сущность ведёт себя в схватке. Раньше доля подхода
         // лежала в разделе spawn вместе с весом появления, хотя к появлению отношения
         // не имеет: определение обязано описывать сам юнит, а не то, как его выставляют
         if (document.Section("battle") is { } battle)
-            definition.StandoffFraction = battle.Float("standoff", basis.StandoffFraction);
+            definition.ApproachHoldFraction =
+                battle.Float("approach_hold", basis.ApproachHoldFraction);
 
         if (document.Section("plant") is { } plant)
         {
@@ -440,7 +467,75 @@ public static class ContentCompiler
             };
         }
 
+        if (document.Section("orders") is { } orders)
+        {
+            definition.HasOrderList = true;
+            // После слияния base в секции уже есть унаследованный allow и локальный deny
+            definition.DeniedOrders = ReadOrderNames(orders, "deny");
+            definition.DeclaredOrders =
+                ReadOrderNames(orders, "allow").Except(definition.DeniedOrders);
+        }
+
         return definition;
+    }
+
+    private static OrderSet ReadOrderNames(TomlDocument orders, string key)
+    {
+        var set = OrderSet.None;
+
+        foreach (string name in orders.Strings(key))
+        {
+            if (System.Enum.TryParse<OrderKind>(name.Replace("_", ""), ignoreCase: true, out var kind))
+            {
+                set = set.With(kind);
+                continue;
+            }
+
+            orders.Error(
+                $"неизвестный приказ «{name}» в «{key}». Допустимые: " +
+                string.Join(", ", System.Enum.GetNames<OrderKind>()).ToLowerInvariant());
+        }
+
+        return set;
+    }
+
+    /// <summary>
+    /// Что сущность умеет исполнить: класс задаёт каркас набора, снабжение уточняет
+    /// ствол и рабочий инструмент. Снос доступен всем, кого можно выделить и снести;
+    /// отдельное разрешение на него даёт только секция <c>[orders]</c>.
+    /// </summary>
+    private static OrderSet ExecutableOrdersOf(UnitDefinition definition)
+    {
+        var set = OrderSet.None.With(OrderKind.Delete);
+
+        switch (definition.Class)
+        {
+            case UnitClass.Plant:
+                return set
+                    .With(OrderKind.Move)
+                    .With(OrderKind.Follow)
+                    .With(OrderKind.Attack);
+
+            case UnitClass.Turret:
+                return set.With(OrderKind.Attack, definition.Weapon != null);
+
+            case UnitClass.Assembler:
+                return set
+                    .With(OrderKind.Build, definition.CanBuild)
+                    .With(OrderKind.Repair, definition.CanRepair);
+
+            case UnitClass.Structure:
+            case UnitClass.Factory:
+                return set;
+
+            default:
+                return set
+                    .With(OrderKind.Move, definition.IsMobile)
+                    .With(OrderKind.Follow, definition.IsMobile)
+                    .With(OrderKind.Attack, definition.Weapon != null)
+                    .With(OrderKind.Build, definition.CanBuild)
+                    .With(OrderKind.Repair, definition.CanRepair);
+        }
     }
 
     // ── Строительные панели ───────────────────────────────────────────────────────
@@ -602,8 +697,12 @@ public static class ContentCompiler
             if (spawn.Has("far_arc_degrees"))
                 over.FarArcDegrees = spawn.Float("far_arc_degrees");
 
+            if (spawn.Has("wave_start"))
+                over.WaveStart = spawn.Float("wave_start");
+
+            // Прежнее имя ключа: читаем, пока файлы волн не переписаны.
             if (spawn.Has("radius_offset_multiplier"))
-                over.RadiusOffsetMultiplier = spawn.Float("radius_offset_multiplier");
+                over.WaveStart = spawn.Float("radius_offset_multiplier");
 
             if (spawn.Has("radius_depth_multiplier"))
                 over.RadiusDepthMultiplier = spawn.Float("radius_depth_multiplier");
@@ -616,6 +715,9 @@ public static class ContentCompiler
 
             if (spawn.Has("groups_arc_degrees"))
                 over.GroupsArcDegrees = spawn.Float("groups_arc_degrees");
+
+            if (spawn.Has("group_delay_seconds"))
+                over.GroupDelaySeconds = spawn.Float("group_delay_seconds");
         }
 
         return wave;
@@ -667,6 +769,12 @@ public static class ContentCompiler
             definition.SelectionGroup = definition.Tags.Has(catalog.Tags.Structure)
                 ? SelectionGroup.Structures
                 : SelectionGroup.Bots;
+
+            // Тир по умолчанию — t1: иначе каждый файл обязан повторять одно и то же
+            if (!definition.Tags.HasAny(catalog.Tags.AnyTier))
+                definition.Tags |= catalog.Tags.T1;
+
+            definition.ExecutableOrders = ExecutableOrdersOf(definition);
 
             if (definition.Buildbar.Length > 0 && catalog.Buildbar(definition.Buildbar) == null)
             {
@@ -883,7 +991,9 @@ public static class ContentCompiler
 
     // ── Общее ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>Пути ко всем .toml каталога. Соседние .md в выборку не попадают.</summary>
+    /// <summary>
+    /// Пути ко всем .toml каталога, включая вложенные. Соседние .md в выборку не попадают.
+    /// </summary>
     private static IEnumerable<string> Files(string dir)
     {
         using var access = DirAccess.Open(dir);
@@ -897,5 +1007,14 @@ public static class ContentCompiler
         foreach (string file in access.GetFiles())
             if (file.EndsWith(".toml"))
                 yield return dir + file;
+
+        foreach (string sub in access.GetDirectories())
+        {
+            if (sub.StartsWith('.'))
+                continue;
+
+            foreach (string path in Files(dir + sub + "/"))
+                yield return path;
+        }
     }
 }

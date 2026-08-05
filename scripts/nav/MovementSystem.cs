@@ -10,8 +10,9 @@ using Godot;
 /// Второй — локальный: силы boids правят курс, чтобы сущности не слипались и расходились
 /// со встречными. Третий — ограничения: выталкивание из зданий и расталкивание перекрывшихся.
 /// Третий слой применяется ПОСЛЕ интегрирования и решает задачу достоверно, тогда как
-/// сила решала бы её вероятностно. Физического движка в проекте нет, поэтому оба
-/// ограничения написаны здесь руками.
+/// сила решала бы её вероятностно. При перекрытии свой идущий полностью смещает своего
+/// стоящего — это и есть проталкивание сквозь союзников. Физического движка в проекте
+/// нет, поэтому оба ограничения написаны здесь руками.
 ///
 /// ЧЕГО СИСТЕМА НЕ ДЕЛАЕТ. Не выбирает цель и не завершает приказы: обработчик приказа
 /// каждый кадр объявляет намерение через <see cref="Movement.Seek"/>, а сам решает,
@@ -288,11 +289,18 @@ public partial class MovementSystem : GameSystem
     ///
     /// Правило действует только в зоне прибытия. Без этого ограничения отряд встал бы
     /// растянутой цепочкой: каждый останавливался бы, едва упёршись в идущего впереди.
+    ///
+    /// Широкая остановка (дальность ствола или инструмента) сюда не входит: у такой цели
+    /// хватает места нескольким юнитам, и ранняя остановка из‑за союзника ближе к точке
+    /// оставляла бы помощника и стрелка за пределами досягаемости.
     /// </summary>
     private bool Crowded(int self, IMobile mobile, Vector2 position, float radius, Vector2 target)
     {
         var movement = mobile.Movement;
         float remaining = position.DistanceTo(target);
+
+        if (movement.StopDistance > radius * 2f)
+            return false;
 
         if (remaining - movement.StopDistance > radius * 3f)
             return false;
@@ -443,8 +451,10 @@ public partial class MovementSystem : GameSystem
             if (into <= 0f)
                 continue;
 
+            // Стоящий свой ослабляет seek слабо: идущий обязан проталкиваться сквозь него,
+            // а не гасить курс. Сильный коэффициент оставляем врагу и окружению цели.
             float weight = other.Faction != mobile.Faction ? 0.9f
-                : other.Movement.HoldGround ? 0.5f
+                : other.Movement.HoldGround ? 0.15f
                 : 0.1f;
 
             float proximity = 1f - distance / contact;
@@ -505,8 +515,9 @@ public partial class MovementSystem : GameSystem
 
     /// <summary>
     /// Жёсткие ограничения: наружу из зданий, врозь из чужих корпусов, внутрь границ мира.
-    /// Раскладка по ячейкам к этому мигу устарела на один проход — для расталкивания
-    /// это несущественно, сдвиги здесь заведомо меньше ячейки.
+    /// Свой идущий при перекрытии полностью смещает своего стоящего; остальные пары делят
+    /// сдвиг пополам. Раскладка по ячейкам к этому мигу устарела на один проход — для
+    /// расталкивания это несущественно, сдвиги здесь заведомо меньше ячейки.
     /// </summary>
     private void Resolve()
     {
@@ -552,13 +563,27 @@ public partial class MovementSystem : GameSystem
                     continue;
                 }
 
+                // Свой идущий полностью смещает своего стоящего: иначе оба делят перекрытие
+                // пополам, и проход сквозь стоящих союзников вырождается в топтание на месте.
+                // Чужих и пары с одинаковым намерением (оба идут или оба стоят) по-прежнему
+                // разводим поровну.
+                if (other.Faction == mobile.Faction && movement.Active != other.Movement.Active)
+                {
+                    if (movement.Active)
+                        other.GlobalPosition += push * overlap;
+                    else
+                        position -= push * overlap;
+
+                    continue;
+                }
+
                 position -= push * (overlap * 0.5f);
                 other.GlobalPosition += push * (overlap * 0.5f);
             }
 
             position = GM.Obstacles.PushOut(position, radius, movement.Exit);
 
-            var bounds = World.Bounds;
+            var bounds = World.ArenaBounds;
             position.X = Mathf.Clamp(position.X, bounds.Position.X + radius, bounds.End.X - radius);
             position.Y = Mathf.Clamp(position.Y, bounds.Position.Y + radius, bounds.End.Y - radius);
 

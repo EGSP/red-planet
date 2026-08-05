@@ -7,7 +7,13 @@ public enum UnitClass
     /// <summary>Юнит: ходит, сам ищет себе занятие, приказы игрока не слушает.</summary>
     Bot,
 
-    /// <summary>Коммандер: единственный, кто слушает приказы, и единственный неуязвимый.</summary>
+    /// <summary>
+    /// Машина: гусеничный или колёсный корпус (силуэт — прямоугольник). По поведению
+    /// как бот, выпускается заводом машин, а не ботов.
+    /// </summary>
+    Vehicle,
+
+    /// <summary>Коммандер: единственный, кто слушает приказы; гибель — поражение.</summary>
     Commander,
 
     /// <summary>Постройка без собственного поведения: склад, генератор, стена.</summary>
@@ -40,12 +46,30 @@ public enum UnitClass
     Plant,
 }
 
-/// <summary>Силуэт корпуса подвижной сущности. Хитбокс при этом остаётся кругом.</summary>
+/// <summary>
+/// Силуэт корпуса подвижной сущности. Хитбокс при этом остаётся кругом.
+///
+/// Первые три выражаются одной фигурой; остальные раскладываются на выпуклые части —
+/// см. <see cref="HullGeometry"/>. Составные заведены ради крупных машин: круг радиусом
+/// в клетку читается как пятно, и отличить одну такую машину от другой нечем.
+/// </summary>
 public enum HullShape
 {
     Circle,
     Rect,
     Hex,
+
+    /// <summary>Стреловидный: клин носа и два отнесённых назад крыла.</summary>
+    Arrow,
+
+    /// <summary>Подкова: кольцевая полоса, разомкнутая вперёд, с клыками.</summary>
+    Crescent,
+
+    /// <summary>Звезда: шесть лучей попеременной длины вокруг ядра.</summary>
+    Star,
+
+    /// <summary>Блочная крепость: длинный корпус с надстройкой и спонсонами.</summary>
+    Fortress,
 }
 
 /// <summary>Параметры завода юнитов. Секции нет — сущность не производит очередь.</summary>
@@ -314,14 +338,15 @@ public sealed class UnitDefinition
     public string Buildbar = "";
 
     /// <summary>
-    /// Вклад постройки в экспансию — до умножения на коэффициент зоны удалённости.
-    /// Не задано — выводится из рода: постройка весит единицу, подвижная сущность ноль.
+    /// Мощь экспансии постройки — абсолютный вес до умножения на коэффициент зоны.
+    /// В .toml — ключ <c>expansion_power</c>. Не задано: единица у постройки, ноль
+    /// у подвижной сущности.
     ///
     /// Задаётся там, где умолчание неверно. Забор весит около 0.05: их много, места они
     /// занимают столько же, сколько завод, а угрозы не несут — и без отдельного веса
     /// периметр из заборов раздувал бы показатель на ровном месте.
     /// </summary>
-    public float? ExpansionWeight;
+    public float? ExpansionPowerWeight;
 
     /// <summary>
     /// Боевая мощь сущности — одно число на обе стороны. Не задано: единица у подвижного
@@ -336,10 +361,18 @@ public sealed class UnitDefinition
     public float? ArmyPowerWeight;
 
     /// <summary>
-    /// На какой доле дальности оружия юнит прекращает сближение. Меньше единицы, чтобы цель
-    /// не выпадала из радиуса от любого шага в сторону.
+    /// Не умножать мощь экспансии на коэффициент зоны кольца мира. В .toml — ключ
+    /// <c>ignore_modifiers</c> в секции <c>[terror]</c>. Нужен там, где вес задан
+    /// абсолютным числом и не должен расти с удалением от точки высадки.
     /// </summary>
-    public float StandoffFraction = 0.75f;
+    public bool IgnoreTerrorModifiers;
+
+    /// <summary>
+    /// На какой доле дальности оружия юнит прекращает сближение и удерживает позицию.
+    /// Меньше единицы, чтобы цель не выпадала из радиуса от любого шага в сторону.
+    /// В .toml — ключ <c>approach_hold</c>.
+    /// </summary>
+    public float ApproachHoldFraction = 0.75f;
 
     /// <summary>
     /// Род при выделении рамкой. Выводится компилятором из тега structure, а не задаётся
@@ -352,6 +385,38 @@ public sealed class UnitDefinition
 
     /// <summary>Рабочий инструмент: стройка и/или ремонт.</summary>
     public WorkToolDefinition BuildTool;
+
+    /// <summary>
+    /// Явно разрешённые приказы: <c>allow</c> минус <c>deny</c> после слияния base.
+    /// Имеет смысл только при <see cref="HasOrderList"/>.
+    /// </summary>
+    public OrderSet DeclaredOrders = OrderSet.None;
+
+    /// <summary>
+    /// Явно запрещённые приказы из <c>deny</c>. В отличие от простого отсутствия в allow,
+    /// такой приказ не попадает ни в принятые, ни в мягкий список панели.
+    /// </summary>
+    public OrderSet DeniedOrders = OrderSet.None;
+
+    /// <summary>В файле была секция <c>[orders]</c> (в том числе с пустым allow или только deny).</summary>
+    public bool HasOrderList;
+
+    /// <summary>
+    /// Что сущность умеет исполнить по классу и снабжению. Считает компилятор после
+    /// связывания инструментов; от объявления в файле не зависит.
+    /// </summary>
+    public OrderSet ExecutableOrders = OrderSet.None;
+
+    /// <summary>Пересечение объявленного и исполнимого — то, что принимает очередь.</summary>
+    public OrderSet AcceptedOrders => DeclaredOrders.Intersect(ExecutableOrders);
+
+    /// <summary>
+    /// Исполнимо, но ни разрешено, ни запрещено явно. Панель показывает со звёздочкой;
+    /// к исполнению не принимается. Приказы из <see cref="DeniedOrders"/> сюда не входят.
+    /// </summary>
+    public OrderSet SoftOrders =>
+        (HasOrderList ? ExecutableOrders.Except(DeclaredOrders) : ExecutableOrders)
+        .Except(DeniedOrders);
 
     /// <summary>Параметры завода. Заданы только у <see cref="UnitClass.Plant"/>.</summary>
     public PlantDefinition Plant;
@@ -392,10 +457,10 @@ public sealed class UnitDefinition
     public bool IsMobile => Speed > 0f;
 
     /// <summary>
-    /// Вес в экспансии с подставленным умолчанием. Считается при обращении, а не при сборке:
+    /// Мощь экспансии с подставленным умолчанием. Считается при обращении, а не при сборке:
     /// умолчание зависит от рода, а род известен только после связывания определения.
     /// </summary>
-    public float TerrorExpansion => ExpansionWeight ?? (IsStructure ? 1f : 0f);
+    public float ExpansionPower => ExpansionPowerWeight ?? (IsStructure ? 1f : 0f);
 
     /// <summary>Боевая мощь с подставленным умолчанием.</summary>
     public float ArmyPower => ArmyPowerWeight ?? (IsMobile && Weapon != null ? 1f : 0f);
@@ -411,6 +476,18 @@ public sealed class UnitDefinition
     public float RadiusPx => Radius * Const.Unit;
 
     public float VisionRadiusPx => VisionRange * Const.Unit;
+
+    /// <summary>
+    /// Радиус внимания: докуда сущность отходит от своего якоря ради занятия, выбранного
+    /// без приказа, — прикрыть строителя, добить подошедшего, починить соседа.
+    ///
+    /// РАВЕН ОБЗОРУ И ОТДЕЛЬНЫМ ЧИСЛОМ НЕ ЗАДАЁТСЯ. Внимание есть готовность отреагировать
+    /// на то, что сущность видит; заводить для него второе число значило бы позволить
+    /// юниту реагировать на то, чего он не видит, либо не реагировать на то, что видит.
+    /// Свойство существует ради имени: в местах применения речь идёт именно о внимании,
+    /// а не об обзоре, и совпадение чисел там читается как случайное.
+    /// </summary>
+    public float AttentionRadiusPx => VisionRadiusPx;
 
     public float SpeedPx => Speed * Const.Unit;
 

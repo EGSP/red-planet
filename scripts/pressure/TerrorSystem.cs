@@ -115,7 +115,7 @@ public partial class TerrorSystem : GameSystem
         var settings = Settings;
 
         RawProduction = Produce(settings);
-        RawExpansion = Expand(settings);
+        RawExpansion = Expand();
         RawArmy = Arm();
         RawTime += interval;
 
@@ -147,13 +147,16 @@ public partial class TerrorSystem : GameSystem
     }
 
     /// <summary>
-    /// Экспансия: вес каждой постройки, умноженный на коэффициент её зоны удалённости.
+    /// Экспансия: вес каждой постройки, умноженный на множитель кольца мира
+    /// (<see cref="WorldSettings.TerrorMultiplierAt"/>), кроме тех, у кого в определении
+    /// стоит <see cref="UnitDefinition.IgnoreTerrorModifiers"/> — у них в сумму входит
+    /// голый вес.
     ///
     /// Каркасы сюда не входят — разрез набирается по готовым постройкам. Это намеренно:
     /// поставленный, но не достроенный каркас ещё ничего не занял и решением не является,
     /// его в любой миг можно отменить.
     /// </summary>
-    private float Expand(TerrorSettings settings)
+    private float Expand()
     {
         float sum = 0f;
         var landing = Const.LandingPoint;
@@ -165,13 +168,19 @@ public partial class TerrorSystem : GameSystem
             if (def == null)
                 continue;
 
-            float weight = def.TerrorExpansion;
+            float weight = def.ExpansionPower;
 
             if (weight <= 0f)
                 continue;
 
+            if (def.IgnoreTerrorModifiers)
+            {
+                sum += weight;
+                continue;
+            }
+
             float cells = building.Position.DistanceTo(landing) / Const.Unit;
-            sum += weight * settings.ZoneCoefficient(cells);
+            sum += weight * World.Settings.TerrorMultiplierAt(cells);
         }
 
         return sum;

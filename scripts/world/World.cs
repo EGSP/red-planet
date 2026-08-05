@@ -1,7 +1,7 @@
 using Godot;
 
 /// <summary>
-/// Действующие настройки мира: размер поля, раскладка точек метала, кольцо появления
+/// Действующие настройки мира: размер поля застройки, кольца руды, окружность появления
 /// противника. Единственная точка, откуда их читают все, кому нужны границы.
 ///
 /// ПОЧЕМУ СТАТИЧЕСКАЯ ССЫЛКА, А НЕ ПОЛЕ НА КАЖДОЙ СИСТЕМЕ. Границы мира спрашивают
@@ -29,22 +29,29 @@ public static class World
         set => _settings = value;
     }
 
-    /// <summary>Клеток застройки от центра до края.</summary>
-    public static int RadiusCells => Settings.RadiusCells;
+    /// <summary>Радиус поля застройки от центра в клетках карты.</summary>
+    public static int Radius => Settings.Radius;
 
     /// <summary>Клеток застройки по стороне мира.</summary>
-    public static int Cells => RadiusCells * 2 + 1;
+    public static int Cells => Radius * 2 + 1;
 
-    /// <summary>Сторона мира в пикселях.</summary>
+    /// <summary>Сторона поля застройки в пикселях.</summary>
     public static int SizePx => Cells * Const.Unit;
 
-    /// <summary>Ячеек навигации по стороне мира.</summary>
+    /// <summary>Ячеек навигации по стороне поля застройки.</summary>
     public static int NavWidth => SizePx / Const.NavCell;
 
-    /// <summary>Левый верхний угол мира в пикселях.</summary>
-    public static Vector2 Min => new(-RadiusCells * Const.Unit, -RadiusCells * Const.Unit);
+    /// <summary>Левый верхний угол поля застройки в пикселях.</summary>
+    public static Vector2 Min => new(-Radius * Const.Unit, -Radius * Const.Unit);
 
+    /// <summary>Прямоугольник поля застройки: постановка, руда, растр навигации.</summary>
     public static Rect2 Bounds => new(Min, new Vector2(SizePx, SizePx));
+
+    /// <summary>
+    /// Прямоугольник арены движения: покрывает окружность появления противника.
+    /// Растр навигации сюда не растягивается.
+    /// </summary>
+    public static Rect2 ArenaBounds => Settings.ArenaBounds;
 
     /// <summary>Радиус окружности появления противника в пикселях.</summary>
     public static float SpawnRadiusPx => Settings.SpawnRadiusPx;

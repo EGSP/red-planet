@@ -51,6 +51,14 @@ public static class DebugFlags
     /// <summary>Ячейки раскладки соседей.</summary>
     public static bool BoidCells;
 
+    // ── замеры ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Измерять время шага систем. Признак читает планировщик; при снятом признаке
+    /// вызов систем идёт без всякой обёртки, а накопленные ряды сбрасываются.
+    /// </summary>
+    public static bool Profile;
+
     /// <summary>Рисовать ли хоть что-нибудь из навигационного растра.</summary>
     public static bool AnyNav => NavBlocked || NavClearance || NavComponents || Footprints;
 

@@ -1,0 +1,26 @@
+# Один: ударный титан Legion. PA HP 50000; main 5600 @ RoF 0.2, range 400.
+
+id    = "odin"
+base  = "/units/enemies/base_enemy.toml"
+name  = "Один"
+color = [0.95, 0.5, 0.3]
+tags  = ["mobile", "enemy", "titan"]
+tools = ["odin_lance"]
+
+[body]
+max_health   = 50000.0
+radius       = 0.9
+vision_range = 11.0
+hull         = "arrow"
+armor_rings  = 1
+
+[movement]
+speed      = 2.0
+turn_speed = 55.0
+brake      = 5.0
+
+[battle]
+approach_hold = 0.6
+
+[terror]
+army_power = 1000.0

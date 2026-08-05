@@ -31,9 +31,6 @@ public partial class Turret : Building, IArmed
 
     public bool CanFire => true;
 
-    /// <summary>Турель не ходит, поэтому весь её набор — один приказ: бей вот этого.</summary>
-    public override OrderSet AllowedOrders => OrderSet.None.With(OrderKind.Attack);
-
     /// <summary>
     /// Приказали цель — бьём её, не приказали — ближайшую в радиусе найдёт система стрельбы.
     /// Своего кода наведения у турели по-прежнему нет.

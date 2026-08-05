@@ -1,0 +1,22 @@
+# Склад металла: PA metal_storage — HP 7500, cost 450, metal 20000.
+
+id    = "metal_storage"
+base  = "/buildings/base_building.toml"
+name  = "Склад металла"
+color = [0.7, 0.45, 0.28]
+tags  = ["structure", "economy", "t1"]
+
+[footprint]
+rows         = ["##", "##"]
+pattern      = "line"
+pattern_alt  = "square"
+pattern_step = "narrow"
+
+[body]
+max_health = 7500.0
+
+[storage]
+metal = 20000.0
+
+[assembly]
+cost_metal = 450.0

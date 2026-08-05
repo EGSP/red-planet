@@ -43,17 +43,43 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     public string DisplayName => Definition?.DisplayName ?? "постройка";
 
     /// <summary>
-    /// Обычной постройке приказать нечего: склад, стена и генератор стоят и работают сами.
-    /// Пустой набор и есть способ это сказать — очередь у них общая со всеми, но пополнить
-    /// её невозможно. Турель и башня-сборщик свой набор переопределяют.
+    /// Приказы из определения: пересечение <c>[orders]</c> и исполнимых по классу.
+    /// Обычной постройке в файле обычно разрешён только снос; турель и завод расширяют список.
     /// </summary>
-    public virtual OrderSet AllowedOrders => OrderSet.None;
+    public virtual OrderSet AllowedOrders => Definition?.AcceptedOrders ?? OrderSet.None;
+
+    /// <summary>Исполнимо, но не объявлено — панель помечает звёздочкой.</summary>
+    public virtual OrderSet SoftOrders => Definition?.SoftOrders ?? OrderSet.None;
 
     public SelectionGroup SelectionGroup => SelectionGroup.Structures;
 
-    public virtual void RunOrder(Order order, double dt) { }
+    public virtual void RunOrder(Order order, double dt)
+    {
+        if (order.Kind == OrderKind.Delete)
+            Demolish();
+    }
 
     public virtual void OnIdle(double dt) { }
+
+    /// <summary>
+    /// Снос через тот же канал, что и гибель от урона: документ DamageDealt разбирает
+    /// DamageSystem в React, и проекции видят EntityDestroyed. Прямой QueueFree из
+    /// Simulate оставил бы журнал без следа гибели.
+    /// </summary>
+    protected void Demolish()
+    {
+        if (Health == null || Health.IsDead || IsQueuedForDeletion())
+            return;
+
+        float amount = Mathf.Max(Health.Current, 1f);
+        GameManager.I.Events.Append(new DamageDealt
+        {
+            TargetId = Id,
+            SourceId = Id,
+            Amount = amount,
+            Pos = GlobalPosition,
+        });
+    }
 
     public Faction Faction => Faction.Player;
 

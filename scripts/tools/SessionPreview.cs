@@ -2,27 +2,35 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Предпросмотр мира в редакторе: границы поля, заполненные пояса размещения,
-/// раскладка точек метала и заполненная область наступления выбранной волны.
+/// Предпросмотр мира в редакторе: границы поля, кольца руды, кластеры, окружность
+/// появления противника и заполненная область наступления выбранной волны.
 ///
 /// ЗАЧЕМ ОН НУЖЕН. Числа, задающие геометрию партии, подбираются глазом по карте, а до сих
-/// пор проверялись запуском: правишь радиус — запускаешь — ждёшь две минуты первой волны —
-/// смотришь. Здесь то же самое видно сразу и, что важнее, видно ВМЕСТЕ: подвинув поле точек
-/// метала, вы двигаете и пояс появления противника, который от него отсчитывается,
-/// и кольцевой сектор волны, который отсчитывается уже от внешней границы пояса. Такие
-/// зависимости между системами по отдельным полям инспектора не читаются.
+/// пор проверялись запуском. Здесь то же самое видно сразу и, что важнее, видно ВМЕСТЕ:
+/// кольца руды, круг появления и WaveStart, от которого отсчитывается форма волны.
 ///
 /// ЧЕМ ОН НЕ ЯВЛЯЕТСЯ. Это не редактор карты и не отдельная модель мира: он ничего не хранит
 /// и ничего не создаёт. Геометрию считают те же <see cref="MetalSpotLayout"/>,
-/// <see cref="WaveComposer"/> и <see cref="WaveFormation"/>, которые работают в партии,
-/// поэтому показанное совпадает с тем, что будет в игре. Единственное расхождение — точки
-/// метала: в редакторе стартовой базы нет, и занятость проверяется по одним границам мира,
-/// поэтому вблизи центра раскладка может отличаться на одну-две точки.
+/// <see cref="WaveComposer"/> и <see cref="WaveFormation"/>, которые работают в партии.
 /// </summary>
 [Tool]
 public partial class SessionPreview : Node2D
 {
     private static readonly Color TextColor = new(0.85f, 0.9f, 1f);
+
+    private static readonly VizKind[] RingKinds =
+    {
+        VizKind.PreviewRing0,
+        VizKind.PreviewRing1,
+        VizKind.PreviewRing2,
+    };
+
+    private static readonly string[] RingNames =
+    {
+        "старт",
+        "середина",
+        "даль",
+    };
 
     // ── Что показывать ────────────────────────────────────────────────────────────
 
@@ -30,6 +38,7 @@ public partial class SessionPreview : Node2D
     [Export] public bool ShowGrid = true;
     [Export] public bool ShowRings = true;
     [Export] public bool ShowMetalSpots = true;
+    [Export] public bool ShowClusters = true;
     [Export] public bool ShowWave = true;
     [Export] public bool ShowLegend = true;
 
@@ -39,11 +48,10 @@ public partial class SessionPreview : Node2D
 
     /// <summary>
     /// Настройки мира. Тот же ресурс назначен сессии, поэтому правка здесь меняет
-    /// и предпросмотр, и партию — в этом и смысл: подбирать надо то, во что играешь.
+    /// и предпросмотр, и партию.
     ///
     /// Класс <see cref="WorldSettings"/> помечен атрибутом Tool именно ради этого поля:
-    /// без него редактор подставляет вместо ресурса заглушку базового класса Resource,
-    /// и типизированное свойство падало бы с InvalidCastException.
+    /// без него редактор подставляет вместо ресурса заглушку базового класса Resource.
     /// </summary>
     [Export] public WorldSettings WorldTuning;
 
@@ -87,11 +95,6 @@ public partial class SessionPreview : Node2D
     private Catalog _catalog;
     private string _note = "";
 
-    /// <summary>
-    /// Перерисовка каждый кадр редактора. Дешевле, чем следить за изменениями: ресурс
-    /// правят прямо в инспекторе, и сигнал Changed пришлось бы переподписывать при каждой
-    /// смене ссылки, тогда как отрисовка стоит нескольких сотен линий.
-    /// </summary>
     public override void _Process(double delta)
     {
         if (Engine.IsEditorHint())
@@ -102,8 +105,6 @@ public partial class SessionPreview : Node2D
     {
         var settings = WorldTuning ?? World.Settings;
 
-        // Показанное должно совпадать с тем, что посчитает игра, поэтому границы мира
-        // берутся не из полей ноды, а из действующих настроек
         World.Settings = settings;
 
         if (ShowGrid)
@@ -112,8 +113,6 @@ public partial class SessionPreview : Node2D
         if (ShowRings)
             DrawRings(settings);
 
-        // Заливка зон и волны — снизу; точки метала и силуэты юнитов — поверх неё,
-        // иначе полупрозрачный сектор закрывает маркеры в своей полосе.
         WavePreview wave = default;
         string waveNote = null;
         bool haveWave = false;
@@ -127,26 +126,32 @@ public partial class SessionPreview : Node2D
         if (haveWave)
             DrawWaveShapes(in wave);
 
-        if (ShowMetalSpots)
-            DrawSpots(settings);
+        MetalSpotPlan plan = null;
+
+        if (ShowMetalSpots || ShowClusters)
+            plan = MetalSpotLayout.Build(settings, Seed(settings), MetalSpotLayout.InsideWorld);
+
+        if (ShowClusters && plan != null)
+            DrawClusters(plan);
+
+        if (ShowMetalSpots && plan != null)
+            DrawSpots(plan);
 
         if (haveWave)
             DrawWaveUnits(in wave);
 
-        // Подпись волны важнее предупреждения о точках: при включённой волне она
-        // должна остаться и после DrawSpots.
         if (waveNote != null)
             _note = waveNote;
 
         if (ShowLegend)
-            DrawLegend(settings);
+            DrawLegend(settings, plan);
     }
 
     // ── Поле ──────────────────────────────────────────────────────────────────────
 
     private void DrawGrid()
     {
-        int r = World.RadiusCells;
+        int r = World.Radius;
         float min = -r * Const.Unit;
         float max = (r + 1) * Const.Unit;
         var grid = DrawTheme.Line(VizKind.GridLine);
@@ -164,72 +169,98 @@ public partial class SessionPreview : Node2D
     }
 
     /// <summary>
-    /// Четыре непересекающихся пояса, показывающие связь настроек друг с другом: зачистка
-    /// у базы, стартовые точки, край поля точек метала и появление противника. Последний
-    /// выведен из поля точек множителем, поэтому двигается вместе с ним — увидеть это
-    /// иначе, чем рядом, нельзя. Пояса не накладываются, чтобы alpha в центре не складывалась.
+    /// Зачистка у базы, пояса колец руды, окружность появления и отметка WaveStart.
+    /// Подписи колец — на оси X у внешнего края каждого пояса, цветом этого пояса.
     /// </summary>
     private void DrawRings(WorldSettings settings)
     {
         var center = Const.LandingPoint;
-        NormalizedRingBounds(settings, out float clearance, out float start, out float field,
-            out float spawn);
+        float clearance = Mathf.Max(settings.BaseClearancePx, 0f);
+        float spawn = settings.SpawnRadiusPx;
+        float waveStart = spawn * Mathf.Max(settings.WaveStart, 0.01f);
 
-        // Диск [0, clearance], затем кольца между соседними границами.
-        // Пояс нулевой толщины не рисуем: иначе при совпадении границ Ring даёт
-        // второй контур поверх уже нарисованного.
         ShapeDraw.Circle(this, center, clearance,
             DrawTheme.Radius(VizKind.PreviewClearance));
-        if (start > clearance)
-            ShapeDraw.Ring(this, center, clearance, start,
-                DrawTheme.Radius(VizKind.PreviewStart));
-        if (field > start)
-            ShapeDraw.Ring(this, center, start, field,
-                DrawTheme.Radius(VizKind.PreviewField));
-        if (spawn > field)
-            ShapeDraw.Ring(this, center, field, spawn,
+
+        float previous = clearance;
+        var rings = settings.Rings;
+
+        if (rings != null)
+        {
+            for (int i = 0; i < rings.Length; i++)
+            {
+                var ring = rings[i];
+
+                if (ring == null)
+                    continue;
+
+                settings.RingBounds(i, out float innerCells, out float outerCells);
+                float inner = Mathf.Max(innerCells * Const.Unit, previous);
+                float outer = Mathf.Max(outerCells * Const.Unit, inner);
+                var kind = RingKind(i);
+
+                if (outer > inner)
+                    ShapeDraw.Ring(this, center, inner, outer, DrawTheme.Radius(kind));
+
+                DrawRingLabel(outer, i, ring.Radius, kind);
+                previous = outer;
+            }
+        }
+
+        if (spawn > previous)
+            ShapeDraw.Ring(this, center, previous, spawn,
                 DrawTheme.Radius(VizKind.PreviewSpawn));
+
+        if (Mathf.Abs(waveStart - spawn) > 1f)
+            ShapeDraw.Circle(this, center, waveStart,
+                DrawTheme.Outline(VizKind.PreviewWaveStart, width: 2f, alpha: 0.85f));
     }
 
-    /// <summary>
-    /// Монотонные границы поясов: каждый следующий радиус не меньше предыдущего.
-    /// При перепутанном порядке в настройках нулевая толщина пояса просто не рисуется,
-    /// а геометрия не инвертируется.
-    /// </summary>
-    private static void NormalizedRingBounds(
-        WorldSettings settings,
-        out float clearance,
-        out float start,
-        out float field,
-        out float spawn)
+    private void DrawRingLabel(float outerPx, int index, int thickness, VizKind kind)
     {
-        clearance = Mathf.Max(settings.BaseClearancePx, 0f);
-        start = Mathf.Max(settings.StartRadiusPx, clearance);
-        field = Mathf.Max(settings.FieldRadiusPx, start);
-        spawn = Mathf.Max(settings.SpawnRadiusPx, field);
+        var font = ThemeDB.FallbackFont;
+        string name = index < RingNames.Length ? RingNames[index] : $"кольцо {index + 1}";
+        string text = $"{name} · {thickness}";
+        int size = 48;
+        var color = DrawTheme.Hue(kind);
+
+        DrawString(font, new Vector2(outerPx + Const.Unit * 0.25f, size * 0.35f), text,
+            HorizontalAlignment.Left, -1f, size, color);
     }
 
-    private void DrawSpots(WorldSettings settings)
+    private static VizKind RingKind(int index) =>
+        RingKinds[Mathf.Clamp(index, 0, RingKinds.Length - 1)];
+
+    private void DrawClusters(MetalSpotPlan plan)
     {
-        var placed = MetalSpotLayout.Build(settings, Seed(settings), MetalSpotLayout.InsideWorld);
+        var font = ThemeDB.FallbackFont;
+        int size = 36;
+
+        foreach (var cluster in plan.Clusters)
+        {
+            ShapeDraw.Circle(this, cluster.Center, cluster.RadiusPx,
+                DrawTheme.Radius(VizKind.PreviewCluster));
+
+            string label = cluster.Shape.ToString();
+            DrawString(font, cluster.Center + new Vector2(cluster.RadiusPx * 0.15f, -size * 0.2f),
+                label, HorizontalAlignment.Left, -1f, size,
+                new Color(DrawTheme.Hue(VizKind.PreviewCluster), 0.95f));
+        }
+    }
+
+    private void DrawSpots(MetalSpotPlan plan)
+    {
         float half = Const.Unit * 0.35f;
+        float alpha = ShowClusters ? 0.75f : 0.9f;
 
-        // Заливкой, а не контуром: поле целиком помещается в вид только при сильном
-        // уменьшении, и линия в два пикселя на нём попросту пропадает
-        foreach (var position in placed)
+        foreach (var position in plan.Spots)
             ShapeDraw.Rect(this, new Rect2(position - new Vector2(half, half), half * 2f, half * 2f),
-                DrawTheme.Fill(VizKind.Metal, 0.9f));
+                DrawTheme.Fill(VizKind.Metal, alpha));
 
-        if (placed.Count < settings.SpotCount)
-            _note = $"точек размещено {placed.Count} из {settings.SpotCount}: " +
-                    "поле тесное для их числа и расстояния между ними";
+        if (plan.Spots.Count == 0)
+            _note = "точек метала не размещено: поле тесное или кольца пусты";
     }
 
-    /// <summary>
-    /// Сид раскладки. Ноль в настройках означает «на каждую партию свой», но предпросмотр
-    /// при этом не должен мерцать каждый кадр, поэтому нулевое значение заменяется единицей.
-    /// Кнопка «новый сид руды» пишет в настройки конкретное число.
-    /// </summary>
     private static ulong Seed(WorldSettings settings) =>
         settings.Seed != 0 ? settings.Seed : 1;
 
@@ -355,7 +386,6 @@ public partial class SessionPreview : Node2D
         }
     }
 
-    /// <summary>Заполненный кольцевой сектор формы волны.</summary>
     private void DrawWaveSector(WaveShape shape, float center)
     {
         float near = shape.NearRadiusPx;
@@ -389,27 +419,24 @@ public partial class SessionPreview : Node2D
 
     // ── Подпись ───────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Числа под полем: то, что иначе пришлось бы считать в уме, сопоставляя поля инспектора.
-    /// Рисуется в мировых координатах, поэтому вместе с полем и масштабируется.
-    /// </summary>
-    private void DrawLegend(WorldSettings settings)
+    private void DrawLegend(WorldSettings settings, MetalSpotPlan plan)
     {
         var font = ThemeDB.FallbackFont;
-        float y = (World.RadiusCells + 2) * Const.Unit;
-        float x = -World.RadiusCells * Const.Unit;
-        // Подпись рисуется в мировых координатах и уменьшается вместе с полем, поэтому
-        // кегль задан заметно крупнее обычного: на общем плане иначе не прочесть
+        float y = (World.Radius + 2) * Const.Unit;
+        float x = -World.Radius * Const.Unit;
         int size = 64;
+
+        int spots = plan?.Spots.Count ?? 0;
+        int clusters = plan?.Clusters.Count ?? 0;
+        int rings = settings.Rings?.Length ?? 0;
 
         string[] lines =
         {
             $"поле {World.Cells}×{World.Cells} клеток, растр " +
             $"{World.NavWidth}×{World.NavWidth} ячеек",
 
-            $"точек метала {settings.SpotCount}, поле до {settings.FieldRadiusCells} клеток, " +
-            $"появление на {settings.FieldRadiusCells * settings.RingFactor:0.0} клетках " +
-            $"(×{settings.RingFactor:0.00})",
+            $"колец {rings}, кластеров {clusters}, точек метала {spots}, " +
+            $"появление на {settings.EnemySpawnRadius} клетках, WaveStart {settings.WaveStart:0.00}",
 
             _note,
         };
@@ -426,7 +453,6 @@ public partial class SessionPreview : Node2D
 
     // ── Кнопки ────────────────────────────────────────────────────────────────────
 
-    /// <summary>Взять следующую волну справочника. По кругу, чтобы перебрать все подряд.</summary>
     private void RollWave()
     {
         _catalog ??= Content.Catalog;
@@ -441,9 +467,6 @@ public partial class SessionPreview : Node2D
 
         int index = ids.IndexOf(WaveId);
         WaveId = ids[(index + 1) % ids.Count];
-
-        // Состав тоже пересобираем: одна и та же волна при разных сидах набирается
-        // по-разному, и увиденное на одном сиде за правило принимать нельзя
         WaveSeed = GD.Randi() | 1;
 
         QueueRedraw();
@@ -457,10 +480,6 @@ public partial class SessionPreview : Node2D
         QueueRedraw();
     }
 
-    /// <summary>
-    /// Перечитать .toml. Нужно потому, что справочник читается один раз за запуск редактора:
-    /// правку файла волны иначе было бы видно только после перезапуска.
-    /// </summary>
     private void Reload()
     {
         _catalog = new Catalog();

@@ -1,0 +1,28 @@
+# Синтезатор метала: локальный сброс излишков энергии. Расход на шкале PA (×100).
+
+id    = "metal_maker"
+base  = "/buildings/base_building.toml"
+name  = "Синтезатор"
+class = "factory"
+color = [0.55, 0.62, 0.72]
+tags  = ["structure", "economy", "t1"]
+
+[footprint]
+rows           = ["##", "##"]
+pattern        = "line"
+pattern_alt    = "square"
+pattern_step   = "margin"
+facing_degrees = -90.0
+
+[body]
+max_health = 400.0
+
+[terror]
+expansion_power = 5.0
+
+[conversion]
+energy_drain = 1200.0
+metal_output = 8.0
+
+[assembly]
+cost_metal = 100.0

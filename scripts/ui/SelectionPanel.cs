@@ -12,12 +12,31 @@ public partial class SelectionPanel : CanvasLayer
 {
     private static readonly Color CountColor = new(0.65f, 0.95f, 0.75f);
 
+    /// <summary>
+    /// Отступ нижнего края панели от низа экрана. Не только свой: на этой же высоте
+    /// начинается стопка панелей левого нижнего угла, и её верхние ярусы отсчитываются
+    /// от того же числа — см. <see cref="StackHeight"/>.
+    /// </summary>
+    public const int BottomMargin = 42;
+
     private Control _frame;
     private Label _total;
     private VBoxContainer _kinds;
+    private PanelContainer _panel;
 
     /// <summary>Отпечаток состава: пересобираем строки только когда он сменился.</summary>
     private string _key = "";
+
+    /// <summary>
+    /// Сколько места панель занимает над своим нижним краем. Ноль, когда выделения нет.
+    ///
+    /// Спрашивает <see cref="HoverPanel"/>: справка о наведении стоит ярусом выше и обязана
+    /// подниматься вместе с ростом списка выделенного. Направление зависимости выбрано так,
+    /// а не наоборот, потому что панель выделения главнее: её место постоянно и от соседей
+    /// не зависит, а справка пристраивается к ней.
+    /// </summary>
+    public float StackHeight =>
+        _frame is { Visible: true } && _panel != null ? _panel.Size.Y : 0f;
 
     public override void _Ready()
     {
@@ -36,7 +55,7 @@ public partial class SelectionPanel : CanvasLayer
 
         var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         margin.AddThemeConstantOverride("margin_left", 12);
-        margin.AddThemeConstantOverride("margin_bottom", 42);
+        margin.AddThemeConstantOverride("margin_bottom", BottomMargin);
         row.AddChild(margin);
 
         var column = new VBoxContainer
@@ -46,12 +65,12 @@ public partial class SelectionPanel : CanvasLayer
         };
         margin.AddChild(column);
 
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(210, 0) };
-        column.AddChild(panel);
+        _panel = new PanelContainer { CustomMinimumSize = new Vector2(210, 0) };
+        column.AddChild(_panel);
 
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 4);
-        panel.AddChild(box);
+        _panel.AddChild(box);
 
         _total = new Label { Text = "" };
         _total.AddThemeFontSizeOverride("font_size", 15);

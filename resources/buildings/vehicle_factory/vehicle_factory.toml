@@ -1,0 +1,37 @@
+# Завод машин: PA vehicle_factory — HP 6000, cost 600, metal 15 / energy 675.
+# Выпускает танки и машинного фабрикатора; ботов — bot_factory.
+
+id       = "vehicle_factory"
+base     = "/buildings/base_building.toml"
+name     = "Завод машин"
+class    = "plant"
+color    = [0.55, 0.5, 0.4]
+buildbar = "vehicle_factory_buildbar"
+tags     = ["structure", "t1"]
+
+[footprint]
+rows           = ["##", "##"]
+pattern        = "line"
+pattern_alt    = "square"
+pattern_step   = "margin"
+facing_degrees = -90.0
+
+[body]
+max_health   = 6000.0
+vision_range = 8.0
+
+[plant]
+factory_cooldown    = 1.5
+build_power         = 15.0
+energy_per_power    = 45.0
+rolloff_directions  = [[1.0, 0.0], [-1.0, 0.0]]
+rolloff_clearance   = 0.0
+
+[terror]
+expansion_power = 8.0
+
+[assembly]
+cost_metal = 600.0
+
+[orders]
+allow = ["move", "follow", "attack", "delete"]

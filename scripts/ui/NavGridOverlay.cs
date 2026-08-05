@@ -4,10 +4,11 @@ using Godot;
 /// Растр навигации поверх земли: непроходимость, клиренс, связные области, а также
 /// прямоугольники строений с зазорами.
 ///
-/// РИСУЕТСЯ ОДНОЙ ТЕКСТУРОЙ. Поле состоит из 27 тысяч ячеек, и вызывать DrawRect на каждую
-/// каждый кадр нельзя. Вместо этого поле собирается в изображение 164×164 и растягивается
-/// на мир одним вызовом, а пересобирается только при смене ревизии растра или набора
-/// признаков отладки. Фильтрация «ближайший сосед» оставляет границы ячеек различимыми.
+/// РИСУЕТСЯ ОДНОЙ ТЕКСТУРОЙ. Поле может содержать сотни тысяч ячеек, и вызывать DrawRect
+/// на каждую каждый кадр нельзя. Вместо этого поле собирается в изображение Width×Width
+/// и растягивается на мир одним вызовом, а пересобирается только при смене ревизии
+/// опубликованного снимка или набора признаков отладки. Фильтрация «ближайший сосед»
+/// оставляет границы ячеек различимыми.
 /// </summary>
 public partial class NavGridOverlay : Node2D
 {
@@ -19,6 +20,7 @@ public partial class NavGridOverlay : Node2D
 
     private int _drawnRevision = -1;
     private int _drawnMode = -1;
+    private int _drawnWidth = -1;
 
     /// <summary>Рисовали ли в прошлом кадре: погасить нарисованное тоже нужно перерисовкой.</summary>
     private bool _shown;
@@ -26,9 +28,7 @@ public partial class NavGridOverlay : Node2D
     public override void _Ready()
     {
         TextureFilter = TextureFilterEnum.Nearest;
-
-        _image = Image.CreateEmpty(NavGrid.Width, NavGrid.Width, false, Image.Format.Rgba8);
-        _texture = ImageTexture.CreateFromImage(_image);
+        EnsureImage();
     }
 
     public override void _Process(double delta)
@@ -61,41 +61,61 @@ public partial class NavGridOverlay : Node2D
     /// <summary>Пересобрать картинку, если растр или выбранный режим изменились.</summary>
     private void Refresh(GameManager gm)
     {
-        int mode = Mode();
+        gm.Nav.Fresh();
+        EnsureImage();
 
-        if (_drawnRevision == gm.Nav.Revision && _drawnMode == mode)
+        int mode = Mode();
+        int revision = gm.Nav.ActiveRevision;
+
+        if (_drawnRevision == revision && _drawnMode == mode && _drawnWidth == NavGrid.Width)
             return;
 
-        _drawnRevision = gm.Nav.Revision;
+        _drawnRevision = revision;
         _drawnMode = mode;
+        _drawnWidth = NavGrid.Width;
 
         Repaint(gm);
+    }
+
+    private void EnsureImage()
+    {
+        if (_image != null && _image.GetWidth() == NavGrid.Width && _image.GetHeight() == NavGrid.Width)
+            return;
+
+        _image = Image.CreateEmpty(NavGrid.Width, NavGrid.Width, false, Image.Format.Rgba8);
+        _texture = ImageTexture.CreateFromImage(_image);
+        _drawnRevision = -1;
     }
 
     private void Repaint(GameManager gm)
     {
         int required = NavGrid.Required(SampleRadius);
+        var snapshot = gm.Nav.Active;
 
         for (int y = 0; y < NavGrid.Width; y++)
         {
             for (int x = 0; x < NavGrid.Width; x++)
             {
                 int index = y * NavGrid.Width + x;
-                _image.SetPixel(x, y, Tint(gm, index, required));
+                _image.SetPixel(x, y, Tint(gm, snapshot, index, required));
             }
         }
 
         _texture.Update(_image);
     }
 
-    private static Color Tint(GameManager gm, int index, int required)
+    private static Color Tint(GameManager gm, NavSnapshot snapshot, int index, int required)
     {
-        if (DebugFlags.NavBlocked && gm.Nav.BlockedAt(index))
+        bool blocked = gm.Nav.BlockedAt(index);
+
+        if (DebugFlags.NavBlocked && blocked)
             return new Color(DrawTheme.Hue(VizKind.NavBlocked), 0.55f);
 
         if (DebugFlags.NavComponents)
         {
-            int label = gm.Nav.ComponentAt(index, SampleRadius);
+            int label = snapshot != null
+                ? snapshot.ComponentAt(index, required)
+                : gm.Nav.ComponentAt(index, SampleRadius);
 
             if (label == 0)
                 return DebugFlags.NavBlocked

@@ -1,0 +1,11 @@
+# Рука Stitch: только ремонт. PA metal 30 / energy 400, range 60.
+
+id   = "stitch_arm"
+name = "Ремонтная рука Стича"
+kind = "work"
+
+range            = 4.0
+power            = 30.0
+energy_per_power = 13.333
+works            = ["repair"]
+repairs_units    = true

@@ -1,0 +1,24 @@
+# Фабрикатор: строит и чинит, копать не умеет.
+
+id       = "fabricator"
+base     = "/units/base_unit.toml"
+name     = "Фабрикатор"
+color    = [0.4, 0.9, 0.5]
+buildbar = "fabricator_buildbar"
+tags     = ["mobile", "builder"]
+tools    = ["fabricator_arm"]
+
+[footprint]
+rows = ["#"]
+
+[body]
+max_health = 50.0
+radius     = 0.32
+
+[movement]
+speed      = 4.0
+turn_speed = 240.0
+
+[assembly]
+cost_metal   = 75.0
+frame_health = 80.0

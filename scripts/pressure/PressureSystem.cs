@@ -25,9 +25,9 @@ using Godot;
 /// не останавливается — связи между подсистемами нет намеренно, иначе подбирать их
 /// пришлось бы вместе.
 ///
-/// Появляются юниты на окружности вокруг базы радиусом с внешнее кольцо руды, взятым
-/// с запасом (WorldSettings.RingFactor): дальние месторождения оказываются на линии подхода,
-/// и добыча на краю кольца перестаёт быть безопасной.
+/// Появляются юниты на окружности <see cref="WorldSettings.EnemySpawnRadius"/> за краем
+/// поля застройки: подход идёт снаружи растра навигации, а дальние месторождения
+/// оказываются на линии этого подхода.
 /// </summary>
 public partial class PressureSystem : GameSystem
 {
@@ -67,14 +67,16 @@ public partial class PressureSystem : GameSystem
         if (GM.Playground == null)
             return;
 
+        // Бюджет и занятость считаются каждый шаг: плашка террора читает их между
+        // появлениями, а порождение по-прежнему ждёт таймера
+        Budget = Cap();
+        Used = AmbientPower();
+
         _timer -= (float)dt;
         if (_timer > 0f)
             return;
 
         _timer = Mathf.Max(0.1f, Settings.SpawnInterval);
-
-        Budget = Cap();
-        Used = AmbientPower();
 
         var def = PickType(Available);
 
@@ -118,6 +120,7 @@ public partial class PressureSystem : GameSystem
 
         // Появился — уже смотрит на базу: иначе первый ход выглядит как разворот на месте
         enemy.Rotation = Heading.AngleTo(position, Vector2.Zero);
+        enemy.SnapToolToBody();
 
         Used += def.ArmyPower;
 

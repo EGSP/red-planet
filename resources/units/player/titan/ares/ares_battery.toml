@@ -1,0 +1,14 @@
+# Батарея Ареса: PA main 800×4 @ 0.3 → один залп 3200 / interval ≈3.333; range 400÷15.
+
+id   = "ares_battery"
+base = "/tools/base_weapon.toml"
+name = "Батарея Ареса"
+
+range             = 26.7
+damage            = 3200.0
+fire_interval     = 3.333
+projectile_speed  = 13.3
+spread_degrees    = 1.5
+aim_cone_degrees  = 6.0
+projectile_radius = 0.16
+projectile_color  = [0.55, 0.9, 1.0]

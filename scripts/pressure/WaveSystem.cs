@@ -29,7 +29,9 @@ public sealed class WaveRecord
 ///
 /// ЧЕМ ВОЛНА ОТЛИЧАЕТСЯ ОТ ФОНА, ПОМИМО РАЗМЕРА. Фон ограничен бюджетом, выведенным
 /// из террора, и восполняет потери по таймеру; волна бюджетом фона не ограничена
-/// и приходит целиком разом. Её юниты помечаются признаком <see cref="PressureOrigin.Wave"/>
+/// и приходит целиком как одно событие — состав набирается разом, а очаги могут
+/// выходить с паузой <see cref="WaveShape.GroupDelaySeconds"/> между собой.
+/// Её юниты помечаются признаком <see cref="PressureOrigin.Wave"/>
 /// и в занятое место фона не входят — иначе после волны фон замер бы на всё время жизни
 /// пришедших, и за пиком следовала бы тишина неопределённой длины.
 ///
@@ -48,6 +50,16 @@ public sealed class WaveRecord
 /// </summary>
 public partial class WaveSystem : GameSystem
 {
+    /// <summary>
+    /// Очаг, ждущий своего часа. Места считаются в миг запуска волны, чтобы пауза
+    /// не сдвигала построение относительно уже вышедших соседей.
+    /// </summary>
+    private sealed class PendingGroup
+    {
+        public float Remaining;
+        public List<(UnitDefinition Definition, Vector2 Position)> Units;
+    }
+
     /// <summary>Константа отдыха, разброс и умолчания формы появления.</summary>
     [Export] public WaveSettings Settings;
 
@@ -84,6 +96,9 @@ public partial class WaveSystem : GameSystem
     /// <summary>Состав по убыванию мощи — в том порядке, в каком он встаёт по рядам.</summary>
     private readonly List<UnitDefinition> _ordered = new();
 
+    /// <summary>Очаги текущей (и, редко, предыдущей) волны, ещё не вышедшие на карту.</summary>
+    private readonly List<PendingGroup> _pending = new();
+
     private string[] _preferred = System.Array.Empty<string>();
     private float _timer;
     private float _gameTime;
@@ -118,8 +133,14 @@ public partial class WaveSystem : GameSystem
         if (GM.Playground == null)
             return;
 
-        _gameTime += (float)dt;
-        _timer -= (float)dt;
+        float step = (float)dt;
+        _gameTime += step;
+
+        // Отложенные очаги тикают независимо от отдыха: пауза между ними короче интервала
+        // между волнами, и следующий отбор не должен их «забыть»
+        TickPending(step);
+
+        _timer -= step;
 
         if (_timer > 0f)
             return;
@@ -220,6 +241,10 @@ public partial class WaveSystem : GameSystem
     /// равные доли мощи и смешанный состав. Разделение по видам («очаг толстяков и очаг
     /// стрелков») этим не выражается — и не должно: оно и так получается двумя волнами
     /// подряд через малый множитель отдыха.
+    ///
+    /// Первый очаг выходит сразу; каждый следующий — через
+    /// <see cref="WaveShape.GroupDelaySeconds"/> после предыдущего. Ноль паузы сохраняет
+    /// прежнее поведение: все очаги в одном шаге.
     /// </summary>
     private int Deploy(WaveShape shape, float center)
     {
@@ -234,22 +259,52 @@ public partial class WaveSystem : GameSystem
         _ordered.Sort((a, b) => b.ArmyPower.CompareTo(a.ArmyPower));
 
         int groups = Mathf.Min(shape.Groups, _ordered.Count);
+        float delay = shape.GroupDelaySeconds;
         int extra = 0;
 
         for (int g = 0; g < groups; g++)
         {
             float angle = WaveFormation.GroupAngle(shape, center, g);
+            var units = new List<(UnitDefinition Definition, Vector2 Position)>();
             int index = 0;
 
             for (int i = g; i < _ordered.Count; i += groups)
             {
                 var (position, row) = WaveFormation.Slot(shape, angle, index++);
-                Spawn(_ordered[i], position);
+                units.Add((_ordered[i], position));
                 extra = Mathf.Max(extra, row);
             }
+
+            float when = delay > 0f ? g * delay : 0f;
+
+            if (when <= 0f)
+                ReleaseGroup(units);
+            else
+                _pending.Add(new PendingGroup { Remaining = when, Units = units });
         }
 
         return Mathf.Max(extra + 1 - WaveFormation.Rows(shape), 0);
+    }
+
+    private void TickPending(float dt)
+    {
+        for (int i = _pending.Count - 1; i >= 0; i--)
+        {
+            var group = _pending[i];
+            group.Remaining -= dt;
+
+            if (group.Remaining > 0f)
+                continue;
+
+            ReleaseGroup(group.Units);
+            _pending.RemoveAt(i);
+        }
+    }
+
+    private void ReleaseGroup(List<(UnitDefinition Definition, Vector2 Position)> units)
+    {
+        foreach (var (definition, position) in units)
+            Spawn(definition, position);
     }
 
     private void Spawn(UnitDefinition definition, Vector2 position)
@@ -259,6 +314,7 @@ public partial class WaveSystem : GameSystem
 
         // Появился — уже смотрит на базу: иначе первый ход выглядит как разворот на месте
         enemy.Rotation = Heading.AngleTo(position, Vector2.Zero);
+        enemy.SnapToolToBody();
 
         GM.Events.Append(new EnemySpawned
         {

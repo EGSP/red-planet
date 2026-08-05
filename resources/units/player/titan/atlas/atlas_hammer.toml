@@ -1,0 +1,15 @@
+# Молоты Атласа: PA stomp dmg 8000, RoF 0.2, range 135.
+
+id   = "atlas_hammer"
+base = "/tools/base_weapon.toml"
+name = "Молоты Атласа"
+
+range             = 9.0
+damage            = 8000.0
+fire_interval     = 5.0
+projectile_speed  = 11.0
+spread_degrees    = 9.0
+aim_cone_degrees  = 24.0
+projectile_radius = 0.2
+projectile_color  = [1.0, 0.7, 0.3]
+aim_while_moving  = false

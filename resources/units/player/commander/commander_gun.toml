@@ -1,0 +1,14 @@
+# Пушка коммандера: PA dmg 80, RoF 2.0, range 100, vel 125.
+
+id   = "commander_gun"
+base = "/tools/base_weapon.toml"
+name = "Универсальная пушка"
+
+range             = 6.7
+damage            = 80.0
+fire_interval     = 0.5
+projectile_speed  = 8.3
+spread_degrees    = 3.0
+aim_cone_degrees  = 10.0
+projectile_radius = 0.09
+projectile_color  = [0.55, 0.85, 1.0]

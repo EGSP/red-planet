@@ -1,0 +1,21 @@
+# Общий предок построек. Умолчания тела и приказ сноса; класс и теги потомок задаёт сам,
+# если они отличаются от structure. Сам в каталог не попадает.
+
+id       = "base_building"
+abstract = true
+name     = "Постройка"
+class    = "structure"
+color    = [0.6, 0.6, 0.65]
+tags     = ["structure"]
+
+[body]
+max_health   = 100.0
+vision_range = "/content/units.vars.toml/structure_vision"
+
+[orders]
+allow = ["delete"]
+
+# Мощь экспансии: абсолютный вес постройки в слагаемом террора, до множителя зоны.
+# Потомки перекрывают значение там, где единица не подходит.
+[terror]
+expansion_power = 1.0

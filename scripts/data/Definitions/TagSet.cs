@@ -4,7 +4,7 @@ using Godot;
 
 /// <summary>
 /// Набор тегов сущности, упакованный в битовую маску. Теги — это категории, которыми
-/// определение помечает само себя: «постройка», «подвижный», «строитель», «продвинутый».
+/// определение помечает само себя: «постройка», «подвижный», «строитель», «t2».
 ///
 /// ЗАЧЕМ БИТЫ, А НЕ СПИСОК СТРОК. Проверка принадлежности к категории нужна в отборах
 /// («ближайший повреждённый, но только не постройка») и в правилах выделения, то есть
@@ -62,6 +62,18 @@ public sealed class TagRegistry
 
     /// <summary>Сторона противника. По нему спавн набирает поток.</summary>
     public TagSet Enemy { get; private set; }
+
+    /// <summary>Первый тир.</summary>
+    public TagSet T1 { get; private set; }
+
+    /// <summary>Второй тир.</summary>
+    public TagSet T2 { get; private set; }
+
+    /// <summary>Титан.</summary>
+    public TagSet Titan { get; private set; }
+
+    /// <summary>Любой из тегов тира.</summary>
+    public TagSet AnyTier => T1 | T2 | Titan;
 
     public IReadOnlyCollection<string> Names => _byName.Keys;
 
@@ -151,6 +163,9 @@ public sealed class TagRegistry
         Structure = Required("structure", path, ref ok);
         Mobile = Required("mobile", path, ref ok);
         Enemy = Required("enemy", path, ref ok);
+        T1 = Required("t1", path, ref ok);
+        T2 = Required("t2", path, ref ok);
+        Titan = Required("titan", path, ref ok);
 
         return ok;
     }

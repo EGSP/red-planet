@@ -1,311 +1,239 @@
 using System.Collections.Generic;
 using Godot;
 
-/// <summary>Одно место будущего строения: где, под каким углом и годится ли оно.</summary>
-public readonly struct BuildSpot
-{
-    public readonly Vector2 Center;
-    public readonly float Facing;
-
-    /// <summary>Годится ли место. Негодные остаются в плане: игрок должен видеть отказ.</summary>
-    public readonly bool Valid;
-
-    public BuildSpot(Vector2 center, float facing, bool valid)
-    {
-        Center = center;
-        Facing = facing;
-        Valid = valid;
-    }
-}
-
 /// <summary>
-/// План застройки: во что превращается протаскивание мыши с выбранной постройкой.
+/// План постройки: намерение игрока, а не строение. Появляется в мире по щелчку и живёт
+/// до тех пор, пока исполнитель не дойдёт до места и не поставит на нём каркас.
 ///
-/// ЗАЧЕМ ОТДЕЛЬНЫМ КЛАССОМ И БЕЗ НОД. План спрашивают дважды и с разными намерениями:
-/// призрак под курсором — каждый кадр, чтобы показать, и постановка каркасов — один раз,
-/// чтобы выполнить. Оба обязаны получить один и тот же ответ, иначе игрок поставит не то,
-/// что видел. Общий расчёт это гарантирует, а отсутствие нод делает его проверяемым
-/// без запуска мира.
+/// ЧЕМ ПЛАН ОТЛИЧАЕТСЯ ОТ КАРКАСА. Каркас — материальный объект: он занимает место,
+/// его можно разбить, он тянет метал из хранилища. План неосязаем: ходьбе он не мешает,
+/// прочности у него нет, атаковать его нечем и незачем. Единственное, на что он влияет, —
+/// на постановку СЛЕДУЮЩИХ планов и строений: размеченное место больше не предлагается
+/// под другую постройку.
 ///
-/// ЧТО ЗАДАЁТ ПРОТАСКИВАНИЕ. Вектор от точки нажатия к курсору один, а решает он сразу три
-/// вещи: направление ряда, угол строений и протяжённость раскладки. Отсюда и берётся то,
-/// что вращение и раскладка работают одновременно, — это не два приёма, а два следствия
-/// одного движения.
+/// ЗАЧЕМ ЭТО НУЖНО. Раньше каркас возникал в любой точке карты мгновенно, поэтому стену
+/// перед наступающим противником можно было поставить, не имея там ни одного юнита.
+/// С планом застройка становится следствием присутствия: сначала исполнитель доходит,
+/// и только потом на месте появляется то, что можно обстрелять.
+///
+/// ПЛАН — НЕ ПРИКАЗ, хотя и рождается из него. Приказ живёт в очереди исполнителя
+/// и исчезает вместе с ним; план переживает гибель того, кому был назначен, и за него
+/// берётся любой, кому его поручат. Отказ игрока от приказа — другое дело: вместе
+/// с брошенными приказами снимаются и планы, на которые больше никто не нацелен
+/// (см. <see cref="ReleaseAbandoned"/>). Поэтому план — сущность мира, а приказ на неё —
+/// обычный <see cref="OrderKind.Build"/>.
 /// </summary>
-public static class BuildPlan
+public partial class BuildPlan : Node2D, IWorkSite, IFacing
 {
-    /// <summary>
-    /// Короче этого протаскивание считается щелчком: угол по нему не читается, потому что
-    /// дрожание руки на паре пикселей давало бы произвольный поворот.
-    /// </summary>
-    public const float AngleThreshold = 8f;
+    public int Id { get; set; }
+
+    public UnitDefinition Definition { get; private set; }
+
+    /// <summary>Угол, под которым план размечен. Каркас и постройка его унаследуют.</summary>
+    public float BodyFacing { get; private set; }
 
     /// <summary>
-    /// Рассчитать план. Список заполняется заново, первым в нём всегда идёт место
-    /// под точкой нажатия: оно и есть то, что игрок выбрал, а остальные к нему пристроены.
+    /// Сцена каркаса. План носит её с собой, потому что каркас ставит он сам, а взять
+    /// сцену в этот миг больше неоткуда: <see cref="CommandSystem"/> к тому времени
+    /// занят уже другим, и спрашивать её у системы означало бы связать сущность
+    /// с системой ввода.
     /// </summary>
-    public static void Compute(GameManager gm, UnitDefinition def, Vector2 anchor, Vector2 cursor,
-        bool alt, List<BuildSpot> into)
+    public PackedScene FrameScene;
+
+    /// <summary>План израсходован: каркас поставлен либо место оказалось занято.</summary>
+    private bool _spent;
+
+    /// <summary>
+    /// Место работы сменилось каркасом. Подписаны на объявление сами приказы, нацеленные
+    /// на этот план: список подписчиков и есть обратная связь «место работы — приказы»,
+    /// без которой их пришлось бы искать перебором всех веток приказов.
+    ///
+    /// Отменённый план объявления не делает: преемника у него нет, и приказы на него
+    /// становятся невыполнимыми сами — цели больше нет.
+    /// </summary>
+    public event System.Action<IWorkSite> Superseded;
+
+    public float Facing => BodyFacing;
+
+    /// <summary>
+    /// Место, которое план держит за собой. В карту препятствий не попадает: занятость
+    /// там означает «здесь стоит нечто твёрдое», а план не твёрд. Читает эту форму только
+    /// <see cref="Placement"/>.
+    /// </summary>
+    public Obb Footprint => Definition == null
+        ? new Obb(GlobalPosition, Vector2.Zero)
+        : Placement.Footprint(Definition, GlobalPosition, BodyFacing);
+
+    public bool NeedsWork => !_spent && Definition != null;
+
+    public void Init(int id, UnitDefinition def, Vector2 center, float facing, PackedScene frame)
     {
-        into.Clear();
-
-        if (gm == null || def == null)
-            return;
-
-        var drag = cursor - anchor;
-        float length = drag.Length();
-        float facing = Facing(def, drag, length);
-
-        // Прилипание считается от точки нажатия и только от неё: остальные места ряда
-        // отсчитываются от неё же, и подвинься каждое само по себе — ряд перестал бы
-        // быть рядом. Негодные места из ряда просто выпадают
-        var origin = Placement.Snap(gm, def, anchor, facing);
-
-        var pattern = Pattern(def, alt);
-        var taken = new List<Obb>();
-
-        if (pattern == BuildPattern.MetalArea)
-        {
-            Deposits(gm, def, origin, facing, length, taken, into);
-            return;
-        }
-
-        Accept(gm, def, origin, facing, taken, into);
-
-        if (pattern == BuildPattern.None || length < AngleThreshold)
-            return;
-
-        var direction = drag / length;
-
-        switch (pattern)
-        {
-            case BuildPattern.Line:
-                Line(gm, def, origin, facing, direction, length, taken, into);
-                break;
-
-            case BuildPattern.Diamond:
-                Diamond(gm, def, origin, facing, direction, length, taken, into);
-                break;
-
-            default:
-                Field(gm, def, origin, facing, direction, length, taken, into);
-                break;
-        }
+        Id = id;
+        Definition = def;
+        Position = center;
+        BodyFacing = facing;
+        FrameScene = frame;
     }
 
-    /// <summary>Какая раскладка сейчас действует: обычная или та, что под Alt.</summary>
-    public static BuildPattern PatternOf(UnitDefinition def, bool alt) =>
-        alt && def.PatternAlt != BuildPattern.None ? def.PatternAlt : def.Pattern;
-
-    /// <summary>Какая раскладка сейчас действует: обычная или та, что под Alt.</summary>
-    private static BuildPattern Pattern(UnitDefinition def, bool alt) => PatternOf(def, alt);
+    public override void _Process(double delta) => QueueRedraw();
 
     /// <summary>
-    /// Угол постройки. Строение разворачивается поперёк протаскивания, а не вдоль: ряд
-    /// выкладывается фронтом, и смотреть строения обязаны в ту сторону, которую фронт
-    /// прикрывает, — иначе турели в стене глядели бы вдоль неё.
+    /// Исполнитель дошёл: поставить каркас и уйти из мира.
     ///
-    /// Экстрактор не поворачивается вовсе: он привязан к залежи, и раскладка у него
-    /// не рядовая, поэтому поперечника у неё нет.
+    /// ПОЧЕМУ ПРОВЕРКА МЕСТА ЗДЕСЬ ПОВТОРЯЕТСЯ. Между разметкой и приходом исполнителя
+    /// проходит время, и за это время место могло быть застроено: план его не занимал.
+    /// Случай редкий, поскольку правило постановки планы учитывает, но не невозможный:
+    /// план тихо отменяется, а очередь исполнителя идёт дальше.
+    ///
+    /// ПРИКАЗ НЕ ЗАМЕНЯЕТСЯ И НЕ ДОПИСЫВАЕТСЯ — у него переезжает цель. План объявляет,
+    /// что сменился каркасом, а нацеленный сюда приказ переводит цель сам (см.
+    /// <see cref="IWorkSite.Superseded"/>). Приказ при этом остаётся ОДНИМ объектом на всех,
+    /// на прежнем месте во всех ветках, где он значится: состояние исполнения у него общее,
+    /// поэтому подошедшие следом узнают, что работа уже начата, и включаются в неё.
     /// </summary>
-    private static float Facing(UnitDefinition def, Vector2 drag, float length)
+    public void Realize()
     {
-        float own = Mathf.DegToRad(def.FacingDegrees);
-
-        if (def.RequiresMetalSpot || length < AngleThreshold)
-            return own;
-
-        return drag.Angle() + Mathf.Pi * 0.5f;
-    }
-
-    /// <summary>
-    /// Цепочка вдоль протаскивания. Промежуток постоянен и равен шагу: он выведен из размера
-    /// строения, и растягивать его до курсора нельзя.
-    ///
-    /// РАСТЯЖЕНИЕ БЫЛО ОШИБКОЙ. Промежуток, поделённый на число мест, давал последнее строение
-    /// точно под курсором, но ценой того, что весь ряд ехал от любого движения мыши: два
-    /// одинаково выложенных ряда получались с разными просветами, и застройка переставала
-    /// быть плотной. Курсор задаёт, докуда тянется ряд, а не как в нём стоят строения.
-    /// </summary>
-    private static void Line(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
-        Vector2 direction, float length, List<Obb> taken, List<BuildSpot> into)
-    {
-        float step = Step(def, facing, direction);
-        int count = Mathf.FloorToInt(length / step);
-
-        for (int i = 1; i <= count && into.Count < Const.PatternLimit; i++)
-            Accept(gm, def, origin + direction * step * i, facing, taken, into);
-    }
-
-    /// <summary>
-    /// Квадратная застройка: тот же ряд, что и в цепочке, плюс такое же число рядов рядом с ним.
-    ///
-    /// РЕШЁТКА ИДЁТ ПО ВЕКТОРУ ПРОТАСКИВАНИЯ, промежутки в ней — размеры строения с зазором,
-    /// и ничем другим они не задаются. Смысл раскладки в плотности: строения стоят стенка
-    /// к стенке, а курсор решает только то, сколько их поместилось.
-    ///
-    /// ШИРИНА РАВНА ДЛИНЕ, потому что задать её отдельно нечем. Вектор протаскивания
-    /// израсходован целиком: направление ушло на угол строений, длина — на счёт мест,
-    /// а отклонение курсора от оси измерить невозможно, поскольку ось поворачивается
-    /// вслед за курсором и отклонение всегда нулевое. Отсюда квадрат: сколько строений
-    /// в ряду, столько и рядов.
-    ///
-    /// Ряды расходятся от линии протаскивания в обе стороны поровну, поэтому застройка
-    /// растёт вокруг того места, куда игрок ведёт мышь, а не сносит её вбок.
-    /// </summary>
-    private static void Field(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
-        Vector2 direction, float length, List<Obb> taken, List<BuildSpot> into)
-    {
-        var across = direction.Orthogonal();
-
-        float stepAlong = Step(def, facing, direction);
-        float stepAcross = Step(def, facing, across);
-
-        int count = Mathf.FloorToInt(length / stepAlong) + 1;
-
-        if (count < 2)
+        if (_spent)
             return;
 
-        // Середина полосы приходится на линию протаскивания. При нечётном числе рядов
-        // средний ряд ложится точно на неё, при чётном линия проходит между двумя рядами
-        float middle = (count - 1) * 0.5f;
+        _spent = true;
 
-        for (int row = 0; row < count; row++)
+        var gm = GameManager.I;
+
+        if (!Placement.CanPlace(gm, Definition, GlobalPosition, BodyFacing, ignorePlan: this))
         {
-            for (int column = 0; column < count; column++)
+            gm.Events.Append(new BuildPlanCancelled
             {
-                if (into.Count >= Const.PatternLimit)
-                    return;
+                EntityId = Id,
+                DefinitionId = Definition.Id,
+                Pos = GlobalPosition,
+            });
 
-                var center = origin
-                             + direction * stepAlong * column
-                             + across * stepAcross * (row - middle);
-
-                // Место под точкой нажатия занесено в план первым
-                if (center.DistanceSquaredTo(origin) < 1f)
-                    continue;
-
-                Accept(gm, def, center, facing, taken, into);
-            }
+            Retire();
+            return;
         }
-    }
 
-    /// <summary>
-    /// Ромб вокруг первой постройки: строения занимают узлы решётки, чьё расстояние
-    /// от неё в шагах не превышает радиуса.
-    ///
-    /// РАДИУС, А НЕ ОБЛАСТЬ ДО КУРСОРА. Курсор здесь задаёт только величину — сколько шагов
-    /// ромб занимает во все стороны, — а растёт раскладка вокруг первого строения. Тем она
-    /// и отличается от квадрата: квадрат выкладывается от точки нажатия к курсору, а ромб
-    /// разворачивается симметрично, и место, куда игрок нажал, остаётся его серединой.
-    ///
-    /// На первом шаге получаются четыре соседа по осям решётки, на втором к ним добавляются
-    /// диагональные и следующие осевые, и так далее. Промежутки те же, что в сплошной
-    /// раскладке: соседи по оси стоят стенка к стенке, а диагональные углы остаются
-    /// открытыми — из-за них ромб и прикрывает больше места, чем квадрат той же плотности.
-    ///
-    /// Обход идёт кольцами от середины наружу: при упоре в предел числа мест в план
-    /// попадает ближнее к игроку, а не случайный край раскладки.
-    /// </summary>
-    private static void Diamond(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
-        Vector2 direction, float length, List<Obb> taken, List<BuildSpot> into)
-    {
-        var across = direction.Orthogonal();
+        var frame = gm.Spawn.SpawnBlueprint(FrameScene, Definition, GlobalPosition, BodyFacing);
 
-        float stepAlong = Step(def, facing, direction);
-        float stepAcross = Step(def, facing, across);
-
-        int radius = Mathf.FloorToInt(length / stepAlong);
-
-        for (int ring = 1; ring <= radius; ring++)
+        gm.Events.Append(new BlueprintPlaced
         {
-            for (int along = -ring; along <= ring; along++)
-            {
-                int side = ring - Mathf.Abs(along);
+            EntityId = frame.Id,
+            DefinitionId = Definition.Id,
+            Pos = GlobalPosition,
+            Facing = BodyFacing,
+        });
 
-                // Узлы кольца: при нулевом отступе поперёк узел на кольце один, иначе их два
-                for (int sign = -1; sign <= 1; sign += 2)
-                {
-                    if (into.Count >= Const.PatternLimit)
-                        return;
+        Superseded?.Invoke(frame);
 
-                    var center = origin
-                                 + direction * stepAlong * along
-                                 + across * stepAcross * side * sign;
-
-                    Accept(gm, def, center, facing, taken, into);
-
-                    if (side == 0)
-                        break;
-                }
-            }
-        }
+        Retire();
     }
 
     /// <summary>
-    /// Раскладка по залежам: протаскивание задаёт радиус, а места берутся из карты.
-    ///
-    /// Порядок обхода — от ближней точки к дальней, чтобы при нехватке предела в план
-    /// попало то, что ближе к выбранному игроком месту.
+    /// Отменить план по воле игрока. Размеченное место освобождается; приказы на него
+    /// становятся невыполнимыми сами — преемника нет, и <see cref="Superseded"/>
+    /// не объявляется.
     /// </summary>
-    private static void Deposits(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
-        float radius, List<Obb> taken, List<BuildSpot> into)
+    public void Cancel()
     {
-        Accept(gm, def, origin, facing, taken, into);
-
-        if (radius < AngleThreshold)
+        if (_spent)
             return;
 
-        var found = new List<MetalSpot>();
+        _spent = true;
 
-        foreach (var spot in gm.Index.All<MetalSpot>())
-            if (spot.GlobalPosition.DistanceTo(origin) <= radius)
-                found.Add(spot);
+        var gm = GameManager.I;
 
-        found.Sort((left, right) => origin.DistanceSquaredTo(left.GlobalPosition)
-            .CompareTo(origin.DistanceSquaredTo(right.GlobalPosition)));
-
-        foreach (var spot in found)
+        if (gm != null && Definition != null)
         {
-            if (into.Count >= Const.PatternLimit)
-                return;
+            gm.Events.Append(new BuildPlanCancelled
+            {
+                EntityId = Id,
+                DefinitionId = Definition.Id,
+                Pos = GlobalPosition,
+            });
+        }
 
-            // Точка под курсором уже разобрана первой записью плана: экстрактор к ней
-            // притянут, и второй раз она в план попасть не должна
-            if (spot.GlobalPosition.IsEqualApprox(origin))
+        Retire();
+    }
+
+    /// <summary>
+    /// Снять планы, от которых отказались вместе с приказами и на которые больше никто
+    /// не нацелен. Планы без приказов (размеченные в ожидании исполнителя) сюда не
+    /// попадают: их нет в снимке брошенного остатка. Гибель исполнителя эту процедуру
+    /// не вызывает — план переживает назначение.
+    /// </summary>
+    public static void ReleaseAbandoned(IEnumerable<BuildPlan> abandoned)
+    {
+        if (abandoned == null)
+            return;
+
+        foreach (var plan in abandoned)
+        {
+            if (plan == null || !plan.NeedsWork)
                 continue;
 
-            Accept(gm, def, spot.GlobalPosition, facing, taken, into);
+            if (Ordered(plan))
+                continue;
+
+            plan.Cancel();
         }
     }
 
-    /// <summary>
-    /// Промежуток между соседями вдоль направления: поперечник строения плюс обязательный
-    /// зазор, помноженный на множитель из справочника.
-    /// </summary>
-    private static float Step(UnitDefinition def, float facing, Vector2 axis)
+    /// <summary>Есть ли ещё живая ветка с приказом строить этот план.</summary>
+    private static bool Ordered(BuildPlan plan)
     {
-        var shape = Placement.Footprint(def, Vector2.Zero, facing);
-        float span = shape.Reach(axis.Normalized()) * 2f;
+        var index = GameManager.I?.Index;
 
-        // Добавок в полпикселя разводит соседей, чьи зазоры иначе сходились бы ровно
-        // в касание, — см. Const.PatternSlackPx
-        return span + Const.BuildMarginPx * Mathf.Max(def.PatternStep, 0f) + Const.PatternSlackPx;
+        if (index == null)
+            return false;
+
+        foreach (var list in index.All<OrderList>())
+        {
+            if (!list.Live)
+                continue;
+
+            foreach (var order in list.Items)
+                if (order.Kind == OrderKind.Build && ReferenceEquals(order.Target, plan))
+                    return true;
+        }
+
+        return false;
     }
 
     /// <summary>
-    /// Занести место в план вместе с приговором. Годное запоминается: следующие места
-    /// проверяются и по нему тоже, иначе два места одной партии встали бы друг на друга
-    /// там, где промежуток вышел меньше обязательного.
+    /// План уходит из игры. Приказы на него станут невыполнимы сами: цели больше нет,
+    /// и <see cref="OrderQueue.DropInvalid"/> снимет их с головы очередей.
     /// </summary>
-    private static void Accept(GameManager gm, UnitDefinition def, Vector2 center, float facing,
-        List<Obb> taken, List<BuildSpot> into)
+    private void Retire()
     {
-        bool valid = Placement.CanPlace(gm, def, center, facing, taken);
+        _spent = true;
+        SetProcess(false);
+        Visible = false;
+        QueueFree();
+    }
 
-        if (valid)
-            taken.Add(Placement.Footprint(def, center, facing));
+    /// <summary>
+    /// Бело-серый полупрозрачный контур. Цвет выбран именно бесцветным: план не должен
+    /// читаться как каркас, у которого своя зелень стройки, и не должен выглядеть
+    /// материальным.
+    /// </summary>
+    public override void _Draw()
+    {
+        if (Definition == null)
+            return;
 
-        into.Add(new BuildSpot(center, facing, valid));
+        var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
+        var rect = new Rect2(-size * 0.5f, size);
+
+        DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
+
+        ShapeDraw.Rect(this, rect, ShapeStyle.Solid(new Color(0.85f, 0.88f, 0.92f, 0.08f)));
+        ShapeDraw.Rect(this, rect,
+            ShapeStyle.Outline(new Color(0.85f, 0.88f, 0.92f, 0.45f), 1.5f, WidthMode.Screen));
+
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+
+        DrawString(ThemeDB.FallbackFont, new Vector2(rect.Position.X, rect.Position.Y - 6f),
+            Definition.DisplayName, HorizontalAlignment.Left, -1, 12,
+            new Color(0.85f, 0.88f, 0.92f, 0.6f));
     }
 }

@@ -11,7 +11,7 @@ using Godot;
 /// намеренно: месторождение было вторым, пока метал добывали вручную, и та же форма
 /// понадобится любому занятию, где несколько исполнителей складывают мощность в одну работу.
 /// </summary>
-public abstract partial class WorkNode : Node2D, IEconomyActor
+public abstract partial class WorkNode : Node2D, IEconomyActor, IWorkSite
 {
     /// <summary>
     /// Локальный реестр подключений: id исполнителя -> его мощность и расход энергии.
@@ -32,6 +32,18 @@ public abstract partial class WorkNode : Node2D, IEconomyActor
 
     /// <summary>Нужна ли ещё работа — по этому признаку боты ищут себе занятие.</summary>
     public abstract bool NeedsWork { get; }
+
+    /// <summary>
+    /// Узел работы никем не сменяется: он не превращается в другое место работы, а просто
+    /// заканчивается, и приказ на него становится невыполнимым по <see cref="NeedsWork"/>.
+    /// Объявление поэтому пустое — подписаться на него можно, но звать его некому.
+    /// Наследник, которому смена понадобится, объявит своё поле обычным образом.
+    /// </summary>
+    public event System.Action<IWorkSite> Superseded
+    {
+        add { }
+        remove { }
+    }
 
     public void AttachWorker(int workerId, float power, float energy)
     {

@@ -1,7 +1,8 @@
 using Godot;
 
 /// <summary>
-/// Плашки террора у правого края: итог и четыре слагаемых, из которых он собран.
+/// Плашки террора у правого края: итог, бюджет постоянного давления рядом с ним
+/// и четыре слагаемых, из которых итог собран.
 ///
 /// ПОКАЗЫВАЕТСЯ ВКЛАД ПОСЛЕ КРИВОЙ, а не сырая сумма весов. Это не оформительская мелочь:
 /// по сырой сумме игрок не смог бы объяснить себе, почему двадцать новых заборов не сдвинули
@@ -9,7 +10,8 @@ using Godot;
 /// она отвечает на другой вопрос, «сколько всего», и нужна при настройке кривых.
 ///
 /// Сглаженное значение сюда не выводится намеренно: игроку показывается то, что он сделал,
-/// а задержка есть внутреннее устройство давления.
+/// а задержка есть внутреннее устройство давления. Бюджет при этом читается уже готовый —
+/// из <see cref="PressureSystem"/>, где сглаживание уже учтено.
 ///
 /// Отдельным слоем, как и полоса ресурсов: показывает состояние базы целиком и потому
 /// не зависит ни от выделения, ни от того, чем игрок сейчас занят.
@@ -28,6 +30,7 @@ public partial class TerrorBar : CanvasLayer
     }
 
     private Label _total;
+    private Label _budget;
     private Plate _production;
     private Plate _expansion;
     private Plate _army;
@@ -68,7 +71,7 @@ public partial class TerrorBar : CanvasLayer
         rows.AddThemeConstantOverride("separation", 2);
         panel.AddChild(rows);
 
-        _total = AddTotal(rows);
+        (_total, _budget) = AddTotal(rows);
 
         rows.AddChild(new HSeparator());
 
@@ -81,7 +84,7 @@ public partial class TerrorBar : CanvasLayer
         _time = AddPlate(rows, "время");
     }
 
-    private static Label AddTotal(Node parent)
+    private static (Label total, Label budget) AddTotal(Node parent)
     {
         var row = new HBoxContainer();
         parent.AddChild(row);
@@ -101,7 +104,19 @@ public partial class TerrorBar : CanvasLayer
         value.AddThemeColorOverride("font_color", TerrorColor);
         row.AddChild(value);
 
-        return value;
+        // Бюджет давления стоит рядом с итогом: это прямое следствие показателя,
+        // а не ещё одно слагаемое, поэтому он не уходит в плашки ниже
+        var budget = new Label
+        {
+            Text = "0",
+            HorizontalAlignment = HorizontalAlignment.Right,
+            CustomMinimumSize = new Vector2(34, 0),
+        };
+        budget.AddThemeFontSizeOverride("font_size", 13);
+        budget.AddThemeColorOverride("font_color", RawColor);
+        row.AddChild(budget);
+
+        return (value, budget);
     }
 
     private static Plate AddPlate(Node parent, string caption)
@@ -149,6 +164,9 @@ public partial class TerrorBar : CanvasLayer
             return;
 
         _total.Text = $"{terror.Raw:0}";
+
+        var pressure = GameManager.I.System<PressureSystem>();
+        _budget.Text = pressure != null ? $"{pressure.Budget:0.#}" : "—";
 
         Show(_production, terror.Production, terror.RawProduction);
         Show(_expansion, terror.Expansion, terror.RawExpansion);

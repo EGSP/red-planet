@@ -124,10 +124,10 @@ public partial class Session : Node2D
 
     private void SpawnBase()
     {
-        var def = Systems.Catalog.Unit("base");
+        var def = Systems.Catalog.Unit("fortress");
         if (def == null)
         {
-            GD.PushWarning("[Session] нет определения постройки base");
+            GD.PushWarning("[Session] нет определения постройки fortress");
             return;
         }
 

@@ -76,16 +76,6 @@ public partial class Plant : Building
         }
     }
 
-    /// <summary>
-    /// Заводу можно отдать rally: движение, сопровождение, атака. Он сам их не исполняет —
-    /// <see cref="Building.RunOrder"/> пуст, — а копирует на каждого выпущенного юнита.
-    /// </summary>
-    public override OrderSet AllowedOrders =>
-        OrderSet.None
-            .With(OrderKind.Move)
-            .With(OrderKind.Follow)
-            .With(OrderKind.Attack);
-
     public int CountOf(string unitId)
     {
         int count = 0;
@@ -245,9 +235,11 @@ public partial class Plant : Building
             return;
 
         unit.Rotation = BodyFacing;
+        unit.SnapToolToBody();
 
-        CopyRally(unit);
-        unit.Movement.BeginExit(this, ExitPoint(def));
+        var exit = ExitPoint(def);
+        CopyRally(unit, exit);
+        unit.Movement.BeginExit(this, exit);
         _exiting = unit;
         _progress = 0f;
 
@@ -279,17 +271,42 @@ public partial class Plant : Building
         _cursor = (_cursor + 1) % _queue.Count;
     }
 
-    private void CopyRally(Unit unit)
+    /// <summary>
+    /// Раздать новорождённому точку сбора.
+    ///
+    /// РАЗДАЮТСЯ КОПИИ, А НЕ САМИ ПРИКАЗЫ. Приказ движения дожидается всех своих участников
+    /// (см. <see cref="Order"/>), и стоит выехавшему из корпуса войти в состав общего
+    /// приказа, как весь отряд встал бы у точки сбора, дожидаясь следующего юнита, которого
+    /// завод ещё только собирает. Копия несёт то же намерение, но состав у неё свой.
+    ///
+    /// Без приказов завод ставит якорь у выезда: иначе <see cref="PlayerAiSystem"/>
+    /// послал бы юнита за коммандером, а выпуск без точки сбора должен оставаться у завода.
+    /// </summary>
+    private void CopyRally(Unit unit, Vector2 exit)
     {
         if (Orders.Count == 0)
+        {
+            unit.SetAnchor(exit);
             return;
+        }
 
-        var copy = new Order[Orders.Count];
+        var copy = new List<Order>(Orders.Count);
 
-        for (int i = 0; i < Orders.Count; i++)
-            copy[i] = CloneOrder(Orders.Items[i]);
+        foreach (var order in Orders.Remaining)
+        {
+            var cloned = CloneOrder(order);
+            if (cloned != null)
+                copy.Add(cloned);
+        }
 
-        unit.Orders.TrySet(copy);
+        if (copy.Count == 0)
+        {
+            unit.SetAnchor(exit);
+            return;
+        }
+
+        if (unit.Orders.TrySet(copy.ToArray()))
+            unit.SetAnchor(copy[^1].Point);
     }
 
     private static Order CloneOrder(Order source)
@@ -303,32 +320,100 @@ public partial class Plant : Building
             OrderKind.Attack when Alive.Is(source.Entity) => Order.Attack(source.Entity),
             OrderKind.Follow when Alive.Is(source.Entity) => Order.Follow(source.Entity),
             OrderKind.Repair when Alive.Is(source.Entity) => Order.Repair(source.Entity),
-            OrderKind.Build when Alive.Is(source.Target) => Order.Work(OrderKind.Build, source.Target),
+            OrderKind.Build when Alive.Is(source.Target as Node2D) =>
+                Order.Work(OrderKind.Build, source.Target),
+            // Снос завода новорождённому не копируем: он относится к самой постройке
+            OrderKind.Delete => null,
             _ => Order.MoveTo(source.Point),
         };
     }
 
     /// <summary>
-    /// Внешняя точка выезда: первое направление из rolloff_directions, где клетка
-    /// проходима и не занята чужой постройкой. Если все закрыты — берётся первое
-    /// (таймаут Leaving всё равно телепортирует на NearestPassable).
+    /// Внешняя точка выезда. Среди открытых направлений выбирается то, откуда путь
+    /// до текущей цели точки сбора короче: иначе юнит выезжает с противоположной
+    /// стороны и обходит завод. Без приказов — первое открытое, как раньше.
+    /// Если все закрыты — берётся первое (таймаут Leaving телепортирует на NearestPassable).
     /// </summary>
     private Vector2 ExitPoint(UnitDefinition unitDef)
     {
         float radius = unitDef.RadiusPx;
         float extra = radius + Const.Unit * 0.25f;
+        return PickExit(radius, extra, pathCost: true);
+    }
+
+    /// <summary>
+    /// Цель точки сбора для выбора выезда — точка первого приказа, который копируется
+    /// новорождённому. Delete к заводу самому относится и в оценку не входит.
+    /// </summary>
+    private Vector2? RallyGoal()
+    {
+        foreach (var order in Orders.Remaining)
+        {
+            if (order.Kind == OrderKind.Delete)
+                continue;
+
+            return order.Point;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Выбрать выезд среди маркеров. <paramref name="pathCost"/> включает полный поиск
+    /// пути — только в момент выпуска; отрисовка стрелок обходится евклидовой оценкой,
+    /// иначе каждый кадр запускал бы A* на каждый открытый выход.
+    /// </summary>
+    private Vector2 PickExit(float radius, float extra, bool pathCost)
+    {
         Vector2? first = null;
+        Vector2? firstUsable = null;
+        Vector2? best = null;
+        float bestScore = float.PositiveInfinity;
+        var goal = RallyGoal();
 
         foreach (var point in ExitMarkers(extra))
         {
             first ??= point;
 
-            if (ExitUsable(point, radius))
+            if (!ExitUsable(point, radius))
+                continue;
+
+            firstUsable ??= point;
+
+            // Без цели очереди приоритет — порядок rolloff_directions
+            if (goal is not { } target)
                 return point;
+
+            float score = pathCost
+                ? ExitPathScore(point, target, radius)
+                : point.DistanceTo(target);
+
+            if (score >= bestScore)
+                continue;
+
+            bestScore = score;
+            best = point;
         }
 
-        return first ?? GlobalPosition + Heading.Forward(BodyFacing) *
+        return best ?? firstUsable ?? first ?? GlobalPosition + Heading.Forward(BodyFacing) *
                (Footprint.Half.Length() + extra);
+    }
+
+    /// <summary>
+    /// Стоимость пути от выезда до цели. Недостижимый выход получает бесконечность,
+    /// чтобы уступить достижимому; если оба закрыты сеткой — сравнивать уже нечем,
+    /// и вызывающий возьмёт первый открытый геометрически.
+    /// </summary>
+    private static float ExitPathScore(Vector2 exit, Vector2 goal, float radius)
+    {
+        var paths = GameManager.I?.System<PathfindingSystem>();
+        if (paths == null)
+            return exit.DistanceTo(goal);
+
+        if (paths.TryMeasure(exit, goal, radius, out float length))
+            return length;
+
+        return float.PositiveInfinity;
     }
 
     /// <summary>
@@ -462,7 +547,8 @@ public partial class Plant : Building
         float probeRadius = ProbeRadius;
         float extra = probeRadius + Const.Unit * 0.25f;
         bool selected = GizmoGate.IsSelected(this);
-        bool markedPrimary = false;
+        // Евклидова оценка: полный A* на каждый кадр отрисовки не запускаем
+        var preferred = PickExit(probeRadius, extra, pathCost: false);
 
         foreach (var worldTip in ExitMarkers(extra))
         {
@@ -477,9 +563,7 @@ public partial class Plant : Building
             var from = ToLocal(worldBase);
             var to = ToLocal(worldTip);
             bool open = ExitUsable(worldTip, probeRadius);
-            bool primary = open && !markedPrimary;
-            if (primary)
-                markedPrimary = true;
+            bool primary = open && worldTip.DistanceSquaredTo(preferred) < 0.01f;
 
             var line = open
                 ? ShapeStyle.Outline(new Color(0.95f, 0.85f, 0.25f, 0.9f), 2.5f, WidthMode.Screen)

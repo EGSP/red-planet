@@ -12,11 +12,40 @@ using Godot;
 /// </summary>
 public static class Jobs
 {
-    /// <summary>Ближайший каркас, которому ещё нужна работа.</summary>
-    public static WorkNode NearestBlueprint(Vector2 from, float maxDistance = float.MaxValue) =>
-        GameManager.I.Index.All<Blueprint>()
-            .Where(blueprint => blueprint.NeedsWork)
-            .Nearest(from, blueprint => blueprint.GlobalPosition, maxDistance);
+    /// <summary>
+    /// Ближайшее место работы, которому ещё нужны руки: план, который некому поставить,
+    /// или каркас, который некому достроить.
+    ///
+    /// ПЛАН И КАРКАС ИЩУТСЯ ВМЕСТЕ, потому что для того, кто ищет себе занятие, разницы
+    /// между ними нет: и то и другое — недостроенная постройка, к которой нужно подойти.
+    /// Разница вскрывается только на месте — план ставят, каркас варят.
+    /// </summary>
+    public static IWorkSite NearestSite(Vector2 from, float maxDistance = float.MaxValue)
+    {
+        var index = GameManager.I.Index;
+
+        var plan = index.All<BuildPlan>()
+            .Where(site => site.NeedsWork)
+            .Nearest(from, site => site.GlobalPosition, maxDistance);
+
+        var frame = index.All<Blueprint>()
+            .Where(site => site.NeedsWork)
+            .Nearest(from, site => site.GlobalPosition, maxDistance);
+
+        if (plan == null)
+            return frame;
+
+        if (frame == null)
+            return plan;
+
+        // Начатое ближе к завершению, но правило выбора здесь одно — расстояние:
+        // предпочтение каркасу означало бы, что размеченное далеко от базы не ставится
+        // никогда, пока в тылу есть хоть одна недоваренная стена
+        return from.DistanceSquaredTo(plan.GlobalPosition)
+               <= from.DistanceSquaredTo(frame.GlobalPosition)
+            ? plan
+            : frame;
+    }
 
     /// <summary>
     /// Ближайшее повреждённое, что можно починить. Ремонтом занимаются только в пределах
