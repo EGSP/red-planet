@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "restore": {
+    "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj": {}
+  },
+  "projects": {
+    "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
+        "projectName": "PapaTextureTool",
+        "projectPath": "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
+        "packagesPath": "C:\\Users\\user\\AppData\\Local\\Temp\\cursor-sandbox-cache\\8fea49c53b09cd94375bc9af3f6e08e0\\nuget",
+        "outputPath": "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "StbImageWriteSharp": {
+              "target": "Package",
+              "version": "[1.16.7, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
