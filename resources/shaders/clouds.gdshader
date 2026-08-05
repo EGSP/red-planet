@@ -12,9 +12,9 @@
 // слой выгрызает край первого (erosion) — приём взят из объёмного рендеринга облаков, где
 // базовую форму размывают шумом Уорли. Здесь достаточно того же поля в другом масштабе.
 //
-// ФОРМА ЗАДАЁТСЯ СЖАТИЕМ КООРДИНАТЫ. Координата поворачивается в систему ветра и делится
-// вдоль него на stretch, отчего пятна вытягиваются в волокна по ходу ветра. Кучевые облака
-// получаются при stretch, близком к единице, перистые — при трёх и более.
+// ФОРМА ЗАДАЁТСЯ МАСШТАБОМ В СИСТЕМЕ ВЕТРА. Координата поворачивается в систему ветра и
+// делится на zoom * (scale_x, scale_y): вдоль ветра — scale_x, поперёк — scale_y. Кучевые
+// облака получаются при scale_x, близком к единице, перистые — при трёх и более.
 //
 // ЦВЕТ БЕРЁТСЯ ИЗ ГРАДИЕНТОВ. Шейдер приводит плотность к отрезку от нуля до единицы, где
 // ноль есть край облака, а единица — его ядро, и выбирает цвет из запечённой шкалы. Ни
@@ -34,6 +34,11 @@ uniform sampler2D body_ramp : source_color, filter_linear, repeat_disable;
 uniform bool has_shade = true;
 uniform bool has_body = true;
 
+// Множители непрозрачности слоёв. Задаются снаружи (инспектор или сигнал зума) и не
+// входят в шкалы CloudSettings: шкалы описывают вид, множители — долю проявления
+uniform float shade_amount = 1.0;
+uniform float body_amount = 1.0;
+
 // Область мира, на которую натянут прямоугольник: UV переводится в мировые пиксели
 uniform vec2 rect_origin;
 uniform vec2 rect_size = vec2(1.0, 1.0);
@@ -42,11 +47,12 @@ uniform vec2 rect_size = vec2(1.0, 1.0);
 uniform vec2 wind_dir = vec2(1.0, 0.0);
 uniform float travel = 0.0;
 
-// Размер облачного пятна поперёк ветра, мировых пикселей
-uniform float size_px = 1200.0;
+// Базовый размер пятна плотности, мировых пикселей
+uniform float zoom = 1200.0;
 
-// Вытянутость пятна вдоль ветра
-uniform float stretch = 3.0;
+// Масштаб вдоль ветра и поперёк него относительно zoom
+uniform float scale_x = 3.0;
+uniform float scale_y = 1.0;
 
 // Доля закрытого неба
 uniform float coverage = 0.35;
@@ -71,11 +77,12 @@ const float detail_turn = 0.42;
 // сжаты к середине отрезка, и порог по покрытию срабатывал бы в узкой полоске настроек
 const float field_contrast = 1.9;
 
-// Координата в системе ветра: вдоль него сжата, поперёк оставлена как есть
+// Координата в системе ветра с масштабом осей: X — вдоль ветра, Y — поперёк
 vec2 aligned(vec2 world, vec2 dir)
 {
 	vec2 side = vec2(-dir.y, dir.x);
-	return vec2(dot(world, dir) / max(stretch, 0.001), dot(world, side));
+	vec2 extent = max(zoom * vec2(scale_x, scale_y), vec2(0.001));
+	return vec2(dot(world, dir), dot(world, side)) / extent;
 }
 
 vec2 turn(vec2 dir, float angle)
@@ -95,9 +102,8 @@ float cloud_at(vec2 world)
 {
 	vec2 fine_dir = turn(wind_dir, detail_turn);
 
-	vec2 base_uv = aligned(world - wind_dir * travel, wind_dir) / max(size_px, 1.0);
-	vec2 fine_uv = aligned(world - fine_dir * (travel * detail_speed), fine_dir)
-		/ max(size_px * detail_size, 1.0);
+	vec2 base_uv = aligned(world - wind_dir * travel, wind_dir);
+	vec2 fine_uv = aligned(world - fine_dir * (travel * detail_speed), fine_dir) / detail_size;
 
 	float base = expand(texture(density, base_uv).r);
 	float fine = expand(texture(density, fine_uv).r);
@@ -119,6 +125,9 @@ void fragment()
 
 	vec4 shade = has_shade ? texture(shade_ramp, vec2(cloud_at(world), 0.0)) : vec4(0.0);
 	vec4 body = has_body ? texture(body_ramp, vec2(cloud_at(world + lift), 0.0)) : vec4(0.0);
+
+	shade.a *= clamp(shade_amount, 0.0, 1.0);
+	body.a *= clamp(body_amount, 0.0, 1.0);
 
 	// Тело кладётся поверх тени, поэтому цвета смешиваются по его непрозрачности
 	float alpha = body.a + shade.a * (1.0 - body.a);

@@ -21,6 +21,11 @@ using Godot;
 /// Поля <see cref="Freeze"/> и <see cref="Phase"/> к настройкам вида не относятся: они
 /// задают, какой случай показывать, — форма подбирается по неподвижной картинке, а скорость,
 /// наоборот, только в движении.
+///
+/// ПРОЗРАЧНОСТЬ СЛОЁВ ОТДЕЛЕНА ОТ ШКАЛ. ShadeAmount и BodyAmount умножают альфу тени и тела.
+/// Сигнал зума задаёт целевые величины; каждый кадр текущие сближаются с ними по
+/// CloudSettings.LerpFactor. Ужатие и кривые ответа на зум лежат в CloudSettings; цепочка:
+/// логарифмическая доля камеры → ZoomSqueeze → ShadeCurve / BodyCurve → цель → lerp → множитель.
 /// </summary>
 [Tool]
 public partial class CloudRenderer : Node2D
@@ -40,6 +45,21 @@ public partial class CloudRenderer : Node2D
 
     /// <summary>Настройки вида. Не назначены — облака не рисуются вовсе.</summary>
     [Export] public CloudSettings Settings;
+
+    [ExportGroup("Прозрачность")]
+
+    /// <summary>
+    /// Текущий множитель непрозрачности тени. К целевому значению от зума сближается
+    /// каждый кадр с скоростью <see cref="CloudSettings.LerpFactor"/>. Ноль скрывает тень,
+    /// единица оставляет шкалу <see cref="CloudSettings.Shade"/> без изменений.
+    /// </summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float ShadeAmount = 1f;
+
+    /// <summary>
+    /// Текущий множитель непрозрачности тела облака. Устройство то же, что у
+    /// <see cref="ShadeAmount"/>.
+    /// </summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float BodyAmount = 1f;
 
     [ExportGroup("Стенд")]
 
@@ -62,6 +82,12 @@ public partial class CloudRenderer : Node2D
     private bool _frozen;
 
     private Rect2 _area;
+
+    /// <summary>Целевая непрозрачность тени от зума; к ней тянется <see cref="ShadeAmount"/>.</summary>
+    private float _shadeTarget = 1f;
+
+    /// <summary>Целевая непрозрачность тела от зума; к ней тянется <see cref="BodyAmount"/>.</summary>
+    private float _bodyTarget = 1f;
 
     /// <summary>
     /// Снять с узла всё тяжёлое перед сохранением сцены и вернуть после. Причина та же, что
@@ -87,6 +113,7 @@ public partial class CloudRenderer : Node2D
 
         Attach();
         Advance(delta);
+        bool fading = BlendAmounts(delta);
 
         var area = Area();
         bool moved = _area != area;
@@ -94,9 +121,9 @@ public partial class CloudRenderer : Node2D
         _area = area;
         Apply(area);
 
-        // Перерисовка нужна каждый кадр: облака идут. При остановленном ветре картинка
-        // не меняется, и редактор не занимается напрасной работой
-        if (!Freeze || moved)
+        // Перерисовка нужна каждый кадр: облака идут. При остановленном ветре — только
+        // если сдвинулась область или ещё идёт сближение непрозрачности с целью
+        if (!Freeze || moved || fading)
             QueueRedraw();
     }
 
@@ -110,6 +137,96 @@ public partial class CloudRenderer : Node2D
         _white ??= White();
 
         DrawTextureRect(_white, GetGlobalTransform().AffineInverse() * _area, false);
+    }
+
+    /// <summary>Задать целевую непрозрачность тени. К ней сближается <see cref="ShadeAmount"/>.</summary>
+    public void SetShadeAmount(float amount) => _shadeTarget = Mathf.Clamp(amount, 0f, 1f);
+
+    /// <summary>Задать целевую непрозрачность тела облака.</summary>
+    public void SetBodyAmount(float amount) => _bodyTarget = Mathf.Clamp(amount, 0f, 1f);
+
+    /// <summary>Вести тень от доли приближения камеры. Сигнатура совпадает с ZoomFactorChanged.</summary>
+    public void DriveShadeByZoom(float factor, float inverted)
+    {
+        _ = inverted;
+        SetShadeAmount(MapZoom(factor, Settings?.ShadeCurve));
+    }
+
+    /// <summary>Вести тень от дополнения доли приближения: сильна при отдалённой камере.</summary>
+    public void DriveShadeByZoomInverted(float factor, float inverted)
+    {
+        _ = factor;
+        SetShadeAmount(MapZoom(inverted, Settings?.ShadeCurve));
+    }
+
+    /// <summary>Вести тело облака от доли приближения: проявляется при приближении.</summary>
+    public void DriveBodyByZoom(float factor, float inverted)
+    {
+        _ = inverted;
+        SetBodyAmount(MapZoom(factor, Settings?.BodyCurve));
+    }
+
+    /// <summary>Вести тело облака от дополнения доли приближения.</summary>
+    public void DriveBodyByZoomInverted(float factor, float inverted)
+    {
+        _ = factor;
+        SetBodyAmount(MapZoom(inverted, Settings?.BodyCurve));
+    }
+
+    /// <summary>
+    /// Сблизить текущие множители с целевыми. Возвращает, осталось ли ещё расхождение —
+    /// тогда нужна перерисовка даже при остановленном ветре.
+    /// </summary>
+    private bool BlendAmounts(double delta)
+    {
+        float factor = Settings?.LerpFactor ?? 0f;
+
+        if (factor <= 0f)
+        {
+            bool changed = !Mathf.IsEqualApprox(ShadeAmount, _shadeTarget)
+                || !Mathf.IsEqualApprox(BodyAmount, _bodyTarget);
+
+            ShadeAmount = _shadeTarget;
+            BodyAmount = _bodyTarget;
+            return changed;
+        }
+
+        float t = Mathf.Clamp(factor * (float)delta, 0f, 1f);
+
+        ShadeAmount = Mathf.Lerp(ShadeAmount, _shadeTarget, t);
+        BodyAmount = Mathf.Lerp(BodyAmount, _bodyTarget, t);
+
+        return !Mathf.IsEqualApprox(ShadeAmount, _shadeTarget)
+            || !Mathf.IsEqualApprox(BodyAmount, _bodyTarget);
+    }
+
+    /// <summary>
+    /// Доля зума → множитель слоя: сначала <see cref="CloudSettings.ZoomSqueeze"/>, затем
+    /// кривая слоя из настроек.
+    /// </summary>
+    private float MapZoom(float value, Curve curve)
+    {
+        float squeezed = SqueezeZoom(value);
+
+        if (curve == null)
+            return squeezed;
+
+        return Mathf.Clamp(curve.Sample(squeezed), 0f, 1f);
+    }
+
+    /// <summary>
+    /// Сжать долю зума: края отрезка отсекаются на ZoomSqueeze с каждой стороны, середина
+    /// растягивается на полный отрезок от нуля до единицы.
+    /// </summary>
+    private float SqueezeZoom(float value)
+    {
+        float pad = Mathf.Clamp(Settings?.ZoomSqueeze ?? 0f, 0f, 0.49f);
+        float span = 1f - 2f * pad;
+
+        if (span <= 0f)
+            return value >= 0.5f ? 1f : 0f;
+
+        return Mathf.Clamp((value - pad) / span, 0f, 1f);
     }
 
     /// <summary>
@@ -160,12 +277,15 @@ public partial class CloudRenderer : Node2D
         _material.SetShaderParameter("body_ramp", _bodyRamp);
         _material.SetShaderParameter("has_shade", Settings.Shade != null);
         _material.SetShaderParameter("has_body", Settings.Body != null);
+        _material.SetShaderParameter("shade_amount", Mathf.Clamp(ShadeAmount, 0f, 1f));
+        _material.SetShaderParameter("body_amount", Mathf.Clamp(BodyAmount, 0f, 1f));
 
         _material.SetShaderParameter("wind_dir", Settings.WindDirection);
         _material.SetShaderParameter("travel", _travel);
 
-        _material.SetShaderParameter("size_px", Mathf.Max(Settings.SizePx, 1f));
-        _material.SetShaderParameter("stretch", Mathf.Max(Settings.Stretch, 1f));
+        _material.SetShaderParameter("zoom", Mathf.Max(Settings.Zoom, 1f));
+        _material.SetShaderParameter("scale_x", Mathf.Max(Settings.ScaleX, 0.001f));
+        _material.SetShaderParameter("scale_y", Mathf.Max(Settings.ScaleY, 0.001f));
         _material.SetShaderParameter("coverage", Mathf.Clamp(Settings.Coverage, 0f, 1f));
         _material.SetShaderParameter("erosion", Mathf.Clamp(Settings.Erosion, 0f, 1f));
         _material.SetShaderParameter("lift", Settings.LiftPx);

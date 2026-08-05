@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PapaTextureTool")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f5e8960acfa85c7a2c4557e09f14a122f4b433df")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e0855c228c3e14c0e6cbd278aa00262c6a3153f7")]
 [assembly: System.Reflection.AssemblyProductAttribute("PapaTextureTool")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PapaTextureTool")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

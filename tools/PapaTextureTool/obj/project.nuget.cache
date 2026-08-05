@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "zWoVoOC08hc=",
+  "dgSpecHash": "7bkhYtreCmo=",
   "success": true,
-  "projectFilePath": "C:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
+  "projectFilePath": "C:\\workroot\\Разработка\\Gamedev\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\user\\.nuget\\packages\\stbimagewritesharp\\1.16.7\\stbimagewritesharp.1.16.7.nupkg.sha512"
+    "C:\\Users\\repsb\\.nuget\\packages\\stbimagewritesharp\\1.16.7\\stbimagewritesharp.1.16.7.nupkg.sha512"
   ],
   "logs": []
 }

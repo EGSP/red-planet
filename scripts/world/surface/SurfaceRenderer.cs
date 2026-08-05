@@ -10,7 +10,7 @@ using Godot;
 /// Порядок отрисовки при этом соблюдается сам собой: холст рисует сначала себя, потом
 /// потомков, поэтому декали ложатся поверх базового слоя.
 ///
-/// ПОЧЕМУ БАЗА НЕ ЗАПЕКАЕТСЯ. При <see cref="CameraRig.ZoomMax"/> равном 2.5 запечённая в
+/// ПОЧЕМУ БАЗА НЕ ЗАПЕКАЕТСЯ. При <see cref="CameraSettings.ZoomMax"/> порядка 2.5 запечённая в
 /// разрешении мира текстура растягивается в два с половиной раза и заметно мылится, а
 /// запекание с запасом по резкости заняло бы около 170 МБ. Живой шейдер выбирает из тайла
 /// в его собственном разрешении при любом приближении и памяти сверх самих тайлов не
@@ -260,13 +260,15 @@ public partial class SurfaceRenderer : Node2D
 
     private void ClearDecals()
     {
+        // Только QueueFree, без RemoveChild. Detach зовётся из EditorPreSave, когда
+        // редактор уже блокирует дерево ради сохранения: синхронный RemoveChild тогда
+        // отвергается с «Parent node is busy adding/removing children», а QueueFree
+        // снимает узел в конце кадра. Owner у отпечатков не назначен, поэтому в файл
+        // сцены они и так не попадают.
         foreach (var child in GetChildren())
         {
             if (child is MultiMeshInstance2D node && node.Name.ToString().StartsWith(DecalPrefix))
-            {
-                RemoveChild(node);
                 node.QueueFree();
-            }
         }
     }
 

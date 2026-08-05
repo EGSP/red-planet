@@ -1,114 +1,64 @@
-[gd_scene load_steps=51 format=3 uid="uid://bqvvlwhycmvut"]
+[gd_scene format=3 uid="uid://bqvvlwhycmvut"]
 
 [ext_resource type="Script" uid="uid://ngu44hvaylf5" path="res://scripts/core/Session.cs" id="1_session"]
-
 [ext_resource type="Script" uid="uid://rvo2ifgmct4" path="res://scripts/core/GameManager.cs" id="2_manager"]
-
 [ext_resource type="Script" uid="uid://ck2wua7snt8x7" path="res://scripts/world/Playground.cs" id="3_playground"]
-
+[ext_resource type="Script" uid="uid://0lfllbrf4q87" path="res://scripts/world/CloudRenderer.cs" id="4_clouds"]
+[ext_resource type="Resource" uid="uid://i1jom8qq3cjt" path="res://resources/tuning/clouds.tres" id="4_cloudtuning"]
 [ext_resource type="Script" uid="uid://cc1rudyjv07xp" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
-
-[ext_resource type="Script" path="res://scripts/world/CloudRenderer.cs" id="4_clouds"]
-
-[ext_resource type="Resource" path="res://resources/tuning/clouds.tres" id="4_cloudtuning"]
-
 [ext_resource type="Script" uid="uid://d2ynvft64bh21" path="res://scripts/world/surface/SurfaceRenderer.cs" id="4_surface"]
-
 [ext_resource type="Script" uid="uid://djhm5atkp2jws" path="res://scripts/units/CommandSystem.cs" id="5_command"]
-
 [ext_resource type="Script" uid="uid://dxjsijgee6d2e" path="res://scripts/units/CursorSystem.cs" id="5_cursor"]
-
 [ext_resource type="Script" uid="uid://tuanjuqquucf" path="res://scripts/units/PlayerAiSystem.cs" id="6_playerai"]
-
 [ext_resource type="Script" uid="uid://pcwrq37i4108" path="res://scripts/units/OrderSystem.cs" id="7_order"]
-
 [ext_resource type="Script" uid="uid://bxjws4p4x5u" path="res://scripts/economy/EconomySystem.cs" id="8_economy"]
-
 [ext_resource type="Script" uid="uid://cc4rd12oqli1b" path="res://scripts/world/MetalSpotSystem.cs" id="9_metalspots"]
-
 [ext_resource type="Script" uid="uid://kcnnnrsbqpsl" path="res://scripts/pressure/PressureSystem.cs" id="11_pressure"]
-
 [ext_resource type="Script" uid="uid://bs5pwbd0lbqxa" path="res://scripts/enemies/EnemyAiSystem.cs" id="12_enemyai"]
-
 [ext_resource type="Script" uid="uid://dotcigshtufxu" path="res://scripts/combat/WeaponSystem.cs" id="13_weapon"]
-
 [ext_resource type="Script" uid="uid://dhkbabtkukh50" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
-
 [ext_resource type="Script" uid="uid://dhy78rf5woxf3" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
-
 [ext_resource type="Script" uid="uid://b0ki5uv7akvii" path="res://scripts/world/CameraRig.cs" id="16_camera"]
-
+[ext_resource type="Resource" path="res://resources/tuning/camera.tres" id="16_cameratuning"]
 [ext_resource type="Script" uid="uid://byltoatikqvmc" path="res://scripts/ui/Hud.cs" id="17_hud"]
-
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
-
 [ext_resource type="Script" uid="uid://d0y7y0cjdiohh" path="res://scripts/ui/PauseMenu.cs" id="22_pause"]
-
 [ext_resource type="Script" uid="uid://dy6ix483hdqha" path="res://scripts/ui/Buildbar.cs" id="23_buildbar"]
-
 [ext_resource type="Script" uid="uid://dpntxc3g5mgsd" path="res://scripts/ui/ResourceBar.cs" id="24_resources"]
-
 [ext_resource type="Script" uid="uid://lo6dkso2pxtu" path="res://scripts/ui/SelectionPanel.cs" id="25_selection"]
-
 [ext_resource type="Script" uid="uid://ubj1ta1lkhpq" path="res://scripts/ui/CommandPanel.cs" id="26_commands"]
-
 [ext_resource type="Script" uid="uid://bpfnhioymwehh" path="res://scripts/ui/ControlGroupBar.cs" id="27_groups"]
-
 [ext_resource type="Script" uid="uid://cxpykyovcdly4" path="res://scripts/pressure/TerrorSystem.cs" id="28_terror"]
-
 [ext_resource type="Script" uid="uid://mts7dtmhqpbw" path="res://scripts/ui/TerrorBar.cs" id="29_terrorbar"]
-
 [ext_resource type="Resource" uid="uid://bspmw6d4xtobp" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
-
 [ext_resource type="Script" uid="uid://cidxcw5t8b2mv" path="res://scripts/core/VictorySystem.cs" id="31_victory"]
-
 [ext_resource type="Script" uid="uid://c65huttvnvpun" path="res://scripts/ui/PortalCountdownBar.cs" id="32_portalbar"]
-
 [ext_resource type="Resource" uid="uid://hbujh7enaj83" path="res://resources/surface/lava.tres" id="33_5575j"]
-
 [ext_resource type="Script" uid="uid://bsqkp3ps8tl01" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
-
 [ext_resource type="Script" uid="uid://bnkead8a2t11f" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
-
 [ext_resource type="Script" uid="uid://3fhl61arlssd" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
-
 [ext_resource type="Script" uid="uid://bpyei10ejuqti" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
-
 [ext_resource type="Resource" uid="uid://dpydcpt1gpoip" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
-
 [ext_resource type="Script" uid="uid://bwl8ipmuljqfq" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
-
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
-
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="40_worldsettings"]
-
 [ext_resource type="Script" uid="uid://bgcaq6cgye8l8" path="res://scripts/vision/VisionSystem.cs" id="41_vision"]
-
 [ext_resource type="Resource" uid="uid://byklt06fheqwx" path="res://resources/tuning/fog.tres" id="42_fogsettings"]
-
 [ext_resource type="Resource" uid="uid://dj0jlvgwg4ip7" path="res://resources/tuning/nav.tres" id="43_navsettings"]
-
 [ext_resource type="Script" uid="uid://dngnl101xo5lo" path="res://scripts/ui/HoverSystem.cs" id="44_hover"]
-
 [ext_resource type="Script" uid="uid://xosvhvgeak3m" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
-
 [ext_resource type="Script" uid="uid://ce4dufgxum148" path="res://scripts/world/ShadowRenderer.cs" id="46_shadow"]
-
 [ext_resource type="Resource" uid="uid://d0mtud3752ne3" path="res://resources/tuning/shadow.tres" id="47_shadowsettings"]
-
 [ext_resource type="Script" uid="uid://b8bkh2kwhs8h" path="res://scripts/ui/EventBar.cs" id="48_eventbar"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
 [node name="Session" type="Node2D" unique_id=716196635]
 script = ExtResource("1_session")
-Systems = NodePath("Systems")
-Playground = NodePath("Playground")
 StartingMetal = 250.0
 
 [node name="Systems" type="Node" parent="." unique_id=1100053120]
 script = ExtResource("2_manager")
-Playground = NodePath("../Playground")
 WorldTuning = ExtResource("40_worldsettings")
 NavTuning = ExtResource("43_navsettings")
 
@@ -203,15 +153,6 @@ StepOrder = 30
 
 [node name="Playground" type="Node2D" parent="." unique_id=438516043]
 script = ExtResource("3_playground")
-Terrain = NodePath("Terrain")
-Deposits = NodePath("Deposits")
-Shadows = NodePath("Shadows")
-Structures = NodePath("Structures")
-Actors = NodePath("Actors")
-Projectiles = NodePath("Projectiles")
-Clouds = NodePath("Clouds")
-Fog = NodePath("Fog")
-Effects = NodePath("Effects")
 
 [node name="Terrain" type="Node2D" parent="Playground" unique_id=304019415]
 
@@ -220,6 +161,7 @@ script = ExtResource("4_surface")
 Settings = ExtResource("33_5575j")
 
 [node name="Grid" type="Node2D" parent="Playground/Terrain" unique_id=1875590808]
+visible = false
 script = ExtResource("4_grid")
 
 [node name="Deposits" type="Node2D" parent="Playground" unique_id=1266339897]
@@ -238,9 +180,9 @@ Settings = ExtResource("47_shadowsettings")
 
 [node name="Projectiles" type="Node2D" parent="Playground" unique_id=2038464301]
 
-[node name="Clouds" type="Node2D" parent="Playground"]
+[node name="Clouds" type="Node2D" parent="Playground" unique_id=1232917337]
 
-[node name="Sky" type="Node2D" parent="Playground/Clouds"]
+[node name="Sky" type="Node2D" parent="Playground/Clouds" unique_id=993954548]
 script = ExtResource("4_clouds")
 Settings = ExtResource("4_cloudtuning")
 
@@ -252,6 +194,7 @@ Settings = ExtResource("4_cloudtuning")
 
 [node name="Camera" type="Camera2D" parent="View" unique_id=1310955628]
 script = ExtResource("16_camera")
+Settings = ExtResource("16_cameratuning")
 
 [node name="Hud" type="CanvasLayer" parent="View" unique_id=1862778630]
 script = ExtResource("17_hud")
@@ -291,3 +234,6 @@ script = ExtResource("22_pause")
 
 [node name="OutcomeMenu" type="CanvasLayer" parent="View" unique_id=2055515651]
 script = ExtResource("33_outcomemenu")
+
+[connection signal="ZoomFactorChanged" from="View/Camera" to="Playground/Clouds/Sky" method="DriveBodyByZoomInverted"]
+[connection signal="ZoomFactorChanged" from="View/Camera" to="Playground/Clouds/Sky" method="DriveShadeByZoom"]

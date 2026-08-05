@@ -1,25 +1,32 @@
-[gd_resource type="Resource" script_class="CloudSettings" format=3]
+[gd_resource type="Resource" script_class="CloudSettings" format=3 uid="uid://i1jom8qq3cjt"]
 
-[ext_resource type="Script" path="res://scripts/world/CloudSettings.cs" id="1_clouds"]
-
-[sub_resource type="Gradient" id="Gradient_shade"]
-offsets = PackedFloat32Array(0, 0.45, 1)
-colors = PackedColorArray(0.17, 0.21, 0.31, 0, 0.17, 0.21, 0.31, 0.09, 0.17, 0.21, 0.31, 0.2)
+[ext_resource type="Script" uid="uid://cuposhk15xco4" path="res://scripts/world/CloudSettings.cs" id="1_clouds"]
 
 [sub_resource type="Gradient" id="Gradient_body"]
 offsets = PackedFloat32Array(0, 0.55, 1)
 colors = PackedColorArray(0.85, 0.87, 0.94, 0, 0.85, 0.87, 0.94, 0.05, 0.85, 0.87, 0.94, 0.14)
 
+[sub_resource type="Curve" id="Curve_body"]
+_data = [Vector2(0.83966243, 0), 0.0, 0.033341978, 0, 0, Vector2(1, 0.6516854), 0.15773349, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Gradient" id="Gradient_shade"]
+offsets = PackedFloat32Array(0, 0.3270142, 0.9810427)
+colors = PackedColorArray(0.17050001, 0.210025, 0.31, 0, 0, 0, 0, 0.24705882, 0, 0, 0, 0.4745098)
+
+[sub_resource type="Curve" id="Curve_shade"]
+_data = [Vector2(0, 0.7234042), 0.0, 0.0, 0, 0, Vector2(0.19831222, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 1, 0]
+point_count = 3
+
 [resource]
 script = ExtResource("1_clouds")
-Enabled = true
 Shade = SubResource("Gradient_shade")
 Body = SubResource("Gradient_body")
-LiftPx = Vector2(56, 72)
-Coverage = 0.32
-Erosion = 0.35
-SizePx = 1400.0
-Stretch = 3.2
-WindDegrees = 24.0
-WindSpeedPx = 14.0
-Seed = 1
+ZoomSqueeze = 0.0
+ShadeCurve = SubResource("Curve_shade")
+BodyCurve = SubResource("Curve_body")
+LerpFactor = 2.8
+Zoom = 3088.0
+ScaleX = 4.0
+ScaleY = 4.0
+WindSpeedPx = 48.5
