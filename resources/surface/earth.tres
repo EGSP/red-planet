@@ -1,0 +1,142 @@
+[gd_resource type="Resource" script_class="SurfaceSettings" format=3 uid="uid://ctvqauj7073p"]
+
+[ext_resource type="Script" uid="uid://ct2qu3ueuenor" path="res://scripts/world/surface/SurfaceSettings.cs" id="1_settings"]
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="2_tile"]
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="3_decal"]
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="4_biome"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="5_coarse"]
+[ext_resource type="Resource" path="res://resources/surface/noise/fine.tres" id="6_fine"]
+[ext_resource type="Resource" path="res://resources/surface/noise/patches.tres" id="7_patches"]
+[ext_resource type="Resource" path="res://resources/surface/noise/relief.tres" id="8_relief"]
+[ext_resource type="Texture2D" uid="uid://1oqd6qa21f2k" path="res://assets/sprites/terrain/earth/grass_tile_diffuse.png" id="10_tile_a"]
+[ext_resource type="Texture2D" uid="uid://cbos3u13rnro5" path="res://assets/sprites/terrain/earth/grass_dirt_02_diffuse.png" id="11_tile_b"]
+[ext_resource type="Texture2D" uid="uid://0fagw5m3ntbd" path="res://assets/sprites/terrain/earth/grass_grass_03_diffuse.png" id="12_tile_c"]
+[ext_resource type="Texture2D" uid="uid://201btv1msjcy" path="res://assets/sprites/terrain/earth/grass_decal_01_diffuse.png" id="20_g01"]
+[ext_resource type="Texture2D" uid="uid://b8vnrcjy61o6h" path="res://assets/sprites/terrain/earth/grass_decal_02_diffuse.png" id="21_g02"]
+[ext_resource type="Texture2D" uid="uid://bajwx0n6pvi24" path="res://assets/sprites/terrain/earth/grass_decal_03_diffuse.png" id="22_g03"]
+[ext_resource type="Texture2D" uid="uid://c0ewkwkw15d61" path="res://assets/sprites/terrain/earth/grass_decal_water_01_diffuse.png" id="23_w01"]
+[ext_resource type="Texture2D" uid="uid://btb3nn116vtb" path="res://assets/sprites/terrain/earth/grass_decal_water_02_diffuse.png" id="24_w02"]
+
+[sub_resource type="Resource" id="Decal_g01"]
+script = ExtResource("3_decal")
+Id = "earth · луг · поросль"
+Texture = ExtResource("20_g01")
+Layer = 1
+Noise = ExtResource("5_coarse")
+NoiseRange = Vector2(0, 0.55)
+SpacingPx = 380.0
+Chance = 0.6
+Jitter = 0.85
+SizePx = 400.0
+SizeVariation = 0.3
+TintVariation = 0.1
+Opacity = 0.85
+
+[sub_resource type="Resource" id="Decal_g02"]
+script = ExtResource("3_decal")
+Id = "earth · луг · проплешины"
+Texture = ExtResource("21_g02")
+Layer = 2
+Noise = ExtResource("7_patches")
+NoiseRange = Vector2(0.35, 1)
+SpacingPx = 320.0
+Jitter = 0.9
+SizePx = 320.0
+SizeVariation = 0.35
+TintVariation = 0.12
+Opacity = 0.8
+
+[sub_resource type="Resource" id="Decal_g03"]
+script = ExtResource("3_decal")
+Id = "earth · луг · кустарник"
+Texture = ExtResource("22_g03")
+Layer = 3
+Noise = ExtResource("6_fine")
+NoiseRange = Vector2(0.5, 1)
+HeightRange = Vector2(0.4, 1)
+SpacingPx = 260.0
+Chance = 0.45
+Jitter = 0.95
+SizePx = 230.0
+SizeVariation = 0.4
+TintVariation = 0.14
+Opacity = 0.95
+
+[sub_resource type="Resource" id="Biome_meadow"]
+script = ExtResource("4_biome")
+Id = "earth · луг"
+TemperatureRange = Vector2(0, 0.58)
+Falloff = 0.1
+Decals = [SubResource("Decal_g01"), SubResource("Decal_g02"), SubResource("Decal_g03")]
+
+[sub_resource type="Resource" id="Decal_w01"]
+script = ExtResource("3_decal")
+Id = "earth · низина · мочажина"
+Texture = ExtResource("23_w01")
+Layer = 4
+Noise = ExtResource("5_coarse")
+NoiseRange = Vector2(0.55, 1)
+HeightRange = Vector2(0, 0.55)
+SpacingPx = 520.0
+Chance = 0.45
+Jitter = 0.85
+SizePx = 480.0
+SizeVariation = 0.3
+Opacity = 0.8
+
+[sub_resource type="Resource" id="Decal_w02"]
+script = ExtResource("3_decal")
+Id = "earth · низина · лужи"
+Texture = ExtResource("24_w02")
+Layer = 5
+Noise = ExtResource("6_fine")
+NoiseRange = Vector2(0.6, 1)
+HeightRange = Vector2(0, 0.5)
+SpacingPx = 300.0
+Chance = 0.4
+Jitter = 0.95
+SizePx = 240.0
+SizeVariation = 0.4
+TintVariation = 0.1
+Opacity = 0.85
+
+[sub_resource type="Resource" id="Biome_wetland"]
+script = ExtResource("4_biome")
+Id = "earth · низина"
+TemperatureRange = Vector2(0.5, 1)
+Falloff = 0.12
+Decals = [SubResource("Decal_w01"), SubResource("Decal_w02")]
+
+[sub_resource type="Resource" id="Tile_grass"]
+script = ExtResource("2_tile")
+Id = "earth · трава"
+Texture = ExtResource("10_tile_a")
+SizePx = 520.0
+Range = Vector2(0, 0.45)
+Falloff = 0.1
+
+[sub_resource type="Resource" id="Tile_dirt"]
+script = ExtResource("2_tile")
+Id = "earth · земля"
+Texture = ExtResource("11_tile_b")
+SizePx = 460.0
+Range = Vector2(0.38, 0.78)
+Falloff = 0.1
+
+[sub_resource type="Resource" id="Tile_meadow"]
+script = ExtResource("2_tile")
+Id = "earth · луговина"
+Texture = ExtResource("12_tile_c")
+SizePx = 560.0
+Range = Vector2(0.72, 1)
+Falloff = 0.1
+
+[resource]
+script = ExtResource("1_settings")
+Id = "earth"
+BaseNoise = ExtResource("5_coarse")
+Tiles = [SubResource("Tile_grass"), SubResource("Tile_dirt"), SubResource("Tile_meadow")]
+TemperatureJitter = 0.1
+TemperatureJitterNoise = ExtResource("6_fine")
+HeightNoise = ExtResource("8_relief")
+Biomes = [SubResource("Biome_meadow"), SubResource("Biome_wetland")]

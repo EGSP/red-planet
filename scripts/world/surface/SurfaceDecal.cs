@@ -1,0 +1,72 @@
+using Godot;
+
+/// <summary>
+/// Декаль поверхности: отпечаток, который раскладывается при создании мира и дальше не
+/// меняется. Камни, трещины, песчаные наносы.
+///
+/// ПОЧЕМУ ПЛОТНОСТЬ ЗАДАНА ДВУМЯ ЧИСЛАМИ. Шаг решётки кандидатов отвечает за наименьшее
+/// расстояние между отпечатками, то есть за то, слипаются они или нет; доля принимаемых
+/// кандидатов — за то, насколько густо заполнена подходящая область. Одним числом это не
+/// выражается: разрежённая россыпь крупных камней и плотная сыпь мелких дают одинаковую
+/// долю покрытия при совершенно разном виде.
+///
+/// ПОЧЕМУ НОМЕР СЛОЯ, А НЕ ПОРЯДОК В СПИСКЕ. Порядок наложения должен быть выражен явно,
+/// иначе перестановка строк в инспекторе молча меняет вид карты. Номер слоя заодно
+/// объединяет декали разных биомов: песок ложится под трещины независимо от того,
+/// в каком биоме они объявлены.
+/// </summary>
+[Tool]
+[GlobalClass]
+public partial class SurfaceDecal : Resource
+{
+    /// <summary>Имя для чтения в инспекторе.</summary>
+    [Export] public string Id = "";
+
+    /// <summary>Изображение отпечатка. Берётся диффузная карта: освещения в двумерии нет.</summary>
+    [Export] public Texture2D Texture;
+
+    /// <summary>Порядок наложения: меньший номер лежит ниже.</summary>
+    [Export(PropertyHint.Range, "0,23,1")] public int Layer;
+
+    /// <summary>
+    /// Поле шума, по которому отбираются места. Не назначено — отбор идёт только по
+    /// температуре и высоте.
+    /// </summary>
+    [Export] public NoiseSettings Noise;
+
+    /// <summary>Отрезок значений шума, на котором отпечаток допускается.</summary>
+    [Export] public Vector2 NoiseRange = new(0f, 1f);
+
+    /// <summary>Отрезок температуры. Сужает область биома, а не расширяет её.</summary>
+    [Export] public Vector2 TemperatureRange = new(0f, 1f);
+
+    /// <summary>Отрезок высоты. Действует только при заданном поле высот.</summary>
+    [Export] public Vector2 HeightRange = new(0f, 1f);
+
+    /// <summary>Шаг решётки кандидатов в пикселях мира: наименьший интервал между отпечатками.</summary>
+    [Export(PropertyHint.Range, "32,2048,8")] public float SpacingPx = 256f;
+
+    /// <summary>Доля кандидатов, принимаемых после проверки условий.</summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float Chance = 0.5f;
+
+    /// <summary>Разброс положения внутри клетки решётки, долей шага.</summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float Jitter = 0.7f;
+
+    /// <summary>Сторона отпечатка в пикселях мира.</summary>
+    [Export(PropertyHint.Range, "16,1024,4")] public float SizePx = 192f;
+
+    /// <summary>Относительное отклонение размера в обе стороны.</summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float SizeVariation = 0.25f;
+
+    /// <summary>Случайный поворот. Снят — отпечатки лежат одинаково, что видно как повтор.</summary>
+    [Export] public bool RandomRotation = true;
+
+    /// <summary>Общий оттенок отпечатка.</summary>
+    [Export] public Color Tint = Colors.White;
+
+    /// <summary>Разброс яркости оттенка: разрушает узнаваемость одного и того же изображения.</summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float TintVariation = 0.08f;
+
+    /// <summary>Непрозрачность отпечатка.</summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float Opacity = 1f;
+}

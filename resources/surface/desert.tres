@@ -1,0 +1,192 @@
+[gd_resource type="Resource" script_class="SurfaceSettings" format=3 uid="uid://cj1eanqkijrtf"]
+
+[ext_resource type="Script" uid="uid://ct2qu3ueuenor" path="res://scripts/world/surface/SurfaceSettings.cs" id="1_settings"]
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="2_tile"]
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="3_decal"]
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="4_biome"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="5_coarse"]
+[ext_resource type="Resource" path="res://resources/surface/noise/fine.tres" id="6_fine"]
+[ext_resource type="Resource" path="res://resources/surface/noise/patches.tres" id="7_patches"]
+[ext_resource type="Resource" path="res://resources/surface/noise/relief.tres" id="8_relief"]
+[ext_resource type="Texture2D" uid="uid://bpvac1jbxb1ws" path="res://assets/sprites/terrain/desert/desert_tile_diffuse.png" id="10_tile_a"]
+[ext_resource type="Texture2D" uid="uid://e120rncic0hp" path="res://assets/sprites/terrain/desert/sand_tile_diffuse.png" id="11_tile_b"]
+[ext_resource type="Texture2D" uid="uid://bgd4jqboh1adg" path="res://assets/sprites/terrain/desert/desert_sand_decal_01_diffuse.png" id="20_sand1"]
+[ext_resource type="Texture2D" uid="uid://evbnlt2ee3ys" path="res://assets/sprites/terrain/desert/desert_sand_decal_02_diffuse.png" id="21_sand2"]
+[ext_resource type="Texture2D" uid="uid://bgr557katrktu" path="res://assets/sprites/terrain/desert/desert_sand_decal_03_diffuse.png" id="22_sand3"]
+[ext_resource type="Texture2D" uid="uid://baxypgkugbjrq" path="res://assets/sprites/terrain/desert/desert_cracks_decal_01_diffuse.png" id="23_cracks1"]
+[ext_resource type="Texture2D" uid="uid://evdcj6bh48hn" path="res://assets/sprites/terrain/desert/desert_cracks_decal_02_diffuse.png" id="24_cracks2"]
+[ext_resource type="Texture2D" uid="uid://5t0vp2utnk3q" path="res://assets/sprites/terrain/desert/desert_rock_decal_01_diffuse.png" id="25_rock1"]
+[ext_resource type="Texture2D" uid="uid://dwaltlasfm2ml" path="res://assets/sprites/terrain/desert/desert_rock_decal_02_diffuse.png" id="26_rock2"]
+[ext_resource type="Texture2D" uid="uid://dg4kml47r1m5d" path="res://assets/sprites/terrain/desert/desert_rock_decal_03_diffuse.png" id="27_rock3"]
+[ext_resource type="Texture2D" uid="uid://bo5riduxb4sia" path="res://assets/sprites/terrain/desert/desert_rock_decal_04_diffuse.png" id="28_rock4"]
+
+[sub_resource type="Resource" id="Decal_sand1"]
+script = ExtResource("3_decal")
+Id = "desert · пески · нанос"
+Texture = ExtResource("20_sand1")
+Layer = 1
+Noise = ExtResource("5_coarse")
+NoiseRange = Vector2(0, 0.6)
+SpacingPx = 420.0
+Chance = 0.6
+Jitter = 0.85
+SizePx = 440.0
+SizeVariation = 0.3
+Opacity = 0.85
+
+[sub_resource type="Resource" id="Decal_sand2"]
+script = ExtResource("3_decal")
+Id = "desert · пески · рябь"
+Texture = ExtResource("21_sand2")
+Layer = 2
+Noise = ExtResource("7_patches")
+NoiseRange = Vector2(0.3, 1)
+SpacingPx = 360.0
+Jitter = 0.9
+SizePx = 380.0
+SizeVariation = 0.35
+TintVariation = 0.1
+Opacity = 0.8
+
+[sub_resource type="Resource" id="Decal_sand3"]
+script = ExtResource("3_decal")
+Id = "desert · пески · песчаное пятно"
+Texture = ExtResource("22_sand3")
+Layer = 3
+Noise = ExtResource("6_fine")
+NoiseRange = Vector2(0.45, 1)
+SpacingPx = 280.0
+Chance = 0.45
+Jitter = 0.9
+SizePx = 260.0
+SizeVariation = 0.4
+TintVariation = 0.12
+Opacity = 0.8
+
+[sub_resource type="Resource" id="Biome_sands"]
+script = ExtResource("4_biome")
+Id = "desert · пески"
+TemperatureRange = Vector2(0, 0.52)
+Falloff = 0.1
+Decals = [SubResource("Decal_sand1"), SubResource("Decal_sand2"), SubResource("Decal_sand3")]
+
+[sub_resource type="Resource" id="Decal_cracks1"]
+script = ExtResource("3_decal")
+Id = "desert · каменистая пустошь · трещины крупные"
+Texture = ExtResource("23_cracks1")
+Layer = 2
+Noise = ExtResource("5_coarse")
+NoiseRange = Vector2(0.2, 0.65)
+SpacingPx = 460.0
+Chance = 0.45
+Jitter = 0.85
+SizePx = 420.0
+SizeVariation = 0.3
+TintVariation = 0.09
+Opacity = 0.9
+
+[sub_resource type="Resource" id="Decal_cracks2"]
+script = ExtResource("3_decal")
+Id = "desert · каменистая пустошь · трещины мелкие"
+Texture = ExtResource("24_cracks2")
+Layer = 3
+Noise = ExtResource("6_fine")
+NoiseRange = Vector2(0.5, 1)
+SpacingPx = 340.0
+Chance = 0.45
+Jitter = 0.9
+SizePx = 320.0
+SizeVariation = 0.35
+TintVariation = 0.1
+Opacity = 0.85
+
+[sub_resource type="Resource" id="Decal_rock1"]
+script = ExtResource("3_decal")
+Id = "desert · каменистая пустошь · камни мелкие"
+Texture = ExtResource("25_rock1")
+Layer = 4
+Noise = ExtResource("6_fine")
+NoiseRange = Vector2(0.35, 1)
+SpacingPx = 240.0
+Jitter = 0.95
+SizePx = 190.0
+SizeVariation = 0.4
+TintVariation = 0.14
+
+[sub_resource type="Resource" id="Decal_rock2"]
+script = ExtResource("3_decal")
+Id = "desert · каменистая пустошь · камни средние"
+Texture = ExtResource("26_rock2")
+Layer = 5
+Noise = ExtResource("7_patches")
+NoiseRange = Vector2(0.4, 1)
+SpacingPx = 320.0
+Chance = 0.4
+Jitter = 0.95
+SizePx = 240.0
+SizeVariation = 0.4
+TintVariation = 0.14
+
+[sub_resource type="Resource" id="Decal_rock3"]
+script = ExtResource("3_decal")
+Id = "desert · каменистая пустошь · камни крупные"
+Texture = ExtResource("27_rock3")
+Layer = 6
+Noise = ExtResource("5_coarse")
+NoiseRange = Vector2(0.6, 1)
+HeightRange = Vector2(0.45, 1)
+SpacingPx = 420.0
+Chance = 0.35
+Jitter = 0.9
+SizePx = 300.0
+SizeVariation = 0.35
+TintVariation = 0.12
+
+[sub_resource type="Resource" id="Decal_rock4"]
+script = ExtResource("3_decal")
+Id = "desert · каменистая пустошь · глыбы"
+Texture = ExtResource("28_rock4")
+Layer = 7
+Noise = ExtResource("6_fine")
+NoiseRange = Vector2(0.7, 1)
+HeightRange = Vector2(0.5, 1)
+SpacingPx = 560.0
+Chance = 0.3
+Jitter = 0.9
+SizePx = 340.0
+SizeVariation = 0.35
+TintVariation = 0.12
+
+[sub_resource type="Resource" id="Biome_rocky"]
+script = ExtResource("4_biome")
+Id = "desert · каменистая пустошь"
+TemperatureRange = Vector2(0.42, 1)
+Falloff = 0.12
+Decals = [SubResource("Decal_cracks1"), SubResource("Decal_cracks2"), SubResource("Decal_rock1"), SubResource("Decal_rock2"), SubResource("Decal_rock3"), SubResource("Decal_rock4")]
+
+[sub_resource type="Resource" id="Tile_sand"]
+script = ExtResource("2_tile")
+Id = "desert · песок"
+Texture = ExtResource("11_tile_b")
+SizePx = 480.0
+Range = Vector2(0, 0.5)
+Falloff = 0.12
+
+[sub_resource type="Resource" id="Tile_desert"]
+script = ExtResource("2_tile")
+Id = "desert · растрескавшаяся корка"
+Texture = ExtResource("10_tile_a")
+SizePx = 600.0
+Range = Vector2(0.4, 1)
+Falloff = 0.12
+
+[resource]
+script = ExtResource("1_settings")
+Id = "desert"
+BaseNoise = ExtResource("5_coarse")
+Tiles = [SubResource("Tile_sand"), SubResource("Tile_desert")]
+Ambient = Color(1, 0.97, 0.92, 1)
+TemperatureJitter = 0.12
+TemperatureJitterNoise = ExtResource("6_fine")
+HeightNoise = ExtResource("8_relief")
+Biomes = [SubResource("Biome_sands"), SubResource("Biome_rocky")]

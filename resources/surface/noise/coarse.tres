@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="NoiseSettings" format=3 uid="uid://583taehhv6po"]
+
+[ext_resource type="Script" uid="uid://bucbf0nyr5cgj" path="res://scripts/world/surface/NoiseSettings.cs" id="1_noise"]
+
+[resource]
+script = ExtResource("1_noise")
+Frequency = 0.0025
+Contrast = 0.6
