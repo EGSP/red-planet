@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SurfaceBiome" load_steps=5 format=3]
+
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/sand_drift.tres" id="2_sand_drift"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/sand_ripple.tres" id="3_sand_ripple"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/sand_patch.tres" id="4_sand_patch"]
+
+[resource]
+script = ExtResource("1_biome")
+Id = "desert · пески"
+TemperatureRange = Vector2(0, 0.52)
+Falloff = 0.1
+Decals = [ExtResource("2_sand_drift"), ExtResource("3_sand_ripple"), ExtResource("4_sand_patch")]

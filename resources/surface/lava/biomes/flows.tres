@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SurfaceBiome" format=3 uid="uid://cjy5jdob15tvo"]
+
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
+[ext_resource type="Resource" uid="uid://juvomkrjueia" path="res://resources/surface/lava/decals/flow.tres" id="2_flow"]
+[ext_resource type="Resource" uid="uid://b523kri2qb240" path="res://resources/surface/lava/decals/hot_cracks.tres" id="3_hot_cracks"]
+[ext_resource type="Resource" uid="uid://f34gxjdv7ib6" path="res://resources/surface/lava/decals/yellow_spots.tres" id="4_yellow_spots"]
+[ext_resource type="Resource" uid="uid://bdsuat0xi4vke" path="res://resources/surface/lava/decals/big_rocks.tres" id="5_big_rocks"]
+[ext_resource type="Resource" uid="uid://buo42fosnud5o" path="res://resources/surface/lava/decals/craters.tres" id="6_craters"]
+
+[resource]
+script = ExtResource("1_biome")
+Id = "lava · потоки"
+TemperatureRange = Vector2(0.42, 1)
+Falloff = 0.12
+Decals = [ExtResource("2_flow"), ExtResource("3_hot_cracks"), ExtResource("4_yellow_spots"), ExtResource("5_big_rocks"), ExtResource("6_craters")]

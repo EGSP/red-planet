@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SurfaceSettings" format=3 uid="uid://hbujh7enaj83"]
+
+[ext_resource type="Script" uid="uid://ct2qu3ueuenor" path="res://scripts/world/surface/SurfaceSettings.cs" id="1_settings"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="2_coarse"]
+[ext_resource type="Resource" uid="uid://bfr8cr7pg3aky" path="res://resources/surface/noise/relief.tres" id="4_relief"]
+[ext_resource type="Resource" uid="uid://bv6nstucsxvfk" path="res://resources/surface/lava/tiles/crust.tres" id="5_tile_crust"]
+[ext_resource type="Resource" uid="uid://dh1n5bvl33akh" path="res://resources/surface/lava/tiles/dark_rock.tres" id="6_tile_dark"]
+[ext_resource type="Resource" uid="uid://bc4ptg0thjwnc" path="res://resources/surface/lava/biomes/plains.tres" id="7_biome_plains"]
+[ext_resource type="Resource" uid="uid://cjy5jdob15tvo" path="res://resources/surface/lava/biomes/flows.tres" id="8_biome_flows"]
+
+[resource]
+script = ExtResource("1_settings")
+Id = "lava"
+BaseNoise = ExtResource("2_coarse")
+Tiles = [ExtResource("5_tile_crust"), ExtResource("6_tile_dark")]
+Ambient = Color(1, 0.94, 0.9, 1)
+TemperatureJitter = 0.1
+TemperatureJitterNoise = ExtResource("2_coarse")
+HeightNoise = ExtResource("4_relief")
+Biomes = [ExtResource("7_biome_plains"), ExtResource("8_biome_flows")]

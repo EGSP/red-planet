@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="SurfaceSettings" load_steps=9 format=3 uid="uid://cj1eanqkijrtf"]
+
+[ext_resource type="Script" uid="uid://ct2qu3ueuenor" path="res://scripts/world/surface/SurfaceSettings.cs" id="1_settings"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="2_coarse"]
+[ext_resource type="Resource" path="res://resources/surface/noise/fine.tres" id="3_fine"]
+[ext_resource type="Resource" path="res://resources/surface/noise/relief.tres" id="4_relief"]
+[ext_resource type="Resource" path="res://resources/surface/desert/tiles/sand.tres" id="5_tile_sand"]
+[ext_resource type="Resource" path="res://resources/surface/desert/tiles/crust.tres" id="6_tile_crust"]
+[ext_resource type="Resource" path="res://resources/surface/desert/biomes/sands.tres" id="7_biome_sands"]
+[ext_resource type="Resource" path="res://resources/surface/desert/biomes/rocky.tres" id="8_biome_rocky"]
+
+[resource]
+script = ExtResource("1_settings")
+Id = "desert"
+BaseNoise = ExtResource("2_coarse")
+Tiles = [ExtResource("5_tile_sand"), ExtResource("6_tile_crust")]
+Ambient = Color(1, 0.97, 0.92, 1)
+TemperatureJitter = 0.12
+TemperatureJitterNoise = ExtResource("3_fine")
+HeightNoise = ExtResource("4_relief")
+Biomes = [ExtResource("7_biome_sands"), ExtResource("8_biome_rocky")]

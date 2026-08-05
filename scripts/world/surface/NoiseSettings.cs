@@ -62,6 +62,23 @@ public partial class NoiseSettings : Resource
     public float Frequency = 0.004f;
 
     /// <summary>
+    /// Приближение: множитель размера пятен, действующий при любом виде шума. Двойка
+    /// растягивает рисунок вдвое, половина сжимает; единица оставляет как есть.
+    ///
+    /// ПОЧЕМУ ОТДЕЛЬНО ОТ ЧАСТОТЫ, ХОТЯ ДЕЙСТВУЕТ НА НЕЁ ЖЕ. Частота подбирается один раз
+    /// и выражает замысел поля — насколько крупными задуманы пятна. Приближение правится
+    /// при примерке, когда то же поле надо посмотреть крупнее или мельче, не трогая
+    /// подобранного числа и не пересчитывая его в уме. Итоговая частота есть частное от
+    /// деления <see cref="Frequency"/> на это значение.
+    ///
+    /// К <c>zoom</c> из Planetary Annihilation отношения не имеет: там так назван параметр,
+    /// который управляет не масштабом, а контрастностью, и его роль исполняет
+    /// <see cref="Contrast"/>.
+    /// </summary>
+    [Export(PropertyHint.Range, "0.05,20,0.05")]
+    public float Zoom = 1f;
+
+    /// <summary>
     /// Контрастность вокруг середины: единица оставляет распределение как есть, большие
     /// значения вытесняют его к краям диапазона, меньшие единицы стягивают к 0.5.
     /// </summary>
@@ -131,7 +148,7 @@ public partial class NoiseSettings : Resource
         var noise = new FastNoiseLite
         {
             Seed = unchecked((int)seed + SeedOffset),
-            Frequency = Mathf.Max(Frequency, 0.0001f),
+            Frequency = Mathf.Max(Frequency / Mathf.Max(Zoom, 0.01f), 0.00001f),
             NoiseType = Kind switch
             {
                 NoiseKind.Perlin => FastNoiseLite.NoiseTypeEnum.Perlin,

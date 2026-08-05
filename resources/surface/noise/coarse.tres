@@ -4,5 +4,7 @@
 
 [resource]
 script = ExtResource("1_noise")
-Frequency = 0.0025
-Contrast = 0.6
+Zoom = 17.1
+Contrast = 1.8
+Octaves = 1
+Lacunarity = 1.5

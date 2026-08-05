@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="SurfaceTile" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="1_tile"]
+[ext_resource type="Texture2D" uid="uid://1oqd6qa21f2k" path="res://assets/sprites/terrain/earth/grass_tile_diffuse.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_tile")
+Id = "earth · трава"
+SizePx = 520.0
+Range = Vector2(0, 0.45)
+Falloff = 0.1
+Texture = ExtResource("2_tex")

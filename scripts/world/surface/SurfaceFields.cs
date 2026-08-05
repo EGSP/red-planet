@@ -57,7 +57,11 @@ public sealed class SurfaceFields
         _base = settings.BaseNoise?.Build(seed);
         _height = settings.HeightNoise?.Build(seed);
         _temperature = settings.TemperatureNoise?.Build(seed);
-        _jitter = (settings.TemperatureJitterNoise ?? settings.BaseNoise)?.Build(seed + 977);
+        // Все поля строятся на одном зерне партии: поле определяется своими настройками и
+        // ничем более, а два поля с одинаковыми настройками разводятся SeedOffset ресурса.
+        // Прежняя примесь 977 у неровности нарушала это правило так же, как номер декали
+        // в SurfaceLayout: один и тот же ресурс давал разный рисунок в разных местах
+        _jitter = (settings.TemperatureJitterNoise ?? settings.BaseNoise)?.Build(seed);
 
         BaseTexture = Bake(settings.BaseNoise, _base);
         HeightTexture = Bake(settings.HeightNoise, _height);
@@ -171,7 +175,7 @@ public sealed class SurfaceFields
         return HashCode.Combine(
             (int)noise.Kind, noise.Frequency, noise.Contrast, noise.SeedOffset,
             noise.Octaves, noise.Lacunarity, noise.Persistence,
-            HashCode.Combine((int)noise.CellularDistance, (int)noise.CellularReturn,
-                noise.CellularJitter));
+            HashCode.Combine(noise.Zoom, (int)noise.CellularDistance,
+                (int)noise.CellularReturn, noise.CellularJitter));
     }
 }

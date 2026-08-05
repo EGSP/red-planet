@@ -32,13 +32,24 @@ public partial class SurfaceRenderer : Node2D
 {
     private const string ShaderPath = "res://resources/shaders/surface.gdshader";
 
-    /// <summary>Имя узла отпечатков: по нему они находятся и убираются при пересборке.</summary>
-    private const string DecalPrefix = "Decals_";
+    /// <summary>
+    /// Группа узлов отпечатков: по ней они находятся и убираются при пересборке.
+    /// Группа переживает и перезагрузку сборки, и переименование узла движком, поэтому
+    /// служит приметой надёжнее имени.
+    /// </summary>
+    private const string DecalGroup = "SurfaceDecals";
 
     [ExportGroup("Местность")]
 
     /// <summary>Описание местности. Не назначено — поверхность не рисуется вовсе.</summary>
     [Export] public SurfaceSettings Settings;
+
+    /// <summary>
+    /// Кандидаты на случайный выбор при старте партии. Пусто — остаётся
+    /// <see cref="Settings"/>. В редакторе не выбирается: иначе предпросмотр и сцена
+    /// менялись бы при каждом открытии.
+    /// </summary>
+    [Export] public SurfaceSettings[] Terrains;
 
     /// <summary>
     /// Зерно поверхности. Ноль означает «взять из настроек мира»: тогда поверхность,
@@ -66,13 +77,76 @@ public partial class SurfaceRenderer : Node2D
     /// <summary>Раскладка декалей. Нужна предпросмотру для подписи.</summary>
     public SurfacePlan Plan { get; private set; }
 
+    /// <summary>Включённые покрытия по порядку. Поле, а не местный массив: заполняется каждый кадр.</summary>
+    private readonly SurfaceTile[] _active = new SurfaceTile[SurfaceSettings.MaxTiles];
+
     private ShaderMaterial _material;
     private ImageTexture _white;
     private Rect2 _area;
     private int _fieldsSignature;
     private int _planSignature;
 
-    public override void _Ready() => Attach();
+    public override void _Ready()
+    {
+        // Отпечатки, оставшиеся от прошлой жизни узла, снимаются при входе в дерево.
+        // Обычно их нет, но если скрипт перестал исполняться (в редакторе это случается
+        // после перезагрузки сборки), созданные им узлы остаются в дереве и продолжают
+        // рисоваться, не подчиняясь уже никаким переключателям. Открытие сцены заново
+        // должно давать чистое состояние.
+        ClearDecals();
+
+        if (!Engine.IsEditorHint())
+            BeginParty();
+
+        Attach();
+    }
+
+    /// <summary>
+    /// Случайная местность и зерно шумов на партию. В редакторе не вызывается.
+    /// </summary>
+    private void BeginParty()
+    {
+        PickTerrain();
+
+        // Ноль означает «ещё не задано»: иначе поверхность брала бы запасное зерно 1
+        // из правила в _Process, и партии отличались бы только типом местности
+        if (Seed == 0)
+            Seed = GD.Randi() | 1UL;
+    }
+
+    /// <summary>Выбрать местность из кандидатов. Один раз на партию, до сборки полей.</summary>
+    private void PickTerrain()
+    {
+        if (Terrains == null || Terrains.Length == 0)
+            return;
+
+        int count = 0;
+
+        foreach (var candidate in Terrains)
+        {
+            if (candidate != null)
+                count++;
+        }
+
+        if (count == 0)
+            return;
+
+        int pick = (int)(GD.Randi() % (uint)count);
+
+        foreach (var candidate in Terrains)
+        {
+            if (candidate == null)
+                continue;
+
+            if (pick == 0)
+            {
+                Settings = candidate;
+                return;
+            }
+
+            pick--;
+        }
+    }
 
     /// <summary>
     /// Снять вещество перед сохранением сцены и собрать заново после.
@@ -158,7 +232,17 @@ public partial class SurfaceRenderer : Node2D
             Plan = SurfaceLayout.Build(Settings, Fields);
             _planSignature = plan;
             Present(Plan);
+            return;
         }
+
+        // Сверка дерева с раскладкой. Отпечаток говорит лишь о том, что настройки не
+        // менялись, но узлы отпечатков живут в дереве и могут разойтись с раскладкой по
+        // причинам вне этого кода: в редакторе узлы переживают перезагрузку сборки, при
+        // которой объект C# заменяется, а созданное им остаётся. Несовпадение числа узлов
+        // с числом наборов — признак именно такого расхождения, и лечится оно повторной
+        // раскладкой по узлам, а не пересчётом раскладки
+        if (DecalNodes() != Plan.Groups.Count)
+            Present(Plan);
     }
 
     /// <summary>Передать шейдеру поля, покрытия и настройки смешивания.</summary>
@@ -178,14 +262,27 @@ public partial class SurfaceRenderer : Node2D
         _material.SetShaderParameter("sharpness", Mathf.Max(Settings.Sharpness, 1f));
         _material.SetShaderParameter("ambient", Settings.Ambient);
 
-        var tiles = Settings.Tiles;
-        int count = Mathf.Min(tiles?.Length ?? 0, SurfaceSettings.MaxTiles);
+        // Выключенные покрытия отбираются до передачи шейдеру, а не помечаются флагом в
+        // нём: иначе выключенное занимало бы одно из четырёх мест, которые шейдер
+        // разбирает развёрнутым кодом, и освободить место под примерку было бы нечем
+        int count = 0;
+
+        foreach (var candidate in Settings.Tiles ?? System.Array.Empty<SurfaceTile>())
+        {
+            if (candidate == null || !candidate.Enabled)
+                continue;
+
+            _active[count++] = candidate;
+
+            if (count == SurfaceSettings.MaxTiles)
+                break;
+        }
 
         _material.SetShaderParameter("tile_count", count);
 
         for (int i = 0; i < SurfaceSettings.MaxTiles; i++)
         {
-            var tile = i < count ? tiles[i] : null;
+            var tile = i < count ? _active[i] : null;
 
             _material.SetShaderParameter($"tile_{i}", tile?.Texture);
 
@@ -246,16 +343,41 @@ public partial class SurfaceRenderer : Node2D
 
             var node = new MultiMeshInstance2D
             {
-                Name = $"{DecalPrefix}{i}_{group.Decal.Id}",
                 Multimesh = mesh,
                 Texture = group.Decal.Texture,
                 TextureFilter = TextureFilterEnum.LinearWithMipmaps,
             };
 
+            // Принадлежность группе — единственная примета отпечатка. Имя ею быть не может:
+            // снятые узлы живут до конца кадра, и новый узел с тем же именем движок
+            // переименовывает в служебное «@MultiMeshInstance2D@N». Такой узел переставал
+            // опознаваться при следующей очистке и оставался на холсте навсегда, отчего
+            // переключение показа копило неубираемые отпечатки. Имя здесь поэтому не
+            // назначается вовсе: движок даёт заведомо неповторяющееся.
+            node.AddToGroup(DecalGroup);
+
             // Owner не назначается намеренно: узлы собраны по описанию местности и
             // сохраняться в сцену не должны
             AddChild(node);
         }
+    }
+
+    /// <summary>
+    /// Сколько узлов отпечатков сейчас в дереве. Снятые узлы не считаются: они живут до
+    /// конца кадра, и без этой проверки сверка с раскладкой давала бы ложное расхождение.
+    /// </summary>
+    private int DecalNodes()
+    {
+        int count = 0;
+
+        foreach (var child in GetChildren())
+        {
+            if (child is MultiMeshInstance2D node && !node.IsQueuedForDeletion() &&
+                node.IsInGroup(DecalGroup))
+                count++;
+        }
+
+        return count;
     }
 
     private void ClearDecals()
@@ -267,8 +389,13 @@ public partial class SurfaceRenderer : Node2D
         // сцены они и так не попадают.
         foreach (var child in GetChildren())
         {
-            if (child is MultiMeshInstance2D node && node.Name.ToString().StartsWith(DecalPrefix))
-                node.QueueFree();
+            if (child is not MultiMeshInstance2D node || !node.IsInGroup(DecalGroup))
+                continue;
+
+            // Из группы узел снимается сразу, а освобождается в конце кадра: пока он жив,
+            // сверка дерева с раскладкой не должна его считать
+            node.RemoveFromGroup(DecalGroup);
+            node.QueueFree();
         }
     }
 

@@ -15,6 +15,13 @@ public partial class SurfaceBiome : Resource
     /// <summary>Имя для чтения в инспекторе.</summary>
     [Export] public string Id = "";
 
+    /// <summary>
+    /// Участвует ли биом в раскладке. Снятая галка убирает все его декали разом, не удаляя
+    /// самого биома из списка: подбор ведётся сравнением, и вернуть набор нужно тем же
+    /// движением, каким он выключен. Раскладка прочих биомов при этом не смещается.
+    /// </summary>
+    [Export] public bool Enabled = true;
+
     /// <summary>Отрезок температуры, на котором биом появляется.</summary>
     [Export] public Vector2 TemperatureRange = new(0f, 1f);
 

@@ -51,6 +51,13 @@ public sealed class SurfacePlan
 /// свойства: раскладка не зависит от порядка обхода, и добавление новой декали не
 /// сдвигает уже размещённые. Общий на весь проход генератор ни того, ни другого не даёт.
 ///
+/// НОМЕР ДЕКАЛИ УЧАСТВУЕТ ТОЛЬКО В СЛУЧАЙНОСТИ РАЗМЕЩЕНИЯ, НО НЕ В ПОЛЕ ШУМА. Поле есть
+/// общее свойство местности: две декали, сославшиеся на один ресурс, обязаны видеть один и
+/// тот же рисунок, и он же обязан совпадать с тем, по которому шейдер делит базовый слой.
+/// Случайность же размещения принадлежит самой декали, иначе все декали встали бы на одни
+/// и те же места. Отсюда разделение: номер подмешан в поток чисел клетки и не подмешан в
+/// зерно поля.
+///
 /// РАСКЛАДКА НЕ СОХРАНЯЕТСЯ. При воспроизведении партии из журнала она восстанавливается
 /// из того же зерна, поэтому в документах ей места нет.
 /// </summary>
@@ -76,9 +83,11 @@ public static class SurfaceLayout
 
             foreach (var decal in biome.Decals)
             {
+                // Номер присваивается и пропущенным декалям: из него выводится зерно, и
+                // выключение одного набора иначе сдвинуло бы раскладку всех следующих
                 index++;
 
-                if (decal?.Texture == null)
+                if (!biome.Enabled || decal == null || !decal.Enabled || decal.Texture == null)
                     continue;
 
                 var group = new SurfaceGroup { Decal = decal };
@@ -112,7 +121,21 @@ public static class SurfaceLayout
         if (cols <= 0 || rows <= 0 || cols * rows > Limit * 4)
             return;
 
-        var noise = decal.Noise?.Build(fields.Seed + salt * 31UL);
+        // Поле шума строится на зерне партии без всякой примеси. Номер декали подмешивался
+        // сюда раньше, и следствие было ложным: декаль, сославшаяся на то же поле, что
+        // делит базовый слой, ложилась не туда, куда указывает рисунок покрытий, а на
+        // сдвинутую копию того же поля. Различать два поля с одинаковыми настройками
+        // полагается через SeedOffset самого ресурса, и это единственный способ; номер же
+        // декали остаётся при том, для чего он и нужен, — при потоке случайных чисел,
+        // который решает, где внутри клетки встанет отпечаток
+        var noise = decal.Noise?.Build(fields.Seed);
+
+        // Запас нужен только тогда, когда действует нижняя граница: иначе отвергнутые
+        // розыгрышем кандидаты некуда девать, а хранить их — лишняя работа
+        bool keepReserve = Limited(decal) && decal.CountMin > 0;
+
+        var taken = new List<Candidate>();
+        var reserve = keepReserve ? new List<Candidate>() : null;
 
         for (int cy = 0; cy < rows; cy++)
         {
@@ -120,8 +143,10 @@ public static class SurfaceLayout
             {
                 var random = new Stream(fields.Seed, salt, cx, cy);
 
-                if (random.Next() > decal.Chance)
-                    continue;
+                // Розыгрыш доли берётся первым числом потока, а решение по нему
+                // откладывается: положение обязано выпасть теми же числами и у кандидата,
+                // отвергнутого долей, иначе запас лёг бы не туда, куда лягут принятые
+                float roll = random.Next();
 
                 var position = new Vector2(
                     bounds.Position.X + (cx + 0.5f + (random.Next() - 0.5f) * decal.Jitter) * step,
@@ -137,8 +162,10 @@ public static class SurfaceLayout
                 // рваным, а не отрезанным по линии
                 float belongs = Band(temperature, biome.TemperatureRange, biome.Falloff);
 
-                if (belongs <= 0f || random.Next() > belongs)
+                if (belongs <= 0f)
                     continue;
+
+                float bite = random.Next();
 
                 if (!Inside(temperature, decal.TemperatureRange))
                     continue;
@@ -148,6 +175,11 @@ public static class SurfaceLayout
                     continue;
 
                 if (fields.HasHeight && !Inside(fields.HeightAt(position), decal.HeightRange))
+                    continue;
+
+                bool accepted = roll <= decal.Chance && bite <= belongs;
+
+                if (!accepted && !keepReserve)
                     continue;
 
                 float size = decal.SizePx *
@@ -162,13 +194,69 @@ public static class SurfaceLayout
                     decal.Tint.B * shade,
                     decal.Tint.A * decal.Opacity);
 
-                group.Items.Add(new DecalPlacement(position, rotation, Mathf.Max(size, 1f), tint));
+                var item = new DecalPlacement(position, rotation, Mathf.Max(size, 1f), tint);
+                var candidate = new Candidate(item, Stream.Key(fields.Seed, salt, cx, cy));
 
-                if (group.Items.Count >= Limit)
-                    return;
+                if (accepted)
+                    taken.Add(candidate);
+                else
+                    reserve.Add(candidate);
             }
         }
+
+        Apply(group, decal, taken, reserve);
     }
+
+    /// <summary>
+    /// Свести принятых кандидатов к границам количества.
+    ///
+    /// ПОЧЕМУ ОТБОР ПО КЛЮЧУ, А НЕ ОБРЕЗАНИЕ СПИСКА. Кандидаты набраны обходом по строкам,
+    /// поэтому первые в списке лежат вверху карты: обрезание оставило бы отпечатки только
+    /// в верхней полосе. Ключ выведен из зерна и координат клетки, значит порядок по нему
+    /// не связан с положением на карте, и отбор прореживает область равномерно. Заодно
+    /// отбор устойчив: правка верхней границы не переставляет уже отобранное, а лишь
+    /// прибавляет или убавляет отпечатки с конца порядка.
+    /// </summary>
+    private static void Apply(
+        SurfaceGroup group,
+        SurfaceDecal decal,
+        List<Candidate> taken,
+        List<Candidate> reserve)
+    {
+        bool limited = Limited(decal);
+
+        int max = limited && decal.CountMax > 0 ? Mathf.Min(decal.CountMax, Limit) : Limit;
+        int min = limited ? Mathf.Min(decal.CountMin, max) : 0;
+
+        if (taken.Count > max)
+        {
+            taken.Sort(Order);
+            taken.RemoveRange(max, taken.Count - max);
+        }
+
+        if (reserve != null && taken.Count < min)
+        {
+            reserve.Sort(Order);
+
+            int need = Mathf.Min(min - taken.Count, reserve.Count);
+
+            for (int i = 0; i < need; i++)
+                taken.Add(reserve[i]);
+        }
+
+        foreach (var candidate in taken)
+            group.Items.Add(candidate.Item);
+    }
+
+    private static int Order(Candidate a, Candidate b) => a.Key.CompareTo(b.Key);
+
+    /// <summary>
+    /// Действуют ли границы количества. Совпадение нижней и верхней означает, что правило
+    /// выключено: одинаковыми числами удобно снять ограничение, не помня, какое из них
+    /// нулевое, а требование ровно стольких отпечатков смысла не имеет — раскладка тогда
+    /// перестала бы зависеть от условий размещения.
+    /// </summary>
+    private static bool Limited(SurfaceDecal decal) => decal.CountMin != decal.CountMax;
 
     /// <summary>Лежит ли значение в отрезке. Отрезок задан вектором: X — начало, Y — конец.</summary>
     private static bool Inside(float value, Vector2 range) =>
@@ -209,7 +297,7 @@ public static class SurfaceLayout
             if (biome == null)
                 continue;
 
-            hash = HashCode.Combine(hash, biome.TemperatureRange, biome.Falloff);
+            hash = HashCode.Combine(hash, biome.Enabled, biome.TemperatureRange, biome.Falloff);
 
             if (biome.Decals == null)
                 continue;
@@ -221,8 +309,10 @@ public static class SurfaceLayout
 
                 hash = HashCode.Combine(hash,
                     decal.Texture?.GetInstanceId() ?? 0UL,
-                    HashCode.Combine(decal.Layer, decal.SpacingPx, decal.Chance, decal.Jitter),
-                    HashCode.Combine(decal.SizePx, decal.SizeVariation, decal.RandomRotation),
+                    HashCode.Combine(decal.Layer, decal.SpacingPx, decal.Chance, decal.Jitter,
+                        decal.CountMin, decal.CountMax),
+                    HashCode.Combine(decal.Enabled, decal.SizePx, decal.SizeVariation,
+                        decal.RandomRotation),
                     HashCode.Combine(decal.NoiseRange, decal.TemperatureRange, decal.HeightRange),
                     HashCode.Combine(decal.Tint, decal.TintVariation, decal.Opacity),
                     SurfaceFields.SignatureOf(decal.Noise));
@@ -230,6 +320,22 @@ public static class SurfaceLayout
         }
 
         return hash;
+    }
+
+    /// <summary>
+    /// Кандидат вместе с ключом отбора: по ключу решается, кого убрать при избытке и кого
+    /// добрать при недостаче.
+    /// </summary>
+    private readonly struct Candidate
+    {
+        public readonly DecalPlacement Item;
+        public readonly float Key;
+
+        public Candidate(DecalPlacement item, float key)
+        {
+            Item = item;
+            Key = key;
+        }
     }
 
     /// <summary>
@@ -249,6 +355,14 @@ public static class SurfaceLayout
 
             _state = Mix(key | 1UL);
         }
+
+        /// <summary>
+        /// Ключ отбора клетки. Берётся отдельным потоком, а не очередным числом основного:
+        /// вставка лишнего вызова сдвинула бы всю последовательность клетки, и раскладка
+        /// уже подобранных местностей изменилась бы при неизменных настройках.
+        /// </summary>
+        public static float Key(ulong seed, ulong salt, int cx, int cy) =>
+            new Stream(seed, salt ^ 0xA5A55A5A12349E37UL, cx, cy).Next();
 
         /// <summary>Следующее число от нуля до единицы.</summary>
         public float Next()

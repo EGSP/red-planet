@@ -4,7 +4,7 @@
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="2_world"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="3_waves"]
 [ext_resource type="Script" uid="uid://d2ynvft64bh21" path="res://scripts/world/surface/SurfaceRenderer.cs" id="4_surface"]
-[ext_resource type="Resource" uid="uid://hbujh7enaj83" path="res://resources/surface/lava.tres" id="5_cnxac"]
+[ext_resource type="Resource" uid="uid://hbujh7enaj83" path="res://resources/surface/lava/lava.tres" id="5_cnxac"]
 [ext_resource type="Script" uid="uid://0lfllbrf4q87" path="res://scripts/world/CloudRenderer.cs" id="6_clouds"]
 [ext_resource type="Resource" uid="uid://i1jom8qq3cjt" path="res://resources/tuning/clouds.tres" id="7_cloudtuning"]
 
@@ -17,6 +17,7 @@ zoom = Vector2(0.22, 0.22)
 [node name="Surface" type="Node2D" parent="." unique_id=1031185749]
 script = ExtResource("4_surface")
 Settings = ExtResource("5_cnxac")
+Terrains = []
 
 [node name="Clouds" type="Node2D" parent="." unique_id=1031185750]
 script = ExtResource("6_clouds")

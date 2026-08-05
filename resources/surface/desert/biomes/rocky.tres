@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SurfaceBiome" load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/cracks_large.tres" id="2_cracks_large"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/cracks_small.tres" id="3_cracks_small"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/rock_small.tres" id="4_rock_small"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/rock_medium.tres" id="5_rock_medium"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/rock_large.tres" id="6_rock_large"]
+[ext_resource type="Resource" path="res://resources/surface/desert/decals/boulders.tres" id="7_boulders"]
+
+[resource]
+script = ExtResource("1_biome")
+Id = "desert · каменистая пустошь"
+TemperatureRange = Vector2(0.42, 1)
+Falloff = 0.12
+Decals = [ExtResource("2_cracks_large"), ExtResource("3_cracks_small"), ExtResource("4_rock_small"), ExtResource("5_rock_medium"), ExtResource("6_rock_large"), ExtResource("7_boulders")]

@@ -33,7 +33,9 @@
 [ext_resource type="Resource" uid="uid://bspmw6d4xtobp" path="res://resources/tuning/terror.tres" id="30_terrorsettings"]
 [ext_resource type="Script" uid="uid://cidxcw5t8b2mv" path="res://scripts/core/VictorySystem.cs" id="31_victory"]
 [ext_resource type="Script" uid="uid://c65huttvnvpun" path="res://scripts/ui/PortalCountdownBar.cs" id="32_portalbar"]
-[ext_resource type="Resource" uid="uid://hbujh7enaj83" path="res://resources/surface/lava.tres" id="33_5575j"]
+[ext_resource type="Resource" uid="uid://hbujh7enaj83" path="res://resources/surface/lava/lava.tres" id="33_5575j"]
+[ext_resource type="Resource" uid="uid://cj1eanqkijrtf" path="res://resources/surface/desert/desert.tres" id="33_desert"]
+[ext_resource type="Resource" uid="uid://ctvqauj7073p" path="res://resources/surface/earth/earth.tres" id="33_earth"]
 [ext_resource type="Script" uid="uid://bsqkp3ps8tl01" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
 [ext_resource type="Script" uid="uid://bnkead8a2t11f" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
 [ext_resource type="Script" uid="uid://3fhl61arlssd" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
@@ -159,6 +161,7 @@ script = ExtResource("3_playground")
 [node name="Surface" type="Node2D" parent="Playground/Terrain" unique_id=304019416]
 script = ExtResource("4_surface")
 Settings = ExtResource("33_5575j")
+Terrains = [ExtResource("33_5575j"), ExtResource("33_desert"), ExtResource("33_earth")]
 
 [node name="Grid" type="Node2D" parent="Playground/Terrain" unique_id=1875590808]
 visible = false

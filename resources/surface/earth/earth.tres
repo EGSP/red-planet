@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="SurfaceSettings" load_steps=10 format=3 uid="uid://ctvqauj7073p"]
+
+[ext_resource type="Script" uid="uid://ct2qu3ueuenor" path="res://scripts/world/surface/SurfaceSettings.cs" id="1_settings"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="2_coarse"]
+[ext_resource type="Resource" path="res://resources/surface/noise/fine.tres" id="3_fine"]
+[ext_resource type="Resource" path="res://resources/surface/noise/relief.tres" id="4_relief"]
+[ext_resource type="Resource" path="res://resources/surface/earth/tiles/grass.tres" id="5_tile_grass"]
+[ext_resource type="Resource" path="res://resources/surface/earth/tiles/dirt.tres" id="6_tile_dirt"]
+[ext_resource type="Resource" path="res://resources/surface/earth/tiles/meadow.tres" id="7_tile_meadow"]
+[ext_resource type="Resource" path="res://resources/surface/earth/biomes/meadow.tres" id="8_biome_meadow"]
+[ext_resource type="Resource" path="res://resources/surface/earth/biomes/wetland.tres" id="9_biome_wetland"]
+
+[resource]
+script = ExtResource("1_settings")
+Id = "earth"
+BaseNoise = ExtResource("2_coarse")
+Tiles = [ExtResource("5_tile_grass"), ExtResource("6_tile_dirt"), ExtResource("7_tile_meadow")]
+TemperatureJitter = 0.1
+TemperatureJitterNoise = ExtResource("3_fine")
+HeightNoise = ExtResource("4_relief")
+Biomes = [ExtResource("8_biome_meadow"), ExtResource("9_biome_wetland")]

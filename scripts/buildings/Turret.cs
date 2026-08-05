@@ -77,8 +77,18 @@ public partial class Turret : Building, IArmed
             selected: GizmoGate.IsSelected(this),
             armedStructure: true);
 
-        // Башня — треугольник носом вперёд по оси. Рисуется в координатах самой ноды,
-        // до всякой правки трансформа: нос обязан совпадать с конусом прицеливания
+        // Основание стоит под углом постановки и вслед за башней не крутится — снимаем
+        // поворот ноды и ставим вместо него угол корпуса. Рисуем до башни: непрозрачный
+        // квадрат иначе перекрыл бы треугольник
+        DrawSetTransform(Vector2.Zero, BodyFacing - Rotation, Vector2.One);
+        var baseRect = new Rect2(-half, -half, Const.Unit, Const.Unit);
+        BuildingSkirt.Draw(this, baseRect);
+        ShapeDraw.Rect(this, baseRect,
+            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f, WidthMode.Screen));
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+
+        // Башня — треугольник носом вперёд по оси. После сброса трансформа: координаты
+        // ноды, как у конуса прицеливания; поверх непрозрачного основания
         float nose = half * 0.95f;
         float back = half * 0.6f;
         var body = new[]
@@ -90,14 +100,6 @@ public partial class Turret : Building, IArmed
 
         ShapeDraw.Polygon(this, body,
             ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.45f), 2f, WidthMode.Screen));
-
-        // Основание стоит под углом постановки и вслед за башней не крутится — снимаем
-        // поворот ноды и ставим вместо него угол корпуса
-        DrawSetTransform(Vector2.Zero, BodyFacing - Rotation, Vector2.One);
-        ShapeDraw.Rect(this, new Rect2(-half, -half, Const.Unit, Const.Unit),
-            ShapeStyle.Filled(new Color(Definition.Color, 0.3f), new Color(0f, 0f, 0f, 0.35f), 2f,
-                WidthMode.Screen));
-        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
         HealthBar.Draw(this, Health, Const.Unit * 0.9f, -half - 10f, Rotation);
     }
