@@ -29,14 +29,20 @@ public enum WorldLayer
     Projectiles = 5,
 
     /// <summary>
+    /// Облака и их тень. Лежат поверх всего, что стоит и ходит по земле, поскольку тень
+    /// падает сверху, но под туманом войны и служебной графикой.
+    /// </summary>
+    Clouds = 6,
+
+    /// <summary>
     /// Туман войны. Лежит поверх мира, но под служебной графикой: приказы, призрак постройки
     /// и отладочные выкладки закрываться туманом не должны — они принадлежат не миру,
     /// а тому, кто на мир смотрит.
     /// </summary>
-    Fog = 6,
+    Fog = 7,
 
     /// <summary>Служебная графика поверх мира: призрак постройки, отрисовка приказов.</summary>
-    Effects = 7,
+    Effects = 8,
 }
 
 /// <summary>
@@ -56,6 +62,7 @@ public partial class Playground : Node2D
     [Export] public Node2D Structures;
     [Export] public Node2D Actors;
     [Export] public Node2D Projectiles;
+    [Export] public Node2D Clouds;
     [Export] public Node2D Fog;
     [Export] public Node2D Effects;
 
@@ -90,9 +97,10 @@ public partial class Playground : Node2D
         Structures ??= GetNodeOrNull<Node2D>(nameof(Structures));
         Actors ??= GetNodeOrNull<Node2D>(nameof(Actors));
         Projectiles ??= GetNodeOrNull<Node2D>(nameof(Projectiles));
+        Clouds ??= GetNodeOrNull<Node2D>(nameof(Clouds));
         Fog ??= GetNodeOrNull<Node2D>(nameof(Fog));
         Effects ??= GetNodeOrNull<Node2D>(nameof(Effects));
 
-        _layers = new[] { Terrain, Deposits, Shadows, Structures, Actors, Projectiles, Fog, Effects };
+        _layers = new[] { Terrain, Deposits, Shadows, Structures, Actors, Projectiles, Clouds, Fog, Effects };
     }
 }

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj": {}
+    "C:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj": {}
   },
   "projects": {
-    "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj": {
+    "C:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
+        "projectUniqueName": "C:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
         "projectName": "PapaTextureTool",
-        "projectPath": "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
-        "packagesPath": "C:\\Users\\user\\AppData\\Local\\Temp\\cursor-sandbox-cache\\8fea49c53b09cd94375bc9af3f6e08e0\\nuget",
-        "outputPath": "c:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\obj\\",
+        "projectPath": "C:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\PapaTextureTool.csproj",
+        "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
+        "outputPath": "C:\\workroot\\Разработка\\Программы\\csharp\\red-planet\\tools\\PapaTextureTool\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"

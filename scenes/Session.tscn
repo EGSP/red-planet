@@ -1,4 +1,4 @@
-[gd_scene load_steps=49 format=3 uid="uid://bqvvlwhycmvut"]
+[gd_scene load_steps=51 format=3 uid="uid://bqvvlwhycmvut"]
 
 [ext_resource type="Script" uid="uid://ngu44hvaylf5" path="res://scripts/core/Session.cs" id="1_session"]
 
@@ -7,6 +7,10 @@
 [ext_resource type="Script" uid="uid://ck2wua7snt8x7" path="res://scripts/world/Playground.cs" id="3_playground"]
 
 [ext_resource type="Script" uid="uid://cc1rudyjv07xp" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
+
+[ext_resource type="Script" path="res://scripts/world/CloudRenderer.cs" id="4_clouds"]
+
+[ext_resource type="Resource" path="res://resources/tuning/clouds.tres" id="4_cloudtuning"]
 
 [ext_resource type="Script" uid="uid://d2ynvft64bh21" path="res://scripts/world/surface/SurfaceRenderer.cs" id="4_surface"]
 
@@ -205,6 +209,7 @@ Shadows = NodePath("Shadows")
 Structures = NodePath("Structures")
 Actors = NodePath("Actors")
 Projectiles = NodePath("Projectiles")
+Clouds = NodePath("Clouds")
 Fog = NodePath("Fog")
 Effects = NodePath("Effects")
 
@@ -232,6 +237,12 @@ Settings = ExtResource("47_shadowsettings")
 [node name="Actors" type="Node2D" parent="Playground" unique_id=1387971349]
 
 [node name="Projectiles" type="Node2D" parent="Playground" unique_id=2038464301]
+
+[node name="Clouds" type="Node2D" parent="Playground"]
+
+[node name="Sky" type="Node2D" parent="Playground/Clouds"]
+script = ExtResource("4_clouds")
+Settings = ExtResource("4_cloudtuning")
 
 [node name="Fog" type="Node2D" parent="Playground" unique_id=1153521829]
 
