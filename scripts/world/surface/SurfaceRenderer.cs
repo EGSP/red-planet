@@ -72,16 +72,23 @@ public partial class SurfaceRenderer : Node2D
     private int _fieldsSignature;
     private int _planSignature;
 
-    public override void _Ready()
-    {
-        // Назначенное в сцене вещество берётся как есть: узел с атрибутом Tool иначе
-        // создавал бы новое при каждой загрузке, а редактор сохранял бы его в сцену
-        if (Material is ShaderMaterial assigned)
-            _material = assigned;
-        else
-            Material = _material = new ShaderMaterial();
+    public override void _Ready() => Attach();
 
-        _material.Shader ??= GD.Load<Shader>(ShaderPath);
+    /// <summary>
+    /// Снять вещество перед сохранением сцены и собрать заново после.
+    ///
+    /// ЗАЧЕМ ЭТО НУЖНО. Редактор сохраняет всё, что лежит в свойствах узла, а в веществе
+    /// поверхности лежат запечённые поля — две текстуры по мегабайту. Без этой развязки
+    /// они попадают в саму сцену встроенными ресурсами, и файл сцены разрастается до
+    /// десятка мегабайт, причём с устаревшими на момент сохранения данными. Поля считаются
+    /// из зерна за доли секунды, поэтому хранить их незачем.
+    /// </summary>
+    public override void _Notification(int what)
+    {
+        if (what == NotificationEditorPreSave)
+            Detach();
+        else if (what == NotificationEditorPostSave)
+            Attach();
     }
 
     public override void _Process(double delta)
@@ -94,7 +101,7 @@ public partial class SurfaceRenderer : Node2D
             return;
         }
 
-        _material ??= Material as ShaderMaterial;
+        Attach();
 
         var area = World.ArenaBounds;
         ulong seed = Seed != 0 ? Seed : World.Settings.Seed != 0 ? World.Settings.Seed : 1UL;
@@ -268,6 +275,35 @@ public partial class SurfaceRenderer : Node2D
         ClearDecals();
         Plan = null;
         _planSignature = 0;
+    }
+
+    // ── Вещество ──────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Завести вещество, если его нет. Оно создаётся всякий раз заново и в сцене не
+    /// хранится: сохранять там нечего, а вред от сохранения описан у
+    /// <see cref="_Notification"/>.
+    /// </summary>
+    private void Attach()
+    {
+        if (_material == null)
+        {
+            _material = Material as ShaderMaterial ?? new ShaderMaterial();
+            Material = _material;
+        }
+
+        _material.Shader ??= GD.Load<Shader>(ShaderPath);
+    }
+
+    /// <summary>Снять вещество и поля: после этого узлу нечего отдать сохранению сцены.</summary>
+    private void Detach()
+    {
+        Material = null;
+        _material = null;
+
+        Clear();
+        Fields = null;
+        _fieldsSignature = 0;
     }
 
     // ── Кнопки ────────────────────────────────────────────────────────────────────
