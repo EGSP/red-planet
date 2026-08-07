@@ -7,14 +7,14 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "lava · потоки · раскалённые трещины"
-Enabled = false
 Texture = ExtResource("2_tex")
 Layer = 4
 Noise = ExtResource("1_wr3bm")
-NoiseRange = Vector2(0.6, 1)
+NoiseRange = Vector2(0.5, 1)
 SpacingPx = 380.0
+Chance = 0.03
 Jitter = 0.85
-SizePx = 380.0
-SizeVariation = 0.3
+SizePx = 1024.0
+SizeVariation = 0.39
+Tint = Color(1, 0.83533335, 0.48000002, 1)
 TintVariation = 0.1
-Opacity = 0.95

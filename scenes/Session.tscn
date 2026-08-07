@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://rvo2ifgmct4" path="res://scripts/core/GameManager.cs" id="2_manager"]
 [ext_resource type="Script" uid="uid://ck2wua7snt8x7" path="res://scripts/world/Playground.cs" id="3_playground"]
 [ext_resource type="Script" uid="uid://0lfllbrf4q87" path="res://scripts/world/CloudRenderer.cs" id="4_clouds"]
-[ext_resource type="Resource" uid="uid://i1jom8qq3cjt" path="res://resources/tuning/clouds.tres" id="4_cloudtuning"]
+[ext_resource type="Resource" uid="uid://bcloudslava01rp" path="res://resources/surface/lava/clouds_lava.tres" id="4_cloudtuning"]
 [ext_resource type="Script" uid="uid://cc1rudyjv07xp" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
 [ext_resource type="Script" uid="uid://d2ynvft64bh21" path="res://scripts/world/surface/SurfaceRenderer.cs" id="4_surface"]
 [ext_resource type="Script" uid="uid://djhm5atkp2jws" path="res://scripts/units/CommandSystem.cs" id="5_command"]
@@ -162,6 +162,7 @@ script = ExtResource("3_playground")
 script = ExtResource("4_surface")
 Settings = ExtResource("33_5575j")
 Terrains = [ExtResource("33_5575j"), ExtResource("33_desert"), ExtResource("33_earth")]
+Clouds = NodePath("../../Clouds/Sky")
 
 [node name="Grid" type="Node2D" parent="Playground/Terrain" unique_id=1875590808]
 visible = false

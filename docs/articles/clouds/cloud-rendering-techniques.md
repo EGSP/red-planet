@@ -113,7 +113,10 @@
 
 Файлы: [`clouds.gdshader`](../../../resources/shaders/clouds.gdshader),
 [`CloudRenderer.cs`](../../../scripts/world/CloudRenderer.cs),
-[`CloudSettings.cs`](../../../scripts/world/CloudSettings.cs).
+[`CloudSettings.cs`](../../../scripts/world/CloudSettings.cs),
+[`CloudZoomFade.cs`](../../../scripts/world/CloudZoomFade.cs).
+Вид облаков задаётся через `SurfaceSettings.Clouds`; ответ на зум камеры — отдельным
+`CloudZoomFade`, на который ссылается `CloudSettings.ZoomFade`.
 
 Два слоя одной карты плотности, идущие с разной скоростью и под углом друг к другу; анизотропное сжатие
 координаты вдоль ветра; эрозия края вторым слоем с обратным растяжением остатка; порог по покрытию, за

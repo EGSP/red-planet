@@ -7,6 +7,8 @@
 [ext_resource type="Resource" uid="uid://dh1n5bvl33akh" path="res://resources/surface/lava/tiles/dark_rock.tres" id="6_tile_dark"]
 [ext_resource type="Resource" uid="uid://bc4ptg0thjwnc" path="res://resources/surface/lava/biomes/plains.tres" id="7_biome_plains"]
 [ext_resource type="Resource" uid="uid://cjy5jdob15tvo" path="res://resources/surface/lava/biomes/flows.tres" id="8_biome_flows"]
+[ext_resource type="Resource" uid="uid://crpqmk2i4it1r" path="res://resources/surface/lava/clouds_lava.tres" id="9_clouds"]
+[ext_resource type="Resource" path="res://resources/surface/noise/warp.tres" id="10_warp"]
 
 [resource]
 script = ExtResource("1_settings")
@@ -14,7 +16,11 @@ Id = "lava"
 BaseNoise = ExtResource("2_coarse")
 Tiles = [ExtResource("5_tile_crust"), ExtResource("6_tile_dark")]
 Ambient = Color(1, 0.94, 0.9, 1)
-TemperatureJitter = 0.1
-TemperatureJitterNoise = ExtResource("2_coarse")
+IsothermCurvature = 2.1
+IsothermWidth = 0.4
+IsothermOffset = 0.2
+TemperatureWarpNoise = ExtResource("10_warp")
+TemperatureNoise = ExtResource("2_coarse")
 HeightNoise = ExtResource("4_relief")
 Biomes = [ExtResource("7_biome_plains"), ExtResource("8_biome_flows")]
+Clouds = ExtResource("9_clouds")

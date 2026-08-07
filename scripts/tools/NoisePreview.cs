@@ -247,7 +247,6 @@ public partial class NoisePreview : Node2D
             BaseNoise = entry.Noise,
             Temperature = TemperatureSource.Noise,
             TemperatureNoise = entry.Noise,
-            TemperatureJitter = 0f,
             Biomes = new[]
             {
                 new SurfaceBiome

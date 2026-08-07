@@ -25,7 +25,14 @@ uniform vec2 rect_size = vec2(1.0, 1.0);
 // Поля, посчитанные при создании мира. Канал R, значение от нуля до единицы
 uniform sampler2D field_noise : filter_linear, repeat_disable;
 uniform sampler2D field_height : filter_linear, repeat_disable;
+uniform sampler2D field_temperature : filter_linear, repeat_disable;
 uniform bool use_height = false;
+
+// Оверлеи полей для подбора в инспекторе. Смешиваются поверх покрытия с общей альфой
+uniform bool show_noise = false;
+uniform bool show_temperature = false;
+uniform bool show_height = false;
+uniform float overlay_alpha = 0.55;
 
 uniform int tile_count = 0;
 uniform bool hex_tiling = true;
@@ -157,5 +164,28 @@ void fragment()
 	if (w3 > 0.001)
 		color += sample_tile(tile_3, world / tile_range_3.w) * tile_tint_3.rgb * w3;
 
-	COLOR = vec4(color / total * ambient.rgb, 1.0);
+	color = color / total * ambient.rgb;
+
+	// Оверлеи полей: под поверхностью остаётся читаемая местность
+	float a = clamp(overlay_alpha, 0.0, 1.0);
+
+	if (show_noise)
+		color = mix(color, vec3(noise), a);
+
+	if (show_temperature)
+	{
+		float temp = texture(field_temperature, UV).r;
+		// Синий (холодно) → красный (жарко)
+		vec3 ramp = mix(vec3(0.12, 0.28, 0.92), vec3(0.95, 0.18, 0.12), temp);
+		color = mix(color, ramp, a);
+	}
+
+	if (show_height && use_height)
+	{
+		// Зелёный (низ) → розовый (верх)
+		vec3 ramp = mix(vec3(0.12, 0.72, 0.28), vec3(0.95, 0.38, 0.68), level);
+		color = mix(color, ramp, a);
+	}
+
+	COLOR = vec4(color, 1.0);
 }

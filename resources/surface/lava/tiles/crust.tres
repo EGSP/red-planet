@@ -8,4 +8,4 @@ script = ExtResource("1_tile")
 Id = "lava · остывшая корка"
 Texture = ExtResource("2_tex")
 Range = Vector2(0, 0.45)
-Falloff = 0.35
+Falloff = 0.5

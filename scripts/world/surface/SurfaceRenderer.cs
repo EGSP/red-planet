@@ -58,6 +58,15 @@ public partial class SurfaceRenderer : Node2D
     /// </summary>
     [Export] public ulong Seed;
 
+    [ExportGroup("Облака")]
+
+    /// <summary>
+    /// Отрисовщик облаков. При смене <see cref="Settings"/> получает
+    /// <see cref="SurfaceSettings.Clouds"/>, если они заданы. На стенде предпросмотра
+    /// облаков ссылка не нужна: там настройки назначаются напрямую.
+    /// </summary>
+    [Export] public CloudRenderer Clouds;
+
     [ExportGroup("Показывать")]
 
     [Export] public bool ShowBase = true;
@@ -107,6 +116,7 @@ public partial class SurfaceRenderer : Node2D
     private void BeginParty()
     {
         PickTerrain();
+        ApplyClouds();
 
         // Ноль означает «ещё не задано»: иначе поверхность брала бы запасное зерно 1
         // из правила в _Process, и партии отличались бы только типом местности
@@ -149,6 +159,20 @@ public partial class SurfaceRenderer : Node2D
     }
 
     /// <summary>
+    /// Передать отрисовщику облаков вид из текущей местности. Пустые Clouds у местности
+    /// не затирают уже назначенные настройки: стенд предпросмотра и запасной ресурс в
+    /// сцене остаются в силе.
+    /// </summary>
+    private void ApplyClouds()
+    {
+        if (Clouds == null || Settings?.Clouds == null)
+            return;
+
+        if (Clouds.Settings != Settings.Clouds)
+            Clouds.Settings = Settings.Clouds;
+    }
+
+    /// <summary>
     /// Снять вещество перед сохранением сцены и собрать заново после.
     ///
     /// ЗАЧЕМ ЭТО НУЖНО. Редактор сохраняет всё, что лежит в свойствах узла, а в веществе
@@ -167,6 +191,8 @@ public partial class SurfaceRenderer : Node2D
 
     public override void _Process(double delta)
     {
+        ApplyClouds();
+
         Visible = Settings != null && (ShowBase || ShowDecals);
 
         if (!Visible)
@@ -257,7 +283,16 @@ public partial class SurfaceRenderer : Node2D
         _material.SetShaderParameter("rect_size", area.Size);
         _material.SetShaderParameter("field_noise", Fields?.BaseTexture);
         _material.SetShaderParameter("field_height", Fields?.HeightTexture);
+        _material.SetShaderParameter("field_temperature", Fields?.TemperatureTexture);
         _material.SetShaderParameter("use_height", Fields?.HasHeight ?? false);
+
+        // Оверлеи полей — только подбор в редакторе. В партии флаги из .tres не читаются:
+        // иначе случайно оставленная галка закрывала бы местность поверх боя.
+        bool editor = Engine.IsEditorHint();
+
+        _material.SetShaderParameter("show_noise", editor && Settings.ShowNoise);
+        _material.SetShaderParameter("show_temperature", editor && Settings.ShowTemperature);
+        _material.SetShaderParameter("show_height", editor && Settings.ShowHeight);
         _material.SetShaderParameter("hex_tiling", Settings.HexTiling);
         _material.SetShaderParameter("sharpness", Mathf.Max(Settings.Sharpness, 1f));
         _material.SetShaderParameter("ambient", Settings.Ambient);

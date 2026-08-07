@@ -10,6 +10,6 @@
 [resource]
 script = ExtResource("1_biome")
 Id = "lava · потоки"
-TemperatureRange = Vector2(0.42, 1)
+TemperatureRange = Vector2(0.6, 1)
 Falloff = 0.12
 Decals = [ExtResource("2_flow"), ExtResource("3_hot_cracks"), ExtResource("4_yellow_spots"), ExtResource("5_big_rocks"), ExtResource("6_craters")]

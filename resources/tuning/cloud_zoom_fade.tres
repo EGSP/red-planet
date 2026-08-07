@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CloudZoomFade" format=3 uid="uid://c0oomfade01rp"]
+
+[ext_resource type="Script" uid="uid://b8k2m4n6p0qrs" path="res://scripts/world/CloudZoomFade.cs" id="1_zoom"]
+
+[sub_resource type="Curve" id="Curve_body"]
+_data = [Vector2(0.83966243, 0), 0.0, 0.033341978, 0, 0, Vector2(1, 0.6516854), 0.15773349, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Curve" id="Curve_shade"]
+_data = [Vector2(0, 0.7234042), 0.0, 0.0, 0, 0, Vector2(0.19831222, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 1, 0]
+point_count = 3
+
+[resource]
+script = ExtResource("1_zoom")
+ZoomSqueeze = 0.0
+ShadeCurve = SubResource("Curve_shade")
+BodyCurve = SubResource("Curve_body")
+LerpFactor = 2.8

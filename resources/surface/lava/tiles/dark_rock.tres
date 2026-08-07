@@ -7,7 +7,7 @@
 script = ExtResource("1_tile")
 Id = "lava · тёмная порода"
 Texture = ExtResource("2_tex")
-SizePx = 1072.0
+SizePx = 544.0
 Range = Vector2(0.45, 1)
-Falloff = 0.365
-Tint = Color(0.9880634, 0.9284951, 0.91427004, 1)
+Falloff = 0.5
+Tint = Color(0.61, 0.57584, 0.5673, 1)
