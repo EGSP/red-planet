@@ -7,14 +7,15 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "desert · каменистая пустошь · камни крупные"
+Enabled = false
 Texture = ExtResource("2_tex")
 Layer = 6
 Noise = ExtResource("3_noise")
 NoiseRange = Vector2(0.6, 1)
 HeightRange = Vector2(0.45, 1)
-SpacingPx = 420.0
+Spacing = 0.0415
 Chance = 0.35
 Jitter = 0.9
-SizePx = 300.0
+Size = 0.0297
 SizeVariation = 0.35
 TintVariation = 0.12

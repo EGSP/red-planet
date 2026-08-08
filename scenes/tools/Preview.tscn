@@ -1,12 +1,12 @@
 [gd_scene format=3 uid="uid://cdrjiwky3sbh3"]
 
 [ext_resource type="Script" uid="uid://3kpl2w4knl1c" path="res://scripts/tools/SessionPreview.cs" id="1_preview"]
+[ext_resource type="Resource" uid="uid://ctvqauj7073p" path="res://resources/surface/earth/earth.tres" id="2_jjcxy"]
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="2_world"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="3_waves"]
+[ext_resource type="Resource" uid="uid://orhes64kd15v" path="res://resources/surface/earth/clouds_earth.tres" id="4_hiljl"]
 [ext_resource type="Script" uid="uid://d2ynvft64bh21" path="res://scripts/world/surface/SurfaceRenderer.cs" id="4_surface"]
-[ext_resource type="Resource" uid="uid://hbujh7enaj83" path="res://resources/surface/lava/lava.tres" id="5_cnxac"]
 [ext_resource type="Script" uid="uid://0lfllbrf4q87" path="res://scripts/world/CloudRenderer.cs" id="6_clouds"]
-[ext_resource type="Resource" uid="uid://crpqmk2i4it1r" path="res://resources/surface/lava/clouds_lava.tres" id="7_cloudtuning"]
 
 [node name="Preview" type="Node2D" unique_id=1691428143]
 
@@ -14,16 +14,18 @@
 position = Vector2(32, 32)
 zoom = Vector2(0.22, 0.22)
 
-[node name="Surface" type="Node2D" parent="." unique_id=1031185749]
+[node name="Surface" type="Node2D" parent="." unique_id=1031185749 node_paths=PackedStringArray("CloudRenderer")]
 script = ExtResource("4_surface")
-Settings = ExtResource("5_cnxac")
-Terrains = []
-Seed = 3467432715
+Terrain = ExtResource("2_jjcxy")
+TerrainChoices = []
+SurfaceSeed = 2398831357
+CloudRenderer = NodePath("../Clouds")
 
 [node name="Clouds" type="Node2D" parent="." unique_id=1031185750]
 script = ExtResource("6_clouds")
-Settings = ExtResource("7_cloudtuning")
-ShadeAmount = 0.0
+Settings = ExtResource("4_hiljl")
+ShadeAmount = 0.41
+BodyAmount = 0.0
 
 [node name="SessionPreview" type="Node2D" parent="." unique_id=485349297]
 script = ExtResource("1_preview")

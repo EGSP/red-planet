@@ -1,19 +1,20 @@
-[gd_resource type="Resource" script_class="SurfaceDecal" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://cpqx3h6qobpj6"]
 
 [ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
 [ext_resource type="Texture2D" uid="uid://dwaltlasfm2ml" path="res://assets/sprites/terrain/desert/desert_rock_decal_02_diffuse.png" id="2_tex"]
-[ext_resource type="Resource" path="res://resources/surface/noise/patches.tres" id="3_noise"]
+[ext_resource type="Resource" uid="uid://bjt0mmlb6iae" path="res://resources/surface/noise/patches.tres" id="3_noise"]
 
 [resource]
 script = ExtResource("1_decal")
 Id = "desert · каменистая пустошь · камни средние"
+Enabled = false
+Texture = ExtResource("2_tex")
 Layer = 5
+Noise = ExtResource("3_noise")
 NoiseRange = Vector2(0.4, 1)
-SpacingPx = 320.0
+Spacing = 0.0316
 Chance = 0.4
 Jitter = 0.95
-SizePx = 240.0
+Size = 0.0237
 SizeVariation = 0.4
 TintVariation = 0.14
-Texture = ExtResource("2_tex")
-Noise = ExtResource("3_noise")

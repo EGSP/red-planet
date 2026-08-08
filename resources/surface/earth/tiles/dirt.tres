@@ -1,12 +1,10 @@
-[gd_resource type="Resource" script_class="SurfaceTile" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="SurfaceTile" format=3 uid="uid://byaeeipicfd6r"]
 
+[ext_resource type="Texture2D" uid="uid://1oqd6qa21f2k" path="res://assets/sprites/terrain/earth/grass_tile_diffuse.png" id="1_sipg8"]
 [ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="1_tile"]
-[ext_resource type="Texture2D" uid="uid://cbos3u13rnro5" path="res://assets/sprites/terrain/earth/grass_dirt_02_diffuse.png" id="2_tex"]
 
 [resource]
 script = ExtResource("1_tile")
 Id = "earth · земля"
+Texture = ExtResource("1_sipg8")
 SizePx = 460.0
-Range = Vector2(0.38, 0.78)
-Falloff = 0.1
-Texture = ExtResource("2_tex")

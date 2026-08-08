@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://ip6aal51ey8k"]
+
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_pqvi0"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="1_tq264"]
+[ext_resource type="Texture2D" uid="uid://bgr557katrktu" path="res://assets/sprites/terrain/desert/desert_sand_decal_03_diffuse.png" id="2_gpgea"]
+
+[resource]
+script = ExtResource("1_pqvi0")
+Texture = ExtResource("2_gpgea")
+Noise = ExtResource("1_tq264")
+HeightRange = Vector2(0.6, 1)
+Spacing = 0.0182
+Size = 0.1085
+Tint = Color(0.47007585, 0.47007585, 0.47007585, 1)
+metadata/_custom_type_script = "uid://cr6m8cos3g6i5"

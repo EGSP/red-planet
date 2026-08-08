@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SurfaceDecal" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://c1t7ttubr8772"]
 
 [ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
 [ext_resource type="Texture2D" uid="uid://201btv1msjcy" path="res://assets/sprites/terrain/earth/grass_decal_01_diffuse.png" id="2_tex"]
@@ -7,14 +7,15 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "earth · луг · поросль"
-Layer = 1
-NoiseRange = Vector2(0, 0.55)
-SpacingPx = 380.0
-Chance = 0.6
-Jitter = 0.85
-SizePx = 400.0
-SizeVariation = 0.3
-TintVariation = 0.1
-Opacity = 0.85
+Enabled = false
 Texture = ExtResource("2_tex")
+Layer = 1
 Noise = ExtResource("3_noise")
+NoiseRange = Vector2(0, 0.55)
+Spacing = 0.1745
+Chance = 1.0
+Jitter = 0.85
+Size = 0.1543
+SizeVariation = 0.3
+Tint = Color(1, 1, 1, 0.85)
+TintVariation = 0.0

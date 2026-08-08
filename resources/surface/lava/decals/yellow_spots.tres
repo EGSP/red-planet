@@ -7,15 +7,14 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "lava · потоки · жёлтые налёты"
-Enabled = false
 Texture = ExtResource("2_tex")
 Layer = 5
 Noise = ExtResource("1_t2b2f")
 NoiseRange = Vector2(0.5, 1)
-SpacingPx = 1080.0
+Spacing = 0.1068
 Chance = 0.35
 Jitter = 0.9
-SizePx = 240.0
+Size = 0.0237
 SizeVariation = 0.55
+Tint = Color(1, 1, 1, 0.85)
 TintVariation = 0.14
-Opacity = 0.85

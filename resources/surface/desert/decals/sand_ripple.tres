@@ -1,19 +1,19 @@
-[gd_resource type="Resource" script_class="SurfaceDecal" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://cao0428aknnpi"]
 
 [ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
-[ext_resource type="Texture2D" uid="uid://evbnlt2ee3ys" path="res://assets/sprites/terrain/desert/desert_sand_decal_02_diffuse.png" id="2_tex"]
-[ext_resource type="Resource" path="res://resources/surface/noise/patches.tres" id="3_noise"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="1_ojgmu"]
+[ext_resource type="Texture2D" uid="uid://e78l8xerr73l" path="res://assets/sprites/terrain/lava/lava_decal_01_diffuse.png" id="2_ojgmu"]
 
 [resource]
 script = ExtResource("1_decal")
 Id = "desert · пески · рябь"
+Texture = ExtResource("2_ojgmu")
 Layer = 2
-NoiseRange = Vector2(0.3, 1)
-SpacingPx = 360.0
+Noise = ExtResource("1_ojgmu")
+TemperatureRange = Vector2(0.75, 1)
+Spacing = 0.031
+Chance = 0.36
 Jitter = 0.9
-SizePx = 380.0
+Size = 0.1707
 SizeVariation = 0.35
-TintVariation = 0.1
-Opacity = 0.8
-Texture = ExtResource("2_tex")
-Noise = ExtResource("3_noise")
+Tint = Color(1.3807716, 1.3807716, 1.3807716, 1)

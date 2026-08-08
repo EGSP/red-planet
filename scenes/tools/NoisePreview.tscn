@@ -1,18 +1,14 @@
 [gd_scene format=3 uid="uid://cq7aeoo46d1d8"]
 
 [ext_resource type="Script" uid="uid://cxm4fpv3vl1xh" path="res://scripts/tools/NoisePreview.cs" id="1_preview"]
-[ext_resource type="Resource" uid="uid://cghcim1dmnk51" path="res://resources/surface/lava/decals/plains_plates.tres" id="2_axymr"]
 [ext_resource type="Script" uid="uid://dsl6aruwr75ft" path="res://scripts/tools/NoisePreviewEntry.cs" id="2_entry"]
+[ext_resource type="Resource" uid="uid://bfr8cr7pg3aky" path="res://resources/surface/noise/relief.tres" id="2_f73uq"]
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="3_world"]
-[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="4_coarse"]
-[ext_resource type="Resource" uid="uid://bv6nstucsxvfk" path="res://resources/surface/lava/tiles/crust.tres" id="4_dy7dk"]
 
 [sub_resource type="Resource" id="Entry_coarse"]
 script = ExtResource("2_entry")
 Id = "coarse — деление базового слоя"
-Noise = ExtResource("4_coarse")
-Tile = ExtResource("4_dy7dk")
-Decal = ExtResource("2_axymr")
+Noise = ExtResource("2_f73uq")
 
 [node name="NoisePreview" type="Node2D" unique_id=695032000]
 

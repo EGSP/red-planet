@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="SurfaceTile" format=3 uid="uid://d2igjpphsn8d5"]
+
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="1_8brxb"]
+[ext_resource type="Texture2D" uid="uid://d0o5hv5upa8rs" path="res://assets/sprites/terrain/lava/lava_tile_diffuse.png" id="1_ajwav"]
+
+[resource]
+script = ExtResource("1_8brxb")
+Texture = ExtResource("1_ajwav")
+HeightRange = Vector2(0.5, 1)
+Tint = Color(1.718, 1.189994, 0.93843573, 1)
+metadata/_custom_type_script = "uid://da4qmnvh573ri"

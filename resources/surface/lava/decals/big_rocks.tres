@@ -7,13 +7,14 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "lava · потоки · крупные камни"
+Enabled = false
 Texture = ExtResource("2_tex")
 Layer = 6
 Noise = ExtResource("1_3cwwr")
 NoiseRange = Vector2(0.6, 1)
-SpacingPx = 340.0
+Spacing = 0.0336
 Chance = 0.3
 Jitter = 0.9
-SizePx = 270.0
+Size = 0.0267
 SizeVariation = 0.35
 TintVariation = 0.12

@@ -7,13 +7,12 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "lava · равнина · россыпь камней"
-Enabled = false
 Texture = ExtResource("2_tex")
 Layer = 3
 Noise = ExtResource("3_noise")
 NoiseRange = Vector2(0.4, 1)
-SpacingPx = 220.0
+Spacing = 0.0218
 Jitter = 0.9
-SizePx = 200.0
+Size = 0.0198
 SizeVariation = 0.4
 TintVariation = 0.15

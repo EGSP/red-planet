@@ -1,14 +1,23 @@
-// Базовый слой поверхности: несколько тайлящихся покрытий, поделивших между собой одно
-// поле шума.
+// Базовый слой поверхности: несколько тайлящихся покрытий из биомов, поделивших между
+// собой одно поле шума и отобранных ещё по температуре и высоте.
 //
 // ПОЧЕМУ ПОКРЫТИЙ РОВНО ЧЕТЫРЕ. Выбрать текстуру по вычисляемому номеру в языке шейдеров
 // нельзя, поэтому покрытия разбираются развёрнутым кодом. Четырёх достаточно: при большем
 // числе переходы становятся неразличимы, а стоимость выборок растёт линейно.
 //
-// ПОЧЕМУ ВЕСА ВОЗВОДЯТСЯ В СТЕПЕНЬ. Прямое смешивание по весам даёт широкую полосу, где
-// смешаны все покрытия сразу, и поверхность выглядит размытой. Возведение в степень с
-// последующей перенормировкой оставляет почти везде одно господствующее покрытие и сужает
-// переход. Тот же приём применён к весам гексагональной укладки.
+// ПОКРЫТИЯ НАКЛАДЫВАЮТСЯ ПО ПОРЯДКУ, А НЕ УСРЕДНЯЮТСЯ ПО ВЕСАМ. Прежде каждое покрытие
+// давало вес, веса возводились в степень и перенормировались, а цвет был их средним. У
+// такого правила два неустранимых недостатка. Во-первых, принадлежность отрезку доходила
+// до единицы и там останавливалась, поэтому внутри пересечения двух отрезков веса были
+// равны и цвет застывал ровной смесью в половину каждого; переход выглядел то размытым
+// пятном, то отрезанным по линии, и настройками это не правилось. Во-вторых, само правило
+// симметрично: выразить «щебень поверх песка» было нечем, и художнику приходилось разводить
+// отрезки, вместо того чтобы указать порядок.
+//
+// Теперь первое покрытие кроет область целиком и служит подложкой, а каждое следующее
+// накладывается поверх уже собранного цвета с собственной степенью покрытия. Порядок списка
+// и есть порядок наложения, пустого места не остаётся ни при каких отрезках, а ширина всех
+// переходов задана одним числом местности (smoothness).
 //
 // ГЕКСАГОНАЛЬНАЯ УКЛАДКА разрушает видимый повтор тайла: пространство разбито на решётку
 // равносторонних треугольников, точка получает три ближайших узла, текстура читается
@@ -36,7 +45,9 @@ uniform float overlay_alpha = 0.55;
 
 uniform int tile_count = 0;
 uniform bool hex_tiling = true;
-uniform float sharpness = 4.0;
+
+// Ширина перехода в долях шкалы поля: одно число на все отрезки всех покрытий и биомов
+uniform float smoothness = 0.06;
 uniform vec4 ambient : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 
 uniform sampler2D tile_0 : source_color, filter_linear_mipmap, repeat_enable;
@@ -44,17 +55,29 @@ uniform sampler2D tile_1 : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D tile_2 : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D tile_3 : source_color, filter_linear_mipmap, repeat_enable;
 
-// x — начало отрезка шума, y — конец, z — ширина перехода, w — сторона тайла в пикселях
-uniform vec4 tile_range_0 = vec4(0.0, 1.0, 0.08, 512.0);
-uniform vec4 tile_range_1 = vec4(0.0, 0.0, 0.08, 512.0);
-uniform vec4 tile_range_2 = vec4(0.0, 0.0, 0.08, 512.0);
-uniform vec4 tile_range_3 = vec4(0.0, 0.0, 0.08, 512.0);
+// x — начало отрезка шума, y — конец, z — сторона тайла в пикселях
+uniform vec4 tile_range_0 = vec4(0.0, 1.0, 512.0, 0.0);
+uniform vec4 tile_range_1 = vec4(0.0, 0.0, 512.0, 0.0);
+uniform vec4 tile_range_2 = vec4(0.0, 0.0, 512.0, 0.0);
+uniform vec4 tile_range_3 = vec4(0.0, 0.0, 512.0, 0.0);
 
 // x — начало отрезка высот, y — конец. Действует только при use_height
 uniform vec4 tile_height_0 = vec4(0.0, 1.0, 0.0, 0.0);
 uniform vec4 tile_height_1 = vec4(0.0, 1.0, 0.0, 0.0);
 uniform vec4 tile_height_2 = vec4(0.0, 1.0, 0.0, 0.0);
 uniform vec4 tile_height_3 = vec4(0.0, 1.0, 0.0, 0.0);
+
+// x — начало отрезка температуры покрытия, y — конец
+uniform vec4 tile_temp_0 = vec4(0.0, 1.0, 0.0, 0.0);
+uniform vec4 tile_temp_1 = vec4(0.0, 1.0, 0.0, 0.0);
+uniform vec4 tile_temp_2 = vec4(0.0, 1.0, 0.0, 0.0);
+uniform vec4 tile_temp_3 = vec4(0.0, 1.0, 0.0, 0.0);
+
+// x — начало отрезка температуры биома, которому принадлежит покрытие, y — конец
+uniform vec4 tile_biome_0 = vec4(0.0, 1.0, 0.0, 0.0);
+uniform vec4 tile_biome_1 = vec4(0.0, 1.0, 0.0, 0.0);
+uniform vec4 tile_biome_2 = vec4(0.0, 1.0, 0.0, 0.0);
+uniform vec4 tile_biome_3 = vec4(0.0, 1.0, 0.0, 0.0);
 
 uniform vec4 tile_tint_0 : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform vec4 tile_tint_1 : source_color = vec4(1.0, 1.0, 1.0, 1.0);
@@ -106,27 +129,36 @@ vec3 sample_tile(sampler2D tex, vec2 uv)
 		+ textureGrad(tex, uv + hash22(n3), dx, dy).rgb * w.z;
 }
 
-// Принадлежность отрезку с размытыми краями
-float band(float value, vec2 range, float falloff)
+// Принадлежность отрезку. Переход положен посередине объявленной границы и растянут на
+// smoothness в обе стороны, поэтому на самой границе покрытие проявлено ровно наполовину,
+// а объявленный отрезок не съезжает при изменении ширины перехода.
+//
+// ГРАНИЦА, СОВПАДАЮЩАЯ С КРАЕМ ШКАЛЫ, ОГРАНИЧЕНИЕМ НЕ СЧИТАЕТСЯ. Отрезок во всю ширину
+// означает отсутствие условия; будь край шкалы обыкновенной границей, покрытие затухало бы
+// у нуля и единицы, где ему затухать не от чего.
+float band(float value, vec2 range)
 {
 	float low = min(range.x, range.y);
 	float high = max(range.x, range.y);
-	float outside = max(low - value, value - high);
+	float s = max(smoothness, 0.0001);
 
-	if (falloff <= 0.0)
-		return outside <= 0.0 ? 1.0 : 0.0;
+	float from = low > 0.0 ? smoothstep(low - s, low + s, value) : 1.0;
+	float to = high < 1.0 ? 1.0 - smoothstep(high - s, high + s, value) : 1.0;
 
-	return 1.0 - smoothstep(0.0, falloff, outside);
+	return from * to;
 }
 
-float tile_weight(vec4 range, vec4 height, float noise, float level)
+// Степень покрытия пикселя одним тайлом: произведение принадлежностей всем его условиям.
+// Отрезок биома здесь такое же условие, как собственные отрезки покрытия, и смягчается тем
+// же smoothness: граница биома в базовом слое ничем не отличается от прочих границ.
+float tile_cover(vec4 range, vec4 height, vec4 tile_temp, vec4 biome, float noise, float level, float temp)
 {
-	float w = band(noise, range.xy, range.z);
+	float a = band(noise, range.xy) * band(temp, biome.xy) * band(temp, tile_temp.xy);
 
 	if (use_height)
-		w *= band(level, height.xy, 0.05);
+		a *= band(level, height.xy);
 
-	return pow(w, sharpness);
+	return a;
 }
 
 void fragment()
@@ -134,37 +166,42 @@ void fragment()
 	vec2 world = rect_origin + UV * rect_size;
 	float noise = texture(field_noise, UV).r;
 	float level = use_height ? texture(field_height, UV).r : 0.5;
+	float temp = texture(field_temperature, UV).r;
 
-	float w0 = tile_weight(tile_range_0, tile_height_0, noise, level);
-	float w1 = tile_count > 1 ? tile_weight(tile_range_1, tile_height_1, noise, level) : 0.0;
-	float w2 = tile_count > 2 ? tile_weight(tile_range_2, tile_height_2, noise, level) : 0.0;
-	float w3 = tile_count > 3 ? tile_weight(tile_range_3, tile_height_3, noise, level) : 0.0;
+	// Первое покрытие кроет область целиком: собственные отрезки на него не действуют,
+	// поскольку под ним ничего нет и проявляться ему не на чем. Отсюда невозможность
+	// пустого места при любых настройках прочих покрытий — прежняя проверка суммы весов
+	// и вызванная ею чёрная полоса не имеют теперь причины возникнуть.
+	vec3 color = sample_tile(tile_0, world / tile_range_0.z) * tile_tint_0.rgb;
 
-	float total = w0 + w1 + w2 + w3;
-
-	// Пустого места на поверхности быть не должно: там, где не проявилось ни одно
-	// покрытие, берётся первое из списка
-	if (total < 0.0001)
+	// Порог отсекает выборки, вклад которых меньше половины деления восьмибитного цвета.
+	// Он безопасен именно потому, что подложка уже собрана: пропуск верхнего покрытия
+	// оставляет видимым нижнее, а не пустоту.
+	if (tile_count > 1)
 	{
-		w0 = 1.0;
-		total = 1.0;
+		float a = tile_cover(tile_range_1, tile_height_1, tile_temp_1, tile_biome_1, noise, level, temp);
+
+		if (a > 0.002)
+			color = mix(color, sample_tile(tile_1, world / tile_range_1.z) * tile_tint_1.rgb, a);
 	}
 
-	vec3 color = vec3(0.0);
+	if (tile_count > 2)
+	{
+		float a = tile_cover(tile_range_2, tile_height_2, tile_temp_2, tile_biome_2, noise, level, temp);
 
-	if (w0 > 0.001)
-		color += sample_tile(tile_0, world / tile_range_0.w) * tile_tint_0.rgb * w0;
+		if (a > 0.002)
+			color = mix(color, sample_tile(tile_2, world / tile_range_2.z) * tile_tint_2.rgb, a);
+	}
 
-	if (w1 > 0.001)
-		color += sample_tile(tile_1, world / tile_range_1.w) * tile_tint_1.rgb * w1;
+	if (tile_count > 3)
+	{
+		float a = tile_cover(tile_range_3, tile_height_3, tile_temp_3, tile_biome_3, noise, level, temp);
 
-	if (w2 > 0.001)
-		color += sample_tile(tile_2, world / tile_range_2.w) * tile_tint_2.rgb * w2;
+		if (a > 0.002)
+			color = mix(color, sample_tile(tile_3, world / tile_range_3.z) * tile_tint_3.rgb, a);
+	}
 
-	if (w3 > 0.001)
-		color += sample_tile(tile_3, world / tile_range_3.w) * tile_tint_3.rgb * w3;
-
-	color = color / total * ambient.rgb;
+	color *= ambient.rgb;
 
 	// Оверлеи полей: под поверхностью остаётся читаемая местность
 	float a = clamp(overlay_alpha, 0.0, 1.0);
@@ -174,7 +211,6 @@ void fragment()
 
 	if (show_temperature)
 	{
-		float temp = texture(field_temperature, UV).r;
 		// Синий (холодно) → красный (жарко)
 		vec3 ramp = mix(vec3(0.12, 0.28, 0.92), vec3(0.95, 0.18, 0.12), temp);
 		color = mix(color, ramp, a);

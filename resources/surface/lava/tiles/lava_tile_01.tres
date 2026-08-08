@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="SurfaceTile" format=3 uid="uid://bv6nstucsxvfk"]
+
+[ext_resource type="Texture2D" uid="uid://d0o5hv5upa8rs" path="res://assets/sprites/terrain/lava/lava_tile_diffuse.png" id="1_rfeh3"]
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="2_chatf"]
+
+[resource]
+script = ExtResource("2_chatf")
+Id = "lava · остывшая корка"
+Texture = ExtResource("1_rfeh3")
+HeightRange = Vector2(0, 0.6)

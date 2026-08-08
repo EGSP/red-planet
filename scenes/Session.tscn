@@ -160,9 +160,9 @@ script = ExtResource("3_playground")
 
 [node name="Surface" type="Node2D" parent="Playground/Terrain" unique_id=304019416]
 script = ExtResource("4_surface")
-Settings = ExtResource("33_5575j")
-Terrains = [ExtResource("33_5575j"), ExtResource("33_desert"), ExtResource("33_earth")]
-Clouds = NodePath("../../Clouds/Sky")
+Terrain = ExtResource("33_5575j")
+TerrainChoices = [ExtResource("33_5575j"), ExtResource("33_desert"), ExtResource("33_earth")]
+CloudRenderer = NodePath("../../Clouds/Sky")
 
 [node name="Grid" type="Node2D" parent="Playground/Terrain" unique_id=1875590808]
 visible = false

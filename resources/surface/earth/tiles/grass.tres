@@ -7,6 +7,5 @@
 script = ExtResource("1_tile")
 Id = "earth · трава"
 SizePx = 520.0
-Range = Vector2(0, 0.45)
-Falloff = 0.1
+Range = Vector2(0, 0.55)
 Texture = ExtResource("2_tex")

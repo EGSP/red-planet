@@ -43,8 +43,13 @@ public sealed class SurfacePlan
 ///
 /// ПОЧЕМУ РЕШЁТКА КАНДИДАТОВ, А НЕ СВОБОДНЫЙ РАЗБРОС. Точки, набранные подряд случайным
 /// образом, слипаются: расстояние между соседями ничем не ограничено. Решётка с шагом
-/// <see cref="SurfaceDecal.SpacingPx"/> и смещением внутри клетки даёт нижнюю границу
+/// <see cref="SurfaceDecal.Spacing"/> и смещением внутри клетки даёт нижнюю границу
 /// расстояния даром, а вид при достаточном смещении неотличим от свободного разброса.
+///
+/// РАЗМЕРЫ ПРИВОДЯТСЯ К ПИКСЕЛЯМ ЗДЕСЬ, А НЕ ХРАНЯТСЯ В НИХ. Шаг решётки и сторона
+/// отпечатка заданы долей большей стороны области и умножаются на неё при раскладке.
+/// Отсюда число клеток решётки от размера арены не зависит, и раскладка одной и той же
+/// местности на разных настройках мира отличается только масштабом.
 ///
 /// ПОЧЕМУ ОТДЕЛЬНЫЙ ПОТОК СЛУЧАЙНОСТИ НА КАЖДУЮ КЛЕТКУ. Клетка получает числа из своего
 /// зерна, выведенного из зерна партии, номера декали и координат клетки. Отсюда два
@@ -57,6 +62,16 @@ public sealed class SurfacePlan
 /// Случайность же размещения принадлежит самой декали, иначе все декали встали бы на одни
 /// и те же места. Отсюда разделение: номер подмешан в поток чисел клетки и не подмешан в
 /// зерно поля.
+///
+/// УСЛОВИЯ РАЗМЕЩЕНИЯ ПРОВЕРЯЮТСЯ ОДНИМ ПРАВИЛОМ, А НЕ ПОРОГОМ ДЛЯ ОДНИХ И РАЗМЫТИЕМ ДЛЯ
+/// ДРУГИХ. Отрезки шума, температуры и высоты, а также отрезок температуры биома дают доли
+/// от нуля до единицы (<see cref="SurfaceSettings.Band"/>), их произведение и есть доля
+/// принимаемых кандидатов в этой точке. Прежде плавной была только принадлежность биому, а
+/// шум, температура декали и высота проверялись строгим вхождением в отрезок, отчего
+/// граница по любому из этих полей выходила отрезанной по линии, хотя по температуре биома
+/// в том же месте была рваной. Общее правило снимает расхождение и заодно совпадает с тем,
+/// по которому шейдер накладывает покрытия базового слоя: отпечатки ложатся по тем же
+/// границам, что и цвет под ними.
 ///
 /// РАСКЛАДКА НЕ СОХРАНЯЕТСЯ. При воспроизведении партии из журнала она восстанавливается
 /// из того же зерна, поэтому в документах ей места нет.
@@ -92,7 +107,7 @@ public static class SurfaceLayout
 
                 var group = new SurfaceGroup { Decal = decal };
 
-                Scatter(group, biome, decal, fields, bounds, (ulong)index);
+                Scatter(group, biome, decal, fields, bounds, (ulong)index, settings.Smoothness);
 
                 if (group.Items.Count == 0)
                     continue;
@@ -112,9 +127,14 @@ public static class SurfaceLayout
         SurfaceDecal decal,
         SurfaceFields fields,
         Rect2 bounds,
-        ulong salt)
+        ulong salt,
+        float smoothness)
     {
-        float step = Mathf.Max(decal.SpacingPx, 16f);
+        // Доли отнесены к большей стороне области, как и величины температуры у местности:
+        // на неквадратной области отпечатки иначе вытянулись бы вслед за её пропорциями
+        float side = Mathf.Max(bounds.Size.X, bounds.Size.Y);
+
+        float step = Mathf.Max(decal.Spacing * side, 16f);
         int cols = Mathf.CeilToInt(bounds.Size.X / step);
         int rows = Mathf.CeilToInt(bounds.Size.Y / step);
 
@@ -155,44 +175,39 @@ public static class SurfaceLayout
                 if (!bounds.HasPoint(position))
                     continue;
 
-                float temperature = fields.TemperatureAt(position);
+                // Все условия сводятся в одну долю: у каждой границы отпечаток появляется
+                // тем реже, чем ближе к ней, отчего рваным получается не только стык двух
+                // биомов, но и край по шуму, температуре и высоте
+                float cover = Cover(biome, decal, noise, fields, position, smoothness);
 
-                // Принадлежность биому проверяется вероятностью, а не порогом: у самой
-                // границы отпечаток появляется реже, отчего стык двух биомов получается
-                // рваным, а не отрезанным по линии
-                float belongs = Band(temperature, biome.TemperatureRange, biome.Falloff);
-
-                if (belongs <= 0f)
+                if (cover <= 0f)
                     continue;
 
                 float bite = random.Next();
 
-                if (!Inside(temperature, decal.TemperatureRange))
-                    continue;
-
-                if (noise != null &&
-                    !Inside(decal.Noise.Sample(noise, position), decal.NoiseRange))
-                    continue;
-
-                if (fields.HasHeight && !Inside(fields.HeightAt(position), decal.HeightRange))
-                    continue;
-
-                bool accepted = roll <= decal.Chance && bite <= belongs;
+                bool accepted = roll <= decal.Chance && bite <= cover;
 
                 if (!accepted && !keepReserve)
                     continue;
 
-                float size = decal.SizePx *
+                float size = decal.Size * side *
                     (1f + (random.Next() * 2f - 1f) * decal.SizeVariation);
 
-                float rotation = decal.RandomRotation ? random.Next() * Mathf.Tau : 0f;
+                // Число берётся всегда, а применяется по флагу. Обращение к потоку под
+                // условием сдвигало бы всю дальнейшую последовательность клетки, поэтому
+                // снятие галки меняло не только поворот, но и разброс яркости у каждого
+                // отпечатка — правка одной настройки отзывалась в другой
+                float turn = random.Next();
+                float rotation = decal.RandomRotation ? turn * Mathf.Tau : 0f;
 
+                // Разброс яркости трогает только цвет: примешанный к альфе, он менял бы
+                // плотность наложения отпечатков друг на друга
                 float shade = 1f + (random.Next() * 2f - 1f) * decal.TintVariation;
                 var tint = new Color(
                     decal.Tint.R * shade,
                     decal.Tint.G * shade,
                     decal.Tint.B * shade,
-                    decal.Tint.A * decal.Opacity);
+                    decal.Tint.A);
 
                 var item = new DecalPlacement(position, rotation, Mathf.Max(size, 1f), tint);
                 var candidate = new Candidate(item, Stream.Key(fields.Seed, salt, cx, cy));
@@ -258,24 +273,39 @@ public static class SurfaceLayout
     /// </summary>
     private static bool Limited(SurfaceDecal decal) => decal.CountMin != decal.CountMax;
 
-    /// <summary>Лежит ли значение в отрезке. Отрезок задан вектором: X — начало, Y — конец.</summary>
-    private static bool Inside(float value, Vector2 range) =>
-        value >= Mathf.Min(range.X, range.Y) && value <= Mathf.Max(range.X, range.Y);
-
     /// <summary>
-    /// Принадлежность отрезку с размытыми краями: единица внутри, ноль дальше
-    /// <paramref name="falloff"/> от края, плавный переход между ними.
+    /// Доля кандидатов, принимаемых в этой точке: произведение принадлежностей всем
+    /// условиям размещения. Правило то же, каким шейдер считает степень покрытия пикселя
+    /// тайлом, поэтому граница отпечатков совпадает с границей покрытий под ними.
+    ///
+    /// ПОЛЕ ВЫСОТ ПРОВЕРЯЕТСЯ, ТОЛЬКО ЕСЛИ ОНО ЗАДАНО. Без него отрезок высоты декали
+    /// условием не является вовсе, а не считается нарушенным.
     /// </summary>
-    private static float Band(float value, Vector2 range, float falloff)
+    private static float Cover(
+        SurfaceBiome biome,
+        SurfaceDecal decal,
+        FastNoiseLite noise,
+        SurfaceFields fields,
+        Vector2 position,
+        float smoothness)
     {
-        float low = Mathf.Min(range.X, range.Y);
-        float high = Mathf.Max(range.X, range.Y);
+        float temperature = fields.TemperatureAt(position);
 
-        if (falloff <= 0f)
-            return value >= low && value <= high ? 1f : 0f;
+        float cover = SurfaceSettings.Band(temperature, biome.TemperatureRange, smoothness)
+            * SurfaceSettings.Band(temperature, decal.TemperatureRange, smoothness);
 
-        float outside = Mathf.Max(low - value, value - high);
-        return Mathf.Clamp(1f - outside / falloff, 0f, 1f);
+        if (cover <= 0f)
+            return 0f;
+
+        if (noise != null)
+            cover *= SurfaceSettings.Band(
+                decal.Noise.Sample(noise, position), decal.NoiseRange, smoothness);
+
+        if (fields.HasHeight)
+            cover *= SurfaceSettings.Band(
+                fields.HeightAt(position), decal.HeightRange, smoothness);
+
+        return cover;
     }
 
     /// <summary>
@@ -287,7 +317,9 @@ public static class SurfaceLayout
         if (settings == null || fields == null)
             return 0;
 
-        int hash = fields.Signature;
+        // Ширина перехода участвует в отборе кандидатов, поэтому её правка обязана
+        // пересобрать раскладку так же, как правка любого отрезка
+        int hash = HashCode.Combine(fields.Signature, settings.Smoothness);
 
         if (settings.Biomes == null)
             return hash;
@@ -297,7 +329,7 @@ public static class SurfaceLayout
             if (biome == null)
                 continue;
 
-            hash = HashCode.Combine(hash, biome.Enabled, biome.TemperatureRange, biome.Falloff);
+            hash = HashCode.Combine(hash, biome.Enabled, biome.TemperatureRange);
 
             if (biome.Decals == null)
                 continue;
@@ -309,12 +341,12 @@ public static class SurfaceLayout
 
                 hash = HashCode.Combine(hash,
                     decal.Texture?.GetInstanceId() ?? 0UL,
-                    HashCode.Combine(decal.Layer, decal.SpacingPx, decal.Chance, decal.Jitter,
+                    HashCode.Combine(decal.Layer, decal.Spacing, decal.Chance, decal.Jitter,
                         decal.CountMin, decal.CountMax),
-                    HashCode.Combine(decal.Enabled, decal.SizePx, decal.SizeVariation,
+                    HashCode.Combine(decal.Enabled, decal.Size, decal.SizeVariation,
                         decal.RandomRotation),
                     HashCode.Combine(decal.NoiseRange, decal.TemperatureRange, decal.HeightRange),
-                    HashCode.Combine(decal.Tint, decal.TintVariation, decal.Opacity),
+                    HashCode.Combine(decal.Tint, decal.TintVariation),
                     SurfaceFields.SignatureOf(decal.Noise));
             }
         }

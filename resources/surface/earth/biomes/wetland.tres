@@ -1,12 +1,11 @@
-[gd_resource type="Resource" script_class="SurfaceBiome" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="SurfaceBiome" format=3 uid="uid://1m8lc5kkrk7x"]
 
 [ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
-[ext_resource type="Resource" path="res://resources/surface/earth/decals/wetland_seep.tres" id="2_wetland_seep"]
-[ext_resource type="Resource" path="res://resources/surface/earth/decals/wetland_puddles.tres" id="3_wetland_puddles"]
+[ext_resource type="Resource" uid="uid://bntvvhvh0n4jl" path="res://resources/surface/earth/decals/wetland_seep.tres" id="3_wetland_seep"]
+[ext_resource type="Resource" uid="uid://capr7g6qb63dt" path="res://resources/surface/earth/decals/wetland_puddles.tres" id="4_wetland_puddles"]
 
 [resource]
 script = ExtResource("1_biome")
 Id = "earth · низина"
 TemperatureRange = Vector2(0.5, 1)
-Falloff = 0.12
-Decals = [ExtResource("2_wetland_seep"), ExtResource("3_wetland_puddles")]
+Decals = [ExtResource("3_wetland_seep"), ExtResource("4_wetland_puddles")]

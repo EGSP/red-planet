@@ -23,9 +23,9 @@ using Godot;
 /// Накопительные следы боя, число которых ничем не ограничено, — другое дело, и для них
 /// буфер оправдан.
 ///
-/// РАБОТАЕТ В РЕДАКТОРЕ. Узел помечен атрибутом Tool, зерно берёт из собственного поля либо
-/// из настроек мира, и сессии для работы не требует. Отсюда предпросмотр местности тем же
-/// узлом, что рисует её в партии.
+/// РАБОТАЕТ В РЕДАКТОРЕ. Узел помечен атрибутом Tool, зерно берёт из
+/// <see cref="SurfaceSeed"/> либо из настроек мира, и сессии для работы не требует.
+/// Отсюда предпросмотр местности тем же узлом, что рисует её в партии.
 /// </summary>
 [Tool]
 public partial class SurfaceRenderer : Node2D
@@ -41,36 +41,42 @@ public partial class SurfaceRenderer : Node2D
 
     [ExportGroup("Местность")]
 
-    /// <summary>Описание местности. Не назначено — поверхность не рисуется вовсе.</summary>
-    [Export] public SurfaceSettings Settings;
+    /// <summary>
+    /// Текущее описание местности (<see cref="SurfaceSettings"/>). Не назначено —
+    /// поверхность не рисуется вовсе.
+    /// </summary>
+    [Export] public SurfaceSettings Terrain;
 
     /// <summary>
-    /// Кандидаты на случайный выбор при старте партии. Пусто — остаётся
-    /// <see cref="Settings"/>. В редакторе не выбирается: иначе предпросмотр и сцена
+    /// Кандидаты на случайный выбор местности при старте партии. Пусто — остаётся
+    /// <see cref="Terrain"/>. В редакторе не выбирается: иначе предпросмотр и сцена
     /// менялись бы при каждом открытии.
     /// </summary>
-    [Export] public SurfaceSettings[] Terrains;
+    [Export] public SurfaceSettings[] TerrainChoices;
 
     /// <summary>
-    /// Зерно поверхности. Ноль означает «взять из настроек мира»: тогда поверхность,
+    /// Зерно полей поверхности. Ноль означает «взять из настроек мира»: тогда поверхность,
     /// расположение руды и состав волн выводятся из одного числа, и партия воспроизводится
     /// целиком.
     /// </summary>
-    [Export] public ulong Seed;
+    [Export] public ulong SurfaceSeed;
 
     [ExportGroup("Облака")]
 
     /// <summary>
-    /// Отрисовщик облаков. При смене <see cref="Settings"/> получает
+    /// Узел отрисовки облаков. При смене <see cref="Terrain"/> получает
     /// <see cref="SurfaceSettings.Clouds"/>, если они заданы. На стенде предпросмотра
     /// облаков ссылка не нужна: там настройки назначаются напрямую.
     /// </summary>
-    [Export] public CloudRenderer Clouds;
+    [Export] public CloudRenderer CloudRenderer;
 
     [ExportGroup("Показывать")]
 
-    [Export] public bool ShowBase = true;
-    [Export] public bool ShowDecals = true;
+    /// <summary>Рисовать базовый слой покрытий.</summary>
+    [Export] public bool ShowBaseLayer = true;
+
+    /// <summary>Рисовать статические декали поверх базового слоя.</summary>
+    [Export] public bool ShowDecalLayer = true;
 
     [ExportGroup("Действия")]
 
@@ -86,8 +92,18 @@ public partial class SurfaceRenderer : Node2D
     /// <summary>Раскладка декалей. Нужна предпросмотру для подписи.</summary>
     public SurfacePlan Plan { get; private set; }
 
-    /// <summary>Включённые покрытия по порядку. Поле, а не местный массив: заполняется каждый кадр.</summary>
+    /// <summary>
+    /// Включённые покрытия по порядку. Порядок здесь и есть порядок наложения в шейдере,
+    /// поэтому обход биомов и покрытий менять нельзя, не изменив вида всех местностей.
+    /// Поле, а не местный массив: заполняется каждый кадр.
+    /// </summary>
     private readonly SurfaceTile[] _active = new SurfaceTile[SurfaceSettings.MaxTiles];
+
+    /// <summary>
+    /// Отрезок температуры биома, которому принадлежит покрытие:
+    /// xy — <see cref="SurfaceBiome.TemperatureRange"/>. Параллелен <see cref="_active"/>.
+    /// </summary>
+    private readonly Vector4[] _activeBiome = new Vector4[SurfaceSettings.MaxTiles];
 
     private ShaderMaterial _material;
     private ImageTexture _white;
@@ -120,19 +136,19 @@ public partial class SurfaceRenderer : Node2D
 
         // Ноль означает «ещё не задано»: иначе поверхность брала бы запасное зерно 1
         // из правила в _Process, и партии отличались бы только типом местности
-        if (Seed == 0)
-            Seed = GD.Randi() | 1UL;
+        if (SurfaceSeed == 0)
+            SurfaceSeed = GD.Randi() | 1UL;
     }
 
     /// <summary>Выбрать местность из кандидатов. Один раз на партию, до сборки полей.</summary>
     private void PickTerrain()
     {
-        if (Terrains == null || Terrains.Length == 0)
+        if (TerrainChoices == null || TerrainChoices.Length == 0)
             return;
 
         int count = 0;
 
-        foreach (var candidate in Terrains)
+        foreach (var candidate in TerrainChoices)
         {
             if (candidate != null)
                 count++;
@@ -143,14 +159,14 @@ public partial class SurfaceRenderer : Node2D
 
         int pick = (int)(GD.Randi() % (uint)count);
 
-        foreach (var candidate in Terrains)
+        foreach (var candidate in TerrainChoices)
         {
             if (candidate == null)
                 continue;
 
             if (pick == 0)
             {
-                Settings = candidate;
+                Terrain = candidate;
                 return;
             }
 
@@ -165,11 +181,11 @@ public partial class SurfaceRenderer : Node2D
     /// </summary>
     private void ApplyClouds()
     {
-        if (Clouds == null || Settings?.Clouds == null)
+        if (CloudRenderer == null || Terrain?.Clouds == null)
             return;
 
-        if (Clouds.Settings != Settings.Clouds)
-            Clouds.Settings = Settings.Clouds;
+        if (CloudRenderer.Settings != Terrain.Clouds)
+            CloudRenderer.Settings = Terrain.Clouds;
     }
 
     /// <summary>
@@ -193,7 +209,7 @@ public partial class SurfaceRenderer : Node2D
     {
         ApplyClouds();
 
-        Visible = Settings != null && (ShowBase || ShowDecals);
+        Visible = Terrain != null && (ShowBaseLayer || ShowDecalLayer);
 
         if (!Visible)
         {
@@ -204,7 +220,8 @@ public partial class SurfaceRenderer : Node2D
         Attach();
 
         var area = World.ArenaBounds;
-        ulong seed = Seed != 0 ? Seed : World.Settings.Seed != 0 ? World.Settings.Seed : 1UL;
+        ulong seed = SurfaceSeed != 0 ? SurfaceSeed
+            : World.Settings.Seed != 0 ? World.Settings.Seed : 1UL;
 
         Refresh(area, seed);
         Apply(area);
@@ -218,7 +235,7 @@ public partial class SurfaceRenderer : Node2D
 
     public override void _Draw()
     {
-        if (!ShowBase || _material == null || Settings == null)
+        if (!ShowBaseLayer || _material == null || Terrain == null)
             return;
 
         // Прямоугольник рисуется белой точкой: сам цвет берёт шейдер, а текстура нужна лишь
@@ -234,28 +251,28 @@ public partial class SurfaceRenderer : Node2D
     /// </summary>
     private void Refresh(Rect2 area, ulong seed)
     {
-        int wanted = SurfaceFields.SignatureOf(Settings, seed, area);
+        int wanted = SurfaceFields.SignatureOf(Terrain, seed, area);
 
         if (Fields == null || _fieldsSignature != wanted)
         {
-            Fields = new SurfaceFields(Settings, seed, area);
+            Fields = new SurfaceFields(Terrain, seed, area);
             _fieldsSignature = wanted;
             _planSignature = 0;
             QueueRedraw();
         }
 
-        if (!ShowDecals)
+        if (!ShowDecalLayer)
         {
             ClearDecals();
             _planSignature = 0;
             return;
         }
 
-        int plan = SurfaceLayout.SignatureOf(Settings, Fields);
+        int plan = SurfaceLayout.SignatureOf(Terrain, Fields);
 
         if (Plan == null || _planSignature != plan)
         {
-            Plan = SurfaceLayout.Build(Settings, Fields);
+            Plan = SurfaceLayout.Build(Terrain, Fields);
             _planSignature = plan;
             Present(Plan);
             return;
@@ -290,48 +307,78 @@ public partial class SurfaceRenderer : Node2D
         // иначе случайно оставленная галка закрывала бы местность поверх боя.
         bool editor = Engine.IsEditorHint();
 
-        _material.SetShaderParameter("show_noise", editor && Settings.ShowNoise);
-        _material.SetShaderParameter("show_temperature", editor && Settings.ShowTemperature);
-        _material.SetShaderParameter("show_height", editor && Settings.ShowHeight);
-        _material.SetShaderParameter("hex_tiling", Settings.HexTiling);
-        _material.SetShaderParameter("sharpness", Mathf.Max(Settings.Sharpness, 1f));
-        _material.SetShaderParameter("ambient", Settings.Ambient);
+        _material.SetShaderParameter("show_noise", editor && Terrain.ShowNoise);
+        _material.SetShaderParameter("show_temperature", editor && Terrain.ShowTemperature);
+        _material.SetShaderParameter("show_height", editor && Terrain.ShowHeight);
+        _material.SetShaderParameter("hex_tiling", Terrain.HexTiling);
+        _material.SetShaderParameter("smoothness", Mathf.Max(Terrain.Smoothness, 0f));
+        _material.SetShaderParameter("ambient", Terrain.Ambient);
 
-        // Выключенные покрытия отбираются до передачи шейдеру, а не помечаются флагом в
-        // нём: иначе выключенное занимало бы одно из четырёх мест, которые шейдер
-        // разбирает развёрнутым кодом, и освободить место под примерку было бы нечем
-        int count = 0;
-
-        foreach (var candidate in Settings.Tiles ?? System.Array.Empty<SurfaceTile>())
-        {
-            if (candidate == null || !candidate.Enabled)
-                continue;
-
-            _active[count++] = candidate;
-
-            if (count == SurfaceSettings.MaxTiles)
-                break;
-        }
+        // Покрытия собираются из биомов в общий список до передачи шейдеру. Выключенные
+        // биом и покрытие пропускаются здесь, а не помечаются флагом в шейдере: иначе они
+        // занимали бы одно из четырёх мест, которые шейдер разбирает развёрнутым кодом
+        int count = CollectTiles();
 
         _material.SetShaderParameter("tile_count", count);
 
         for (int i = 0; i < SurfaceSettings.MaxTiles; i++)
         {
             var tile = i < count ? _active[i] : null;
+            var biome = i < count ? _activeBiome[i] : new Vector4(0f, 1f, 0f, 0f);
 
             _material.SetShaderParameter($"tile_{i}", tile?.Texture);
 
+            // z — сторона тайла в пикселях мира
             _material.SetShaderParameter($"tile_range_{i}", new Vector4(
                 tile?.Range.X ?? 0f,
                 tile?.Range.Y ?? 0f,
-                Mathf.Max(tile?.Falloff ?? 0f, 0f),
-                Mathf.Max(tile?.SizePx ?? 512f, 1f)));
+                Mathf.Max(tile?.SizePx ?? 512f, 1f),
+                0f));
 
             _material.SetShaderParameter($"tile_height_{i}", new Vector4(
                 tile?.HeightRange.X ?? 0f, tile?.HeightRange.Y ?? 1f, 0f, 0f));
 
+            _material.SetShaderParameter($"tile_temp_{i}", new Vector4(
+                tile?.TemperatureRange.X ?? 0f, tile?.TemperatureRange.Y ?? 1f, 0f, 0f));
+
+            _material.SetShaderParameter($"tile_biome_{i}", biome);
+
             _material.SetShaderParameter($"tile_tint_{i}", tile?.Tint ?? Colors.White);
         }
+    }
+
+    /// <summary>
+    /// Собрать включённые покрытия биомов в слоты шейдера. Порядок обхода есть порядок
+    /// наложения: слот с меньшим номером лежит ниже, слот ноль служит подложкой.
+    /// Принадлежность биому и собственный отрезок температуры покрытия передаются
+    /// раздельно, поскольку это разные условия, хотя проверяются они по одному полю.
+    /// </summary>
+    private int CollectTiles()
+    {
+        int count = 0;
+
+        foreach (var biome in Terrain.Biomes ?? System.Array.Empty<SurfaceBiome>())
+        {
+            if (biome == null || !biome.Enabled || biome.Tiles == null)
+                continue;
+
+            foreach (var tile in biome.Tiles)
+            {
+                if (tile == null || !tile.Enabled)
+                    continue;
+
+                _active[count] = tile;
+                _activeBiome[count] = new Vector4(
+                    biome.TemperatureRange.X, biome.TemperatureRange.Y, 0f, 0f);
+
+                count++;
+
+                if (count == SurfaceSettings.MaxTiles)
+                    return count;
+            }
+        }
+
+        return count;
     }
 
     // ── Отпечатки ─────────────────────────────────────────────────────────────────
@@ -474,7 +521,7 @@ public partial class SurfaceRenderer : Node2D
 
     private void RollSeed()
     {
-        Seed = GD.Randi() | 1UL;
+        SurfaceSeed = GD.Randi() | 1UL;
         Rebuild();
     }
 

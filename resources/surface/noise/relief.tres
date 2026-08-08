@@ -4,7 +4,9 @@
 
 [resource]
 script = ExtResource("1_noise")
-Frequency = 0.0015
-SeedOffset = 303
+Frequency = 0.0008
+Zoom = 10.1
+Contrast = 1.1
 Octaves = 2
-Persistence = 0.6
+Lacunarity = 3.45
+Persistence = 0.89

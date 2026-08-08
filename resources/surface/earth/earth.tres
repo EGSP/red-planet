@@ -3,11 +3,7 @@
 [ext_resource type="Script" uid="uid://ct2qu3ueuenor" path="res://scripts/world/surface/SurfaceSettings.cs" id="1_settings"]
 [ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="2_coarse"]
 [ext_resource type="Resource" uid="uid://bfr8cr7pg3aky" path="res://resources/surface/noise/relief.tres" id="4_relief"]
-[ext_resource type="Resource" path="res://resources/surface/earth/tiles/grass.tres" id="5_tile_grass"]
-[ext_resource type="Resource" path="res://resources/surface/earth/tiles/dirt.tres" id="6_tile_dirt"]
-[ext_resource type="Resource" path="res://resources/surface/earth/tiles/meadow.tres" id="7_tile_meadow"]
-[ext_resource type="Resource" path="res://resources/surface/earth/biomes/meadow.tres" id="8_biome_meadow"]
-[ext_resource type="Resource" path="res://resources/surface/earth/biomes/wetland.tres" id="9_biome_wetland"]
+[ext_resource type="Resource" uid="uid://bafxbgtxhg1ue" path="res://resources/surface/earth/biomes/meadow.tres" id="8_biome_meadow"]
 [ext_resource type="Resource" uid="uid://orhes64kd15v" path="res://resources/surface/earth/clouds_earth.tres" id="10_clouds"]
 [ext_resource type="Resource" path="res://resources/surface/noise/warp.tres" id="11_warp"]
 
@@ -15,11 +11,10 @@
 script = ExtResource("1_settings")
 Id = "earth"
 BaseNoise = ExtResource("2_coarse")
-Tiles = [ExtResource("5_tile_grass"), ExtResource("6_tile_dirt"), ExtResource("7_tile_meadow")]
 IsothermCurvature = 2.0
 IsothermOffset = 0.0
 TemperatureWarp = 0.09
 TemperatureWarpNoise = ExtResource("11_warp")
 HeightNoise = ExtResource("4_relief")
-Biomes = [ExtResource("8_biome_meadow"), ExtResource("9_biome_wetland")]
+Biomes = [ExtResource("8_biome_meadow")]
 Clouds = ExtResource("10_clouds")

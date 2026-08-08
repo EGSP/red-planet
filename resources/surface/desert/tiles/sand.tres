@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SurfaceTile" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="SurfaceTile" format=3 uid="uid://baaxqmrogt4gy"]
 
 [ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="1_tile"]
 [ext_resource type="Texture2D" uid="uid://e120rncic0hp" path="res://assets/sprites/terrain/desert/sand_tile_diffuse.png" id="2_tex"]
@@ -6,7 +6,5 @@
 [resource]
 script = ExtResource("1_tile")
 Id = "desert · песок"
-SizePx = 480.0
-Range = Vector2(0, 0.5)
-Falloff = 0.12
 Texture = ExtResource("2_tex")
+SizePx = 480.0

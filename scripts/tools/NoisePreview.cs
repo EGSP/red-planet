@@ -75,10 +75,19 @@ public partial class NoisePreview : Node2D
 
     /// <summary>
     /// Зерно, на котором строятся все поля стенда. Ноль означает «взять из настроек мира»
-    /// — то же правило, что у <see cref="SurfaceRenderer.Seed"/>, поэтому при нуле панели
+    /// — то же правило, что у <see cref="SurfaceRenderer.SurfaceSeed"/>, поэтому при нуле панели
     /// показывают ту самую картину, которая получится в партии на этом зерне.
     /// </summary>
     [Export] public ulong Seed;
+
+    /// <summary>
+    /// Ширина перехода, с которой покрытие накладывается на поле панели. Повторяет
+    /// <see cref="SurfaceSettings.Smoothness"/>, но задана здесь отдельно: стенд разбирает
+    /// поля сами по себе и описания местности не имеет, поэтому взять число ему неоткуда.
+    /// Значение стоит держать равным тому, что назначено местности, иначе граница покрытия
+    /// на панели окажется шире или уже, чем на карте.
+    /// </summary>
+    [Export(PropertyHint.Range, "0,0.3,0.005")] public float Smoothness = 0.06f;
 
     // ── Показывать ────────────────────────────────────────────────────────────────
 
@@ -215,10 +224,10 @@ public partial class NoisePreview : Node2D
 
                 if (texture != null)
                 {
-                    float weight = Band(value, tile.Range, tile.Falloff);
+                    float cover = SurfaceSettings.Band(value, tile.Range, Smoothness);
 
-                    if (weight > 0f)
-                        color = color.Lerp(Sample(texture, world, tile) * tile.Tint, weight);
+                    if (cover > 0f)
+                        color = color.Lerp(Sample(texture, world, tile) * tile.Tint, cover);
                 }
 
                 image.SetPixel(x, y, color);
@@ -247,12 +256,12 @@ public partial class NoisePreview : Node2D
             BaseNoise = entry.Noise,
             Temperature = TemperatureSource.Noise,
             TemperatureNoise = entry.Noise,
+            Smoothness = Smoothness,
             Biomes = new[]
             {
                 new SurfaceBiome
                 {
                     TemperatureRange = new Vector2(0f, 1f),
-                    Falloff = 0f,
                     Decals = new[] { decal },
                 },
             },
@@ -370,7 +379,7 @@ public partial class NoisePreview : Node2D
         if (entry.Tile != null)
             lines.Add($"покрытие «{entry.Tile.Id}» на " +
                 $"[{entry.Tile.Range.X:0.##}; {entry.Tile.Range.Y:0.##}], " +
-                $"размытие {entry.Tile.Falloff:0.###}, сторона {entry.Tile.SizePx:0} px" +
+                $"переход {Smoothness:0.###}, сторона {entry.Tile.SizePx:0} px" +
                 (entry.Tile.Enabled ? "" : " — выключено"));
 
         if (entry.Decal != null)
@@ -442,27 +451,11 @@ public partial class NoisePreview : Node2D
         return image.GetPixel(x, y);
     }
 
-    /// <summary>
-    /// Принадлежность отрезку с размытыми краями. Повторяет правило шейдера поверхности,
-    /// поэтому граница покрытия на панели проходит там же, где на карте.
-    /// </summary>
-    private static float Band(float value, Vector2 range, float falloff)
-    {
-        float low = Mathf.Min(range.X, range.Y);
-        float high = Mathf.Max(range.X, range.Y);
-
-        if (falloff <= 0f)
-            return value >= low && value <= high ? 1f : 0f;
-
-        float outside = Mathf.Max(low - value, value - high);
-        return Mathf.Clamp(1f - outside / falloff, 0f, 1f);
-    }
-
     /// <summary>Отпечаток всего, от чего зависят панели.</summary>
     private int SignatureOf(Rect2 bounds)
     {
         int hash = HashCode.Combine(Grain, bounds.Position, bounds.Size, Resolution,
-            ShowTiles, ShowDecals, Entries?.Length ?? 0);
+            ShowTiles, ShowDecals, Smoothness, Entries?.Length ?? 0);
 
         if (Entries == null)
             return hash;
@@ -481,18 +474,17 @@ public partial class NoisePreview : Node2D
             if (entry.Tile != null)
                 hash = HashCode.Combine(hash,
                     entry.Tile.Texture?.GetInstanceId() ?? 0UL, entry.Tile.Enabled,
-                    entry.Tile.Range, entry.Tile.Falloff, entry.Tile.SizePx, entry.Tile.Tint);
+                    entry.Tile.Range, entry.Tile.SizePx, entry.Tile.Tint);
 
             if (entry.Decal != null)
                 hash = HashCode.Combine(hash,
                     entry.Decal.Texture?.GetInstanceId() ?? 0UL,
-                    HashCode.Combine(entry.Decal.SpacingPx, entry.Decal.Chance,
+                    HashCode.Combine(entry.Decal.Spacing, entry.Decal.Chance,
                         entry.Decal.Jitter, entry.Decal.NoiseRange,
                         entry.Decal.CountMin, entry.Decal.CountMax),
-                    HashCode.Combine(entry.Decal.Enabled, entry.Decal.SizePx,
+                    HashCode.Combine(entry.Decal.Enabled, entry.Decal.Size,
                         entry.Decal.SizeVariation, entry.Decal.RandomRotation),
-                    HashCode.Combine(entry.Decal.Tint, entry.Decal.TintVariation,
-                        entry.Decal.Opacity));
+                    HashCode.Combine(entry.Decal.Tint, entry.Decal.TintVariation));
         }
 
         return hash;

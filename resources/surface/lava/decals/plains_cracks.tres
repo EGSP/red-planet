@@ -7,15 +7,14 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "lava · равнина · трещины"
-Enabled = false
 Texture = ExtResource("2_tex")
 Layer = 4
 Noise = ExtResource("1_3rctl")
-NoiseRange = Vector2(0.15, 0.55)
-SpacingPx = 712.0
-Chance = 0.14
-Jitter = 0.85
-SizePx = 340.0
-SizeVariation = 0.3
-TintVariation = 0.59
-Opacity = 0.28
+HeightRange = Vector2(0.5, 1)
+Spacing = 0.0341
+Chance = 0.05
+Jitter = 0.0
+Size = 0.0817
+SizeVariation = 0.43
+Tint = Color(1, 1, 1, 0.30588236)
+TintVariation = 0.49

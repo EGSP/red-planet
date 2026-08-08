@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="SurfaceTile" format=3 uid="uid://bco5lky571d8r"]
+
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="1_0sc6e"]
+[ext_resource type="Texture2D" uid="uid://bo5riduxb4sia" path="res://assets/sprites/terrain/desert/desert_rock_decal_04_diffuse.png" id="1_vi0bk"]
+
+[resource]
+script = ExtResource("1_0sc6e")
+Texture = ExtResource("1_vi0bk")
+SizePx = 256.0
+metadata/_custom_type_script = "uid://da4qmnvh573ri"
