@@ -34,9 +34,22 @@ public interface IProducer
     /// </summary>
     int Revision { get; }
 
+    /// <summary>Сколько экземпляров данного типа заказано всего: и в основной очереди, и срочно.</summary>
     int CountOf(string unitId);
 
-    void Enqueue(string unitId, int count = 1);
+    /// <summary>Сколько экземпляров данного типа заказано срочно, вне основной очереди.</summary>
+    int RushCountOf(string unitId);
 
-    void Dequeue(string unitId, int count = 1);
+    /// <summary>
+    /// Заказать выпуск. При <paramref name="rush"/> заказ попадает не в основную очередь,
+    /// а в отдельный список срочных: он расходуется до опустошения прежде основной очереди
+    /// и никогда не прокручивается по кругу, даже когда включён режим повтора.
+    /// </summary>
+    void Enqueue(string unitId, int count = 1, bool rush = false);
+
+    /// <summary>
+    /// Снять заказ. <paramref name="rush"/> выбирает список, из которого снимать: срочный
+    /// заказ правится отдельно от основной очереди, иначе снять его было бы нечем.
+    /// </summary>
+    void Dequeue(string unitId, int count = 1, bool rush = false);
 }

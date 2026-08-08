@@ -32,6 +32,12 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     /// </summary>
     private readonly List<string> _production = new();
 
+    /// <summary>
+    /// Срочные заказы, набранные до достройки. Отдельно от основной очереди по той же
+    /// причине, что и у завода: они расходуются первыми и по кругу не идут.
+    /// </summary>
+    private readonly List<string> _rush = new();
+
     public OrderQueue Orders { get; }
 
     public Blueprint() => Orders = new OrderQueue(this);
@@ -156,11 +162,15 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
     // ── очередь производства ───────────────────────────────────────────────────
 
-    public int CountOf(string unitId)
+    public int CountOf(string unitId) => Tally(_production, unitId) + Tally(_rush, unitId);
+
+    public int RushCountOf(string unitId) => Tally(_rush, unitId);
+
+    private static int Tally(List<string> list, string unitId)
     {
         int count = 0;
 
-        foreach (string id in _production)
+        foreach (string id in list)
             if (id == unitId)
                 count++;
 
@@ -171,7 +181,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     /// Заказать выпуск. Ключ проверяется по каталогу так же, как у завода: неизвестное
     /// определение до достройки всё равно не превратилось бы в юнита.
     /// </summary>
-    public void Enqueue(string unitId, int count = 1)
+    public void Enqueue(string unitId, int count = 1, bool rush = false)
     {
         if (!CanProduce || string.IsNullOrEmpty(unitId) || count <= 0)
             return;
@@ -179,8 +189,10 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         if (GameManager.I?.Catalog.Unit(unitId) == null)
             return;
 
+        var list = rush ? _rush : _production;
+
         for (int i = 0; i < count; i++)
-            _production.Add(unitId);
+            list.Add(unitId);
 
         Revision++;
     }
@@ -189,21 +201,23 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     /// Снять с конца очереди до <paramref name="count"/> последних вхождений этого типа.
     /// Указателя и накопленного прогресса у каркаса нет — снимать проще, чем заводу.
     /// </summary>
-    public void Dequeue(string unitId, int count = 1)
+    public void Dequeue(string unitId, int count = 1, bool rush = false)
     {
         if (string.IsNullOrEmpty(unitId) || count <= 0)
             return;
 
+        var list = rush ? _rush : _production;
+
         for (int n = 0; n < count; n++)
         {
-            int at = _production.LastIndexOf(unitId);
+            int at = list.LastIndexOf(unitId);
 
             // Вхождения кончились раньше запрошенного числа — выходим из цикла, а не из
             // метода: снятое до этого мига уже изменило очередь, и ревизию надо поднять
             if (at < 0)
                 break;
 
-            _production.RemoveAt(at);
+            list.RemoveAt(at);
         }
 
         Revision++;
@@ -310,7 +324,13 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         foreach (string unitId in _production)
             producer.Enqueue(unitId);
 
+        // Срочные заказы переезжают срочными: иначе они растворились бы в основной
+        // очереди и в режиме повтора пошли бы по кругу вопреки замыслу игрока
+        foreach (string unitId in _rush)
+            producer.Enqueue(unitId, rush: true);
+
         _production.Clear();
+        _rush.Clear();
     }
 
     /// <summary>Каркас разбит: вывести из игры. Место и EntityStore освобождает Spawner.</summary>
@@ -326,6 +346,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         Orders.Clear();
 
         _production.Clear();
+        _rush.Clear();
         SetProcess(false);
         Visible = false;
         QueueFree();

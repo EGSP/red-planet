@@ -4,4 +4,4 @@
 
 [resource]
 script = ExtResource("1_settings")
-PowerPerTerror = 0.34
+PowerPerTerror = 0.89

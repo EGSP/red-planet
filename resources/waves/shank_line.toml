@@ -7,7 +7,7 @@ tags = ["line"]
 
 prefer_next = ["swarm"]
 
-terror_range = [30.0, -1]
+terror_range = [50.0, -1]
 
 army_power_budget     = 16.0
 army_power_per_terror = 0.05

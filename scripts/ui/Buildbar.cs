@@ -18,8 +18,14 @@ public partial class Buildbar : CanvasLayer
     /// <summary>Размер ячейки. Один на все кнопки — иначе сетка поплывёт.</summary>
     private static readonly Vector2 CellSize = new(118, 30);
 
+    /// <summary>Сторона квадрата под иконку юнита внутри ячейки.</summary>
+    private const float IconSide = 24f;
+
     private static readonly Color TitleColor = new(0.45f, 0.85f, 0.95f);
     private static readonly Color TipColor = new(0.9f, 0.92f, 0.95f);
+
+    /// <summary>Цвет счётчика срочных заказов: он должен отличаться от основного счётчика.</summary>
+    private static readonly Color RushColor = new(1f, 0.62f, 0.2f);
 
     private Control _frame;
     private HBoxContainer _sections;
@@ -51,8 +57,11 @@ public partial class Buildbar : CanvasLayer
     /// <summary>
     /// Кнопки с счётчиками очереди, собранные при постройке сетки. Держим список,
     /// чтобы обновление счётчиков не обходило дерево интерфейса заново.
+    ///
+    /// Подписей две, потому что счётчик основной очереди и счётчик срочных заказов
+    /// различаются цветом, а <see cref="Button.Text"/> красится целиком.
     /// </summary>
-    private readonly List<(Button Button, UnitDefinition Def)> _counted = new();
+    private readonly List<(Label Count, Label Rush, UnitDefinition Def)> _counted = new();
 
     /// <summary>Кнопка переключения режима производства. Есть только у plant-панели.</summary>
     private Button _modeButton;
@@ -274,7 +283,8 @@ public partial class Buildbar : CanvasLayer
         column.AddChild(_modeButton);
 
         string tip = "Режим производства\nПовтор — очередь идёт по кругу\n" +
-                     "Один проход — слот снимается после выпуска";
+                     "Один проход — слот снимается после выпуска\n" +
+                     "Срочные заказы режиму не подчиняются";
         _modeButton.MouseEntered += () => ShowTip(_modeButton, tip);
         _modeButton.MouseExited += () =>
         {
@@ -353,7 +363,6 @@ public partial class Buildbar : CanvasLayer
     {
         var button = new Button
         {
-            Text = ButtonCaption(def),
             CustomMinimumSize = CellSize,
             ClipText = true,
         };
@@ -362,13 +371,17 @@ public partial class Buildbar : CanvasLayer
 
         if (_kind == BuildbarKind.Plant)
         {
+            // Содержимое ячейки собирается отдельными узлами, поэтому собственный текст
+            // у кнопки пустой: иначе он лёг бы под ними вторым слоем
+            BuildCell(button, def);
+
             // Не Pressed, а GuiInput: сигнал нажатия приходит только от левой кнопки,
             // а очередь правится обеими — левой в хвост, правой из хвоста
             button.GuiInput += @event => OnPlantButtonInput(button, def, @event);
-            _counted.Add((button, def));
         }
         else
         {
+            button.Text = def.DisplayName;
             button.Pressed += () => GameManager.I?.Command?.BeginBuild(def);
         }
 
@@ -383,17 +396,80 @@ public partial class Buildbar : CanvasLayer
         return button;
     }
 
+    /// <summary>
+    /// Содержимое ячейки завода: иконка, название и два счётчика — основной очереди
+    /// и срочных заказов.
+    ///
+    /// ПОЧЕМУ СОБСТВЕННОГО ТЕКСТА У КНОПКИ НЕТ. Счётчики различаются цветом,
+    /// а <see cref="Button.Text"/> красится целиком, поэтому подпись собрана из отдельных
+    /// <see cref="Label"/>. Ввода они не перехватывают, и нажатие достаётся кнопке, где бы
+    /// по ней ни щёлкнули.
+    ///
+    /// ПОЧЕМУ РАСТЯГИВАЕТСЯ ИМЕННО НАЗВАНИЕ. Счётчики стоят у правого края и не должны
+    /// ездить от длины названия: игрок ищет число в одном и том же месте ячейки. Свободное
+    /// место поэтому отдано названию, а лишнее оно обрезает по своей границе.
+    /// </summary>
+    private void BuildCell(Button button, UnitDefinition def)
+    {
+        var line = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        line.AddThemeConstantOverride("separation", 4);
+        button.AddChild(line);
+        line.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        line.OffsetLeft = 5f;
+        line.OffsetRight = -5f;
+
+        line.AddChild(new UnitIcon
+        {
+            Definition = def,
+            CustomMinimumSize = new Vector2(IconSide, IconSide),
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+        });
+
+        var main = new Label
+        {
+            Text = def.DisplayName,
+            // ClipText обнуляет минимальную ширину подписи, поэтому без Expand она
+            // сжалась бы до нуля и текста не осталось бы вовсе
+            ClipText = true,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        main.AddThemeFontSizeOverride("font_size", 12);
+        line.AddChild(main);
+
+        var count = new Label
+        {
+            Visible = false,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        count.AddThemeFontSizeOverride("font_size", 12);
+        line.AddChild(count);
+
+        var rush = new Label
+        {
+            Visible = false,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        rush.AddThemeFontSizeOverride("font_size", 12);
+        rush.AddThemeColorOverride("font_color", RushColor);
+        line.AddChild(rush);
+
+        _counted.Add((count, rush, def));
+        ApplyCounters(count, rush, def);
+    }
+
     private void OnPlantButtonInput(Button button, UnitDefinition def, InputEvent @event)
     {
         if (@event is not InputEventMouseButton { Pressed: true } mouse)
             return;
 
         int count = ModifierCount();
+        bool rush = Input.IsKeyPressed(Key.Ctrl);
 
         if (mouse.ButtonIndex == MouseButton.Left)
         {
             foreach (var plant in _plants)
-                plant.Enqueue(def.Id, count);
+                plant.Enqueue(def.Id, count, rush);
 
             button.AcceptEvent();
             RefreshPlantCounts();
@@ -403,29 +479,24 @@ public partial class Buildbar : CanvasLayer
         if (mouse.ButtonIndex == MouseButton.Right)
         {
             foreach (var plant in _plants)
-                plant.Dequeue(def.Id, count);
+                plant.Dequeue(def.Id, count, rush);
 
             button.AcceptEvent();
             RefreshPlantCounts();
         }
     }
 
-    /// <summary>Shift ×5, Ctrl ×10, Shift+Ctrl ×50; без модификаторов — 1.</summary>
+    /// <summary>
+    /// Кратность заказа: Shift ×10, Shift+Alt ×50; без них — 1. Ctrl в кратности не
+    /// участвует вовсе, поскольку он отвечает за другое — за то, в какой из двух списков
+    /// заказ попадёт (см. <see cref="OnPlantButtonInput"/>).
+    /// </summary>
     private static int ModifierCount()
     {
-        bool shift = Input.IsKeyPressed(Key.Shift);
-        bool ctrl = Input.IsKeyPressed(Key.Ctrl);
+        if (!Input.IsKeyPressed(Key.Shift))
+            return 1;
 
-        if (shift && ctrl)
-            return 50;
-
-        if (ctrl)
-            return 10;
-
-        if (shift)
-            return 5;
-
-        return 1;
+        return Input.IsKeyPressed(Key.Alt) ? 50 : 10;
     }
 
     /// <summary>
@@ -445,22 +516,35 @@ public partial class Buildbar : CanvasLayer
 
         _queueRevision = revision;
 
-        foreach (var (button, def) in _counted)
-            button.Text = ButtonCaption(def);
+        foreach (var (count, rush, def) in _counted)
+            ApplyCounters(count, rush, def);
 
         UpdateModeButton();
     }
 
-    private string ButtonCaption(UnitDefinition def)
+    /// <summary>
+    /// Проставить оба счётчика ячейки: число слотов основной очереди и рядом отдельным
+    /// цветом — число срочных заказов. Нулевой счётчик скрывается целиком, иначе ячейки
+    /// пустой панели состояли бы из одних нулей.
+    /// </summary>
+    private void ApplyCounters(Label count, Label rush, UnitDefinition def)
     {
-        if (_kind != BuildbarKind.Plant || _plants.Count == 0)
-            return def.DisplayName;
-
         int total = 0;
-        foreach (var plant in _plants)
-            total += plant.CountOf(def.Id);
+        int urgent = 0;
 
-        return total > 0 ? $"{def.DisplayName} ×{total}" : def.DisplayName;
+        foreach (var plant in _plants)
+        {
+            total += plant.CountOf(def.Id);
+            urgent += plant.RushCountOf(def.Id);
+        }
+
+        int queued = total - urgent;
+
+        count.Visible = queued > 0;
+        count.Text = $"×{queued}";
+
+        rush.Visible = urgent > 0;
+        rush.Text = $"+{urgent}";
     }
 
     private string TipText(UnitDefinition def)
@@ -474,7 +558,8 @@ public partial class Buildbar : CanvasLayer
             text += $"\n{drain:0.#} энергии/с";
 
         if (_kind == BuildbarKind.Plant)
-            text += "\nЛКМ — в очередь, ПКМ — убрать\nShift ×5, Ctrl ×10, Shift+Ctrl ×50";
+            text += "\nЛКМ — в очередь, ПКМ — убрать\nShift ×10, Shift+Alt ×50" +
+                    "\nCtrl — срочный заказ вне очереди";
 
         return text;
     }

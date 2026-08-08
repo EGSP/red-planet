@@ -10,15 +10,35 @@ using Godot;
 ///
 /// Одновременно из корпуса выезжает не больше одного юнита: следующий слот и пауза
 /// factory_cooldown начинаются только после снятия Leaving у текущего.
+///
+/// Очередей на деле две. Основная набирается левой кнопкой и в режиме повтора идёт
+/// по кругу; срочная набирается с Ctrl, расходуется до опустошения прежде основной
+/// и по кругу не идёт никогда. Отсюда следует, что срочный заказ выпускается ровно
+/// столько раз, сколько его заказали, независимо от режима производства.
 /// </summary>
 public partial class Plant : Building, IProducer
 {
     private readonly List<string> _queue = new();
 
+    /// <summary>
+    /// Срочные заказы в порядке набора. Голова списка вытесняет основную очередь,
+    /// а по выпуске снимается, поэтому указателя здесь не нужно.
+    /// </summary>
+    private readonly List<string> _rush = new();
+
     /// <summary>Указатель текущего слота при циклическом (infinite) производстве.</summary>
     private int _cursor;
 
+    /// <summary>Накопленная работа слота основной очереди, на который смотрит указатель.</summary>
     private float _progress;
+
+    /// <summary>
+    /// Накопленная работа головы срочного списка. Отдельно от <see cref="_progress"/>,
+    /// поскольку срочный заказ вклинивается посреди сборки слота основной очереди,
+    /// и общее поле означало бы, что вклинившийся забирает чужое накопленное себе.
+    /// </summary>
+    private float _rushProgress;
+
     private float _coolLeft;
     private Unit _exiting;
     private bool _infinite = true;
@@ -46,8 +66,29 @@ public partial class Plant : Building, IProducer
 
     public IReadOnlyList<string> Queue => _queue;
 
+    public IReadOnlyList<string> Rush => _rush;
+
     /// <summary>Готовый завод производит всегда — на то он и построен.</summary>
     public bool CanProduce => true;
+
+    /// <summary>Собирается ли сейчас срочный заказ. Он всегда важнее основной очереди.</summary>
+    private bool Rushing => _rush.Count > 0;
+
+    /// <summary>
+    /// Накопленная работа текущего слота — того списка, откуда взят
+    /// <see cref="CurrentDefinition"/>.
+    /// </summary>
+    private float Accumulated
+    {
+        get => Rushing ? _rushProgress : _progress;
+        set
+        {
+            if (Rushing)
+                _rushProgress = value;
+            else
+                _progress = value;
+        }
+    }
 
     public float ProgressRatio
     {
@@ -57,7 +98,7 @@ public partial class Plant : Building, IProducer
             if (def == null || def.TotalWork <= 0f)
                 return 0f;
 
-            return _progress / def.TotalWork;
+            return Accumulated / def.TotalWork;
         }
     }
 
@@ -71,7 +112,13 @@ public partial class Plant : Building, IProducer
     {
         get
         {
-            if (_queue.Count == 0 || GameManager.I?.Catalog == null)
+            if (GameManager.I?.Catalog == null)
+                return null;
+
+            if (Rushing)
+                return GameManager.I.Catalog.Unit(_rush[0]);
+
+            if (_queue.Count == 0)
                 return null;
 
             int index = Mathf.Clamp(_cursor, 0, _queue.Count - 1);
@@ -79,19 +126,26 @@ public partial class Plant : Building, IProducer
         }
     }
 
-    public int CountOf(string unitId)
+    public int CountOf(string unitId) => Tally(_queue, unitId) + Tally(_rush, unitId);
+
+    public int RushCountOf(string unitId) => Tally(_rush, unitId);
+
+    private static int Tally(List<string> list, string unitId)
     {
         int count = 0;
 
-        foreach (string id in _queue)
+        foreach (string id in list)
             if (id == unitId)
                 count++;
 
         return count;
     }
 
-    /// <summary>Добавить <paramref name="count"/> экземпляров в хвост очереди.</summary>
-    public void Enqueue(string unitId, int count = 1)
+    /// <summary>
+    /// Добавить <paramref name="count"/> экземпляров в хвост очереди — основной либо
+    /// срочной, смотря по <paramref name="rush"/>.
+    /// </summary>
+    public void Enqueue(string unitId, int count = 1, bool rush = false)
     {
         if (string.IsNullOrEmpty(unitId) || count <= 0)
             return;
@@ -99,8 +153,33 @@ public partial class Plant : Building, IProducer
         if (GameManager.I?.Catalog.Unit(unitId) == null)
             return;
 
+        var list = rush ? _rush : _queue;
+
         for (int i = 0; i < count; i++)
-            _queue.Add(unitId);
+            list.Add(unitId);
+
+        Revision++;
+    }
+
+    /// <summary>
+    /// Снять с конца срочного списка до <paramref name="count"/> последних вхождений
+    /// данного типа. Накопленное теряется только вместе с головой списка: она и есть
+    /// слот, которому это накопленное принадлежит.
+    /// </summary>
+    private void DequeueRush(string unitId, int count)
+    {
+        for (int n = 0; n < count; n++)
+        {
+            int at = _rush.LastIndexOf(unitId);
+
+            if (at < 0)
+                break;
+
+            _rush.RemoveAt(at);
+
+            if (at == 0)
+                _rushProgress = 0f;
+        }
 
         Revision++;
     }
@@ -108,10 +187,16 @@ public partial class Plant : Building, IProducer
     /// <summary>
     /// Снять с конца очереди до <paramref name="count"/> последних вхождений данного типа.
     /// </summary>
-    public void Dequeue(string unitId, int count = 1)
+    public void Dequeue(string unitId, int count = 1, bool rush = false)
     {
         if (string.IsNullOrEmpty(unitId) || count <= 0)
             return;
+
+        if (rush)
+        {
+            DequeueRush(unitId, count);
+            return;
+        }
 
         for (int n = 0; n < count; n++)
         {
@@ -199,14 +284,14 @@ public partial class Plant : Building, IProducer
         if (energy > 0f)
             events.Append(new ResourceSpent { Kind = ResourceKind.Energy, Amount = energy });
 
-        float done = Mathf.Min(BuildPower * (float)dt * rates.Work, def.TotalWork - _progress);
+        float done = Mathf.Min(BuildPower * (float)dt * rates.Work, def.TotalWork - Accumulated);
         if (done <= 0f)
             return;
 
         events.Append(new ResourceSpent { Kind = ResourceKind.Metal, Amount = done });
-        _progress += done;
+        Accumulated += done;
 
-        if (_progress >= def.TotalWork - 0.001f)
+        if (Accumulated >= def.TotalWork - 0.001f)
             Release(def);
     }
 
@@ -221,7 +306,6 @@ public partial class Plant : Building, IProducer
         _exiting = null;
         _coolLeft = Spec?.FactoryCooldown ?? 3f;
         AdvanceQueue();
-        _progress = 0f;
     }
 
     private void Release(UnitDefinition def)
@@ -254,21 +338,41 @@ public partial class Plant : Building, IProducer
         CopyRally(unit, exit);
         unit.Movement.BeginExit(this, exit);
         _exiting = unit;
-        _progress = 0f;
+
+        // Слот собран и выпущен: накопленное ему больше не принадлежит. Сам слот снимается
+        // не здесь, а в AdvanceQueue — после того, как выехавший освободит корпус
+        Accumulated = 0f;
 
         // Поверх корпуса завода юнит рисуется сам собой: слой Actors объявлен ниже слоя
         // Structures, а значит выше на экране. Ручной ZIndex здесь не нужен — см. WorldLayer
     }
 
+    /// <summary>
+    /// Снять выпущенный слот и перейти к следующему.
+    ///
+    /// Срочный список расходуется первым и всегда в один проход: режим повтора относится
+    /// к основной очереди, а срочный заказ на то и срочный, что выпускается ровно
+    /// заказанное число раз.
+    /// </summary>
     private void AdvanceQueue()
     {
+        if (Rushing)
+        {
+            _rush.RemoveAt(0);
+            _rushProgress = 0f;
+            Revision++;
+            return;
+        }
+
         if (_queue.Count == 0)
         {
             _cursor = 0;
+            _progress = 0f;
             return;
         }
 
         Revision++;
+        _progress = 0f;
 
         if (!Infinite)
         {

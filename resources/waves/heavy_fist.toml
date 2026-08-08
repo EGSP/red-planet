@@ -21,7 +21,7 @@ terror_range = [40.0, -1]
 army_power_budget     = 20.0
 army_power_per_terror = 0.15
 
-chill_interval_multiplier = 2.0
+chill_interval_multiplier = 1.0
 
 # Треть бюджета уходит Maul, остальное набирается свободно
 [[unit_list]]

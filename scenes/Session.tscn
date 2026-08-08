@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://rvo2ifgmct4" path="res://scripts/core/GameManager.cs" id="2_manager"]
 [ext_resource type="Script" uid="uid://ck2wua7snt8x7" path="res://scripts/world/Playground.cs" id="3_playground"]
 [ext_resource type="Script" uid="uid://0lfllbrf4q87" path="res://scripts/world/CloudRenderer.cs" id="4_clouds"]
-[ext_resource type="Resource" uid="uid://bcloudslava01rp" path="res://resources/surface/lava/clouds_lava.tres" id="4_cloudtuning"]
+[ext_resource type="Resource" uid="uid://crpqmk2i4it1r" path="res://resources/surface/lava/clouds_lava.tres" id="4_cloudtuning"]
 [ext_resource type="Script" uid="uid://cc1rudyjv07xp" path="res://scripts/world/GridRenderer.cs" id="4_grid"]
 [ext_resource type="Script" uid="uid://d2ynvft64bh21" path="res://scripts/world/surface/SurfaceRenderer.cs" id="4_surface"]
 [ext_resource type="Script" uid="uid://djhm5atkp2jws" path="res://scripts/units/CommandSystem.cs" id="5_command"]
@@ -19,7 +19,7 @@
 [ext_resource type="Script" uid="uid://dhkbabtkukh50" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
 [ext_resource type="Script" uid="uid://dhy78rf5woxf3" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
 [ext_resource type="Script" uid="uid://b0ki5uv7akvii" path="res://scripts/world/CameraRig.cs" id="16_camera"]
-[ext_resource type="Resource" path="res://resources/tuning/camera.tres" id="16_cameratuning"]
+[ext_resource type="Resource" uid="uid://5bo3xkxq5bvu" path="res://resources/tuning/camera.tres" id="16_cameratuning"]
 [ext_resource type="Script" uid="uid://byltoatikqvmc" path="res://scripts/ui/Hud.cs" id="17_hud"]
 [ext_resource type="PackedScene" path="res://scenes/world/Blueprint.tscn" id="19_blueprint"]
 [ext_resource type="Script" uid="uid://d0y7y0cjdiohh" path="res://scripts/ui/PauseMenu.cs" id="22_pause"]
@@ -38,6 +38,7 @@
 [ext_resource type="Resource" uid="uid://ctvqauj7073p" path="res://resources/surface/earth/earth.tres" id="33_earth"]
 [ext_resource type="Script" uid="uid://bsqkp3ps8tl01" path="res://scripts/ui/OutcomeMenu.cs" id="33_outcomemenu"]
 [ext_resource type="Script" uid="uid://bnkead8a2t11f" path="res://scripts/nav/PathfindingSystem.cs" id="34_pathfinding"]
+[ext_resource type="Resource" uid="uid://bgerl1npukrc7" path="res://resources/surface/lava/shadows_lava.tres" id="35_lf1gi"]
 [ext_resource type="Script" uid="uid://3fhl61arlssd" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
 [ext_resource type="Script" uid="uid://bpyei10ejuqti" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
 [ext_resource type="Resource" uid="uid://dpydcpt1gpoip" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
@@ -50,7 +51,6 @@
 [ext_resource type="Script" uid="uid://dngnl101xo5lo" path="res://scripts/ui/HoverSystem.cs" id="44_hover"]
 [ext_resource type="Script" uid="uid://xosvhvgeak3m" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
 [ext_resource type="Script" uid="uid://ce4dufgxum148" path="res://scripts/world/ShadowRenderer.cs" id="46_shadow"]
-[ext_resource type="Resource" uid="uid://d0mtud3752ne3" path="res://resources/tuning/shadow.tres" id="47_shadowsettings"]
 [ext_resource type="Script" uid="uid://b8bkh2kwhs8h" path="res://scripts/ui/EventBar.cs" id="48_eventbar"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
@@ -177,7 +177,7 @@ script = ExtResource("4_grid")
 visible = false
 material = SubResource("ShaderMaterial_kv8ms")
 script = ExtResource("46_shadow")
-Settings = ExtResource("47_shadowsettings")
+Settings = ExtResource("35_lf1gi")
 Pixelated = true
 
 [node name="Structures" type="Node2D" parent="Playground" unique_id=539201372]
