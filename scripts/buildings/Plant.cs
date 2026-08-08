@@ -237,10 +237,20 @@ public partial class Plant : Building, IProducer
         if (unit == null)
             return;
 
-        unit.Rotation = BodyFacing;
+        var exit = ExitPoint(def);
+
+        // Курс новорождённого — на свой выезд, а не по корпусу завода. Выезд выбирается
+        // среди нескольких направлений rolloff, и повёрнутый по корпусу юнит выезжал бы
+        // боком, доворачиваясь на ходу со своей скоростью вращения: у неповоротливой
+        // машины разворот виден целиком и читается как застрявший выпуск.
+        //
+        // Направления выезда, совпадающего с корпусом, это не меняет: там угол тот же самый
+        var offset = exit - GlobalPosition;
+        unit.Rotation = offset.LengthSquared() > 0.0001f
+            ? Heading.AngleTo(GlobalPosition, exit)
+            : BodyFacing;
         unit.SnapToolToBody();
 
-        var exit = ExitPoint(def);
         CopyRally(unit, exit);
         unit.Movement.BeginExit(this, exit);
         _exiting = unit;

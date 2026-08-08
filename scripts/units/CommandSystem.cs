@@ -498,6 +498,16 @@ public partial class CommandSystem : GameSystem
     /// ремонта не примет и дойдёт до сопровождения сам — фильтр набора приказов устроен
     /// именно так. Сопровождение включает помощь: строитель, приставленный к строителю,
     /// берётся за то же дело — этим занят сам юнит, а не раздача приказов.
+    ///
+    /// ПРИКАЗ НА САМОГО СЕБЯ НЕ ВЫДАЁТСЯ НИ ОДНОГО ВИДА. Цель под курсором бывает и в самом
+    /// выделении: игрок щёлкает по подбитому юниту, которого держит, по каркасу, который
+    /// выделил, по своему же отряду. Ни чинить себя, ни строить себя, ни идти за собой
+    /// нельзя, и приказ, который исполнять нечем, лучше не выдавать вовсе: он повиснет
+    /// в очереди, а исполнитель будет считаться занятым. Отсев делает <see cref="Other"/>;
+    /// у сопровождения он стоит раньше, у самого разбора цели (<see cref="Leader"/>), потому
+    /// что там приказ обязан быть либо у всех получателей, либо ни у кого.
+    ///
+    /// Снос под правило не подпадает: он и означает «уничтожь себя», цели у него нет вовсе.
     /// </summary>
     private void IssueOrder(Vector2 point)
     {
@@ -524,13 +534,16 @@ public partial class CommandSystem : GameSystem
 
         foreach (var actor in recipients)
         {
-            if (victim != null && attack.Give(actor, () => Order.Attack(victim)))
+            if (victim != null && Other(victim, actor)
+                               && attack.Give(actor, () => Order.Attack(victim)))
                 continue;
 
-            if (site != null && build.Give(actor, () => Order.Work(OrderKind.Build, site)))
+            if (site != null && Other(site, actor)
+                             && build.Give(actor, () => Order.Work(OrderKind.Build, site)))
                 continue;
 
-            if (damaged != null && repair.Give(actor, () => Order.Repair(damaged)))
+            if (damaged != null && Other(damaged, actor)
+                               && repair.Give(actor, () => Order.Repair(damaged)))
                 continue;
 
             if (leader != null && follow.Give(actor, () => Order.Follow(leader)))
@@ -664,6 +677,18 @@ public partial class CommandSystem : GameSystem
         /// <summary>Все ли, кто способен дойти до ветки, — из числа получателей приказа.</summary>
         private bool Within(OrderList list) => list.Within(_recipients);
     }
+
+    /// <summary>
+    /// Годится ли цель этому получателю: она не он сам.
+    ///
+    /// Одна проверка на все виды приказов, хотя сейчас сработать она может не у каждого:
+    /// врагом получатель не бывает никогда, а вот местом работы и повреждённой целью бывает —
+    /// каркас выделяется и принимает приказы наравне с постройкой, а подбитый ремонтник
+    /// стоит в том же отряде, которому игрок отдаёт приказ. Проверка стоит у всех потому,
+    /// что правило одно, а не три, и держать его в стольких местах, сколько видов приказов,
+    /// значило бы забыть о нём при появлении следующего.
+    /// </summary>
+    private static bool Other(object target, IOrderable actor) => !ReferenceEquals(target, actor);
 
     /// <summary>
     /// За кем идти: своя сущность под курсором, не входящая в само выделение.

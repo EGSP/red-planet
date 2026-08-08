@@ -49,7 +49,7 @@ public partial class Assembler : Building, IWorker
 
             case OrderKind.Repair:
                 Detach();
-                _repairTarget = order.Entity;
+                Heal(order);
                 return;
 
             case OrderKind.Delete:
@@ -89,6 +89,36 @@ public partial class Assembler : Building, IWorker
 
         if (order.Target is WorkNode node)
             Attach(node);
+    }
+
+    /// <summary>
+    /// Ремонт в пределах манипулятора. Досягаемость проверяется так же, как у стройки,
+    /// и по той же причине: выдача задач отбирает кандидатов по расстоянию между центрами
+    /// и потому расширяет предел поиска на наибольший габарит (см.
+    /// <see cref="PlayerAiSystem"/>), а точный расчёт по краю цели остаётся за башней.
+    /// Без него башня чинила бы то, до чего манипулятор не дотягивается, а по прямому
+    /// приказу игрока — и цель на другом конце карты.
+    ///
+    /// Дальнее для башни недоступно вовсе, поэтому приказ снимается, а не откладывается:
+    /// дойти она не может, и висел бы он в очереди вечно.
+    /// </summary>
+    private void Heal(Order order)
+    {
+        var target = order.Entity;
+
+        // Сама себя башня не чинит — как и всякий носитель инструмента (правило
+        // и обоснование в Unit.Repairing). Проверка своя, потому что через Unit башня
+        // не проходит: приказы она исполняет собственным кодом
+        if (ReferenceEquals(target, this)
+            || !Alive.Is(target)
+            || !Reach.Within(GlobalPosition, target, Definition.WorkRangePx))
+        {
+            _repairTarget = null;
+            Orders.DropCurrent();
+            return;
+        }
+
+        _repairTarget = target;
     }
 
     public override void OnIdle(double dt)

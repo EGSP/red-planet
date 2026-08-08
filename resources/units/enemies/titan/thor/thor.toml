@@ -19,8 +19,5 @@ speed      = 2.6
 turn_speed = 35.0
 brake      = 3.0
 
-[battle]
-approach_hold = 0.8
-
 [terror]
 army_power = 1000.0

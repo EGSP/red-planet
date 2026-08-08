@@ -17,9 +17,6 @@ radius     = 0.28
 speed      = 4.0
 turn_speed = 240.0
 
-[battle]
-approach_hold = 0.8
-
 [assembly]
 cost_metal   = 45.0
 frame_health = 60.0

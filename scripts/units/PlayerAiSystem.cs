@@ -100,7 +100,10 @@ public partial class PlayerAiSystem : GameSystem
 
         if (SelfRepairs(def))
         {
-            var damaged = Jobs.NearestDamaged(anchor, RepairReach(def), def.CanRepairUnits);
+            // Себя в кандидаты не отдаём: сам себя не чинит никто, и повреждённый ремонтник
+            // иначе нашёл бы себя первым — до себя ноль расстояния
+            var damaged = Jobs.NearestDamaged(anchor, RepairReach(def), def.CanRepairUnits,
+                except: worker);
 
             if (damaged != null)
                 return Order.Repair(damaged);
