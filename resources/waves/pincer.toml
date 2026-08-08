@@ -16,7 +16,7 @@ id   = "pincer"
 name = "Клещи"
 tags = ["split"]
 
-terror_range = [25.0, -1]
+terror_range = [40000.0, -1]
 
 army_power_budget     = 14.0
 army_power_per_terror = 0.5

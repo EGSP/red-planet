@@ -106,7 +106,6 @@ public partial class Session : Node2D
             return;
         }
 
-        SpawnBase();
         SpawnCommander();
         GrantStartingResources();
     }
@@ -122,18 +121,11 @@ public partial class Session : Node2D
             events.Append(new ResourceGained { Kind = ResourceKind.Energy, Amount = StartingEnergy });
     }
 
-    private void SpawnBase()
-    {
-        var def = Systems.Catalog.Unit("fortress");
-        if (def == null)
-        {
-            GD.PushWarning("[Session] нет определения постройки fortress");
-            return;
-        }
-
-        Systems.Spawn.SpawnBuilding(def, Const.LandingPoint);
-    }
-
+    /// <summary>
+    /// Коммандер — единственное, что выдаётся игроку в мире. Стартовой постройки нет:
+    /// база сковывала бы игрока привязкой к точке высадки, а роль единственной цели,
+    /// потеря которой означает поражение, целиком несёт коммандер.
+    /// </summary>
     private void SpawnCommander()
     {
         var def = Systems.Catalog.Unit("commander");
@@ -143,7 +135,9 @@ public partial class Session : Node2D
             return;
         }
 
-        var commander = Systems.Spawn.SpawnUnit(def, Const.CellCenter(new Vector2I(3, 0)));
+        // Точно в точке высадки: смещение на три клетки существовало ради того, чтобы
+        // коммандер не оказался внутри стартовой базы, а базы больше нет
+        var commander = Systems.Spawn.SpawnUnit(def, Const.LandingPoint);
 
         // Коммандер сразу лежит в первой группе. Приказы уходят только выделенным,
         // поэтому без этого начало игры требовало бы сперва найти его глазами
