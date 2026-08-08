@@ -406,8 +406,9 @@ public sealed class UnitDefinition
     public float ApproachHoldFraction = 0.75f;
 
     /// <summary>
-    /// Род при выделении рамкой. Выводится компилятором из тега structure, а не задаётся
-    /// в файле: род — следствие того, чем сущность является, и расходиться с тегами он не должен.
+    /// Род при выделении рамкой. Выводится компилятором из тега structure и из снабжения
+    /// (см. <c>ContentCompiler.SelectionGroupOf</c>), а не задаётся в файле: род — следствие
+    /// того, чем сущность является, и расходиться с тегами и инструментами он не должен.
     /// </summary>
     public SelectionGroup SelectionGroup = SelectionGroup.Bots;
 

@@ -6,7 +6,7 @@
 [ext_resource type="Resource" uid="uid://bc4ptg0thjwnc" path="res://resources/surface/lava/biomes/plains.tres" id="7_biome_plains"]
 [ext_resource type="Resource" uid="uid://cjy5jdob15tvo" path="res://resources/surface/lava/biomes/flows.tres" id="8_biome_flows"]
 [ext_resource type="Resource" uid="uid://crpqmk2i4it1r" path="res://resources/surface/lava/clouds_lava.tres" id="9_clouds"]
-[ext_resource type="Resource" path="res://resources/surface/noise/warp.tres" id="10_warp"]
+[ext_resource type="Resource" uid="uid://b7q14dmcevus5" path="res://resources/surface/noise/warp.tres" id="10_warp"]
 [ext_resource type="Resource" uid="uid://bgerl1npukrc7" path="res://resources/surface/lava/shadows_lava.tres" id="11_shadows"]
 
 [resource]

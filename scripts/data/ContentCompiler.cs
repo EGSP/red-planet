@@ -539,6 +539,30 @@ public static class ContentCompiler
         }
     }
 
+    /// <summary>
+    /// Род при выделении рамкой. Выводится из тега structure и из снабжения, а не задаётся
+    /// в файле: род есть следствие того, чем сущность является, и расходиться с её тегами
+    /// и инструментами он не должен.
+    ///
+    /// БОЕВОЙ — ЭТО ВООРУЖЁННЫЙ И БЕЗ РАБОЧЕГО ИНСТРУМЕНТА. Второе условие отделяет от армии
+    /// коммандера: он вооружён, но занят застройкой, и выделять его отдельно от фабрикаторов
+    /// значило бы мешать обычной работе на базе. Оно же оставляет среди ботов вооружённого
+    /// ремонтника, если такой появится: приоритет армии заведён ради тех, у кого другого
+    /// занятия нет вовсе.
+    ///
+    /// Проверяется после <c>LinkTools</c> — ствол и рабочий инструмент к этому мигу
+    /// уже разложены по своим полям.
+    /// </summary>
+    private static SelectionGroup SelectionGroupOf(Catalog catalog, UnitDefinition definition)
+    {
+        if (definition.Tags.Has(catalog.Tags.Structure))
+            return SelectionGroup.Structures;
+
+        return definition.Weapon != null && definition.BuildTool == null
+            ? SelectionGroup.Army
+            : SelectionGroup.Bots;
+    }
+
     // ── Строительные панели ───────────────────────────────────────────────────────
 
     private static int LoadBuildbars(Catalog catalog)
@@ -767,9 +791,7 @@ public static class ContentCompiler
         {
             errors += LinkTools(catalog, definition);
 
-            definition.SelectionGroup = definition.Tags.Has(catalog.Tags.Structure)
-                ? SelectionGroup.Structures
-                : SelectionGroup.Bots;
+            definition.SelectionGroup = SelectionGroupOf(catalog, definition);
 
             // Тир по умолчанию — t1: иначе каждый файл обязан повторять одно и то же
             if (!definition.Tags.HasAny(catalog.Tags.AnyTier))

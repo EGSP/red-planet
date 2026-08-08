@@ -42,8 +42,11 @@ public partial class Buildbar : CanvasLayer
     /// <summary>Режим последней собранной панели: постановка или очередь завода.</summary>
     private BuildbarKind _kind = BuildbarKind.Placement;
 
-    /// <summary>Заводы, чью очередь показывают счётчики (при kind = Plant).</summary>
-    private readonly List<Plant> _plants = new();
+    /// <summary>
+    /// Заводы, чью очередь показывают счётчики (при kind = Plant). Каркас будущего завода
+    /// стоит здесь наравне с готовым: заказ принимают оба (см. <see cref="IProducer"/>).
+    /// </summary>
+    private readonly List<IProducer> _plants = new();
 
     /// <summary>
     /// Кнопки с счётчиками очереди, собранные при постройке сетки. Держим список,
@@ -136,13 +139,15 @@ public partial class Buildbar : CanvasLayer
 
     /// <summary>
     /// Панели выделенных строителей и заводов. Приоритет у завода: если среди выделенных
-    /// есть Plant, показывается только его plant-панель (очередь), а не постановка.
+    /// есть принимающий заказы, показывается только его plant-панель (очередь),
+    /// а не постановка. Каркас завода в этом смысле от готового завода не отличается —
+    /// очередь производства набирается ещё на стройке.
     /// </summary>
     private static List<BuildbarDefinition> BarsOf(CommandSystem command,
-        out List<Plant> plants, out BuildbarKind kind)
+        out List<IProducer> plants, out BuildbarKind kind)
     {
         var bars = new List<BuildbarDefinition>();
-        plants = new List<Plant>();
+        plants = new List<IProducer>();
         kind = BuildbarKind.Placement;
 
         if (command == null)
@@ -152,7 +157,7 @@ public partial class Buildbar : CanvasLayer
         {
             // Живость проверяем здесь: выделение чистится своей системой, а панель может
             // прийти раньше неё в том же кадре, и обращение к снесённому заводу упало бы
-            if (actor is Plant plant && Alive.Is(plant)
+            if (actor is IProducer { CanProduce: true } plant && Alive.Is(plant as Node)
                                      && plant.Definition?.Buildbar is { } plantBarId)
             {
                 plants.Add(plant);
@@ -182,7 +187,7 @@ public partial class Buildbar : CanvasLayer
         return bars;
     }
 
-    private static string Fingerprint(List<BuildbarDefinition> bars, List<Plant> plants,
+    private static string Fingerprint(List<BuildbarDefinition> bars, List<IProducer> plants,
         BuildbarKind kind)
     {
         string ids = string.Join('|', bars.Select(bar => bar.Id).OrderBy(id => id));

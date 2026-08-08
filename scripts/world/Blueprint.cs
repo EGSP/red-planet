@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 /// <summary>
@@ -7,11 +8,33 @@ using Godot;
 ///
 /// Каркас — тоже цель для врага, и прочности у него доля от готовой постройки
 /// (Const.BlueprintHealthFactor): стройка под обстрелом должна быть рискованной затеей.
+///
+/// КАРКАС ПРИНИМАЕТ ПРИКАЗЫ И ЗАКАЗЫ НАРАВНЕ С ГОТОВОЙ СУЩНОСТЬЮ. Выделить его можно,
+/// снести приказом Delete — тоже, а всё прочее, что примет достроенная сущность, каркас
+/// хранит до готовности и передаёт ей (см. <see cref="Bequeath"/>). Стройка занимает время,
+/// и требовать от игрока вернуться к постройке после её окончания значит терять это время:
+/// точка сбора завода и состав его производства назначаются сразу.
+///
+/// САМ КАРКАС НЕ ИСПОЛНЯЕТ НИЧЕГО, КРОМЕ СНОСА. Он неподвижен, безоружен и ничего не
+/// производит, поэтому приказ стоит на голове его очереди всё время стройки — и потому же
+/// он виден игроку в очереди приказов сразу после назначения.
 /// </summary>
-public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObstacle
+public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObstacle,
+    IOrderable, IProducer
 {
     public UnitDefinition Definition { get; private set; }
     public float Progress { get; private set; }
+
+    /// <summary>
+    /// Заказанное производство: ключи справочника в порядке набора. У каркаса это
+    /// намерение и ничего более — собирать юнитов ему нечем, и очередь просто ждёт
+    /// достройки завода.
+    /// </summary>
+    private readonly List<string> _production = new();
+
+    public OrderQueue Orders { get; }
+
+    public Blueprint() => Orders = new OrderQueue(this);
 
     /// <summary>Угол, под которым каркас поставили. Достроенная сущность его наследует.</summary>
     public float BodyFacing { get; private set; }
@@ -31,6 +54,42 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
     /// <summary>Каркас ёмкости хранилища ещё не даёт, поэтому в документ о гибели ключ не идёт.</summary>
     public string DefinitionId => "";
+
+    /// <summary>
+    /// Имя для интерфейса. Названо отлично от готовой постройки намеренно: по этой же строке
+    /// работают сведение выделения в панели и выбор всех однотипных двойным щелчком, и путать
+    /// начатую стройку с готовым строением там нельзя.
+    /// </summary>
+    public string DisplayName => Definition == null
+        ? "каркас"
+        : $"каркас: {Definition.DisplayName}";
+
+    /// <summary>
+    /// Что каркас принимает в очередь: всё, что примет достроенная сущность, плюс снос.
+    /// Снос добавляется помимо определения, потому что относится он к самому каркасу,
+    /// а не к тому, что из него получится: начатую стройку игрок вправе отменить всегда.
+    /// </summary>
+    public OrderSet AllowedOrders =>
+        (Definition?.AcceptedOrders ?? OrderSet.None).With(OrderKind.Delete);
+
+    /// <summary>Исполнимое, но не объявленное — панель помечает звёздочкой.</summary>
+    public OrderSet SoftOrders =>
+        (Definition?.SoftOrders ?? OrderSet.None).Except(AllowedOrders);
+
+    /// <summary>Каркас неподвижен и рамкой выделяется вместе с постройками.</summary>
+    public SelectionGroup SelectionGroup => SelectionGroup.Structures;
+
+    /// <summary>
+    /// Заказы принимает только каркас завода. У прочих каркасов очередь производства
+    /// остаётся пустой: панель производства к ним не относится, хотя строительный
+    /// раздел в определении бывает и у них.
+    /// </summary>
+    public bool CanProduce => Definition?.Plant != null;
+
+    /// <summary>Режим производства, назначенный до постройки. Умолчание то же, что у завода.</summary>
+    public bool Infinite { get; set; } = true;
+
+    public int Revision { get; private set; }
 
     public Faction Faction => Faction.Player;
 
@@ -55,6 +114,100 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     public override void _Ready() => Health ??= new Health(100f * Const.BlueprintHealthFactor);
 
     public override void _Process(double delta) => QueueRedraw();
+
+    // ── приказы ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Каркас исполняет один приказ — снос; остальное он держит для достроенной сущности.
+    /// Держать, а не отвергать, нужно потому, что назначенное каркасу относится к постройке,
+    /// которая из него выйдет: неподвижному каркасу завода приказ «идти» бессмыслен, а точке
+    /// сбора для его юнитов — нет, и это один и тот же приказ.
+    /// </summary>
+    public void RunOrder(Order order, double dt)
+    {
+        if (order.Kind == OrderKind.Delete)
+            Demolish();
+    }
+
+    /// <summary>Приказов нет: каркасу и без них есть чем заняться — он строится.</summary>
+    public void OnIdle(double dt) { }
+
+    /// <summary>
+    /// Снос каркаса по воле игрока — тем же каналом, что и гибель от обстрела: документ
+    /// <c>DamageDealt</c> разбирает DamageSystem в фазе реакции, и проекции видят
+    /// <c>EntityDestroyed</c>. Прямой QueueFree отсюда оставил бы журнал без следа.
+    ///
+    /// Вложенный в стройку метал не возвращается: снос есть потеря, а не отмена сделанного.
+    /// Отменить без потерь можно план, пока за него не взялись, — см. <see cref="BuildPlan"/>.
+    /// </summary>
+    private void Demolish()
+    {
+        if (Health == null || Health.IsDead || IsQueuedForDeletion())
+            return;
+
+        GameManager.I.Events.Append(new DamageDealt
+        {
+            TargetId = Id,
+            SourceId = Id,
+            Amount = Mathf.Max(Health.Current, 1f),
+            Pos = GlobalPosition,
+        });
+    }
+
+    // ── очередь производства ───────────────────────────────────────────────────
+
+    public int CountOf(string unitId)
+    {
+        int count = 0;
+
+        foreach (string id in _production)
+            if (id == unitId)
+                count++;
+
+        return count;
+    }
+
+    /// <summary>
+    /// Заказать выпуск. Ключ проверяется по каталогу так же, как у завода: неизвестное
+    /// определение до достройки всё равно не превратилось бы в юнита.
+    /// </summary>
+    public void Enqueue(string unitId, int count = 1)
+    {
+        if (!CanProduce || string.IsNullOrEmpty(unitId) || count <= 0)
+            return;
+
+        if (GameManager.I?.Catalog.Unit(unitId) == null)
+            return;
+
+        for (int i = 0; i < count; i++)
+            _production.Add(unitId);
+
+        Revision++;
+    }
+
+    /// <summary>
+    /// Снять с конца очереди до <paramref name="count"/> последних вхождений этого типа.
+    /// Указателя и накопленного прогресса у каркаса нет — снимать проще, чем заводу.
+    /// </summary>
+    public void Dequeue(string unitId, int count = 1)
+    {
+        if (string.IsNullOrEmpty(unitId) || count <= 0)
+            return;
+
+        for (int n = 0; n < count; n++)
+        {
+            int at = _production.LastIndexOf(unitId);
+
+            // Вхождения кончились раньше запрошенного числа — выходим из цикла, а не из
+            // метода: снятое до этого мига уже изменило очередь, и ревизию надо поднять
+            if (at < 0)
+                break;
+
+            _production.RemoveAt(at);
+        }
+
+        Revision++;
+    }
 
     /// <summary>
     /// Спрос стройки: мощность строителей — это метал в секунду, а энергия — сумма
@@ -114,18 +267,50 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         // Угол наследуется каркасом: игрок развернул стройку, и готовая постройка обязана
         // встать так же. Юниту угол не передаётся — у подвижного он означает курс,
         // и первый же шаг его перепишет
-        int spawnedId = Definition.IsStructure
-            ? gm.Spawn.SpawnBuilding(Definition, center, BodyFacing).Id
-            : gm.Spawn.SpawnUnit(Definition, center).Id;
+        var heir = Definition.IsStructure
+            ? (IOrderable)gm.Spawn.SpawnBuilding(Definition, center, BodyFacing)
+            : gm.Spawn.SpawnUnit(Definition, center);
 
         gm.Events.Append(new ConstructionCompleted
         {
-            EntityId = spawnedId,
+            EntityId = heir.EntityId,
             DefinitionId = Definition.Id,
             Pos = center,
         });
 
+        Bequeath(heir);
+
         Retire();
+    }
+
+    /// <summary>
+    /// Передать достроенной сущности всё, что было назначено каркасу: ветку приказов
+    /// и набранную очередь производства.
+    ///
+    /// ВЕТКА ПЕРЕДАЁТСЯ ТА ЖЕ САМАЯ, А НЕ КОПИЯ. Приказ, отданный отряду вместе с каркасом,
+    /// один на всех получателей (см. <see cref="Order"/>), и достроенная постройка обязана
+    /// оказаться в том же приказе, а не в его двойнике. Подписка на ветку переезжает
+    /// с курсора каркаса на курсор преемника: сперва подписывается преемник, и только потом
+    /// каркас свою подписку снимает, — иначе ветка на миг осталась бы без исполнителей вовсе.
+    ///
+    /// Отбирать приказы по допустимости не нужно: набор каркаса и есть набор достроенной
+    /// сущности, за вычетом сноса, который до этого мига уже был бы исполнен.
+    /// </summary>
+    private void Bequeath(IOrderable heir)
+    {
+        // Подписку каркаса снимает Retire — уже после того, как преемник подписался сам
+        if (Orders.List is { } branch)
+            heir.Orders.Adopt(branch);
+
+        if (heir is not IProducer producer || !producer.CanProduce)
+            return;
+
+        producer.Infinite = Infinite;
+
+        foreach (string unitId in _production)
+            producer.Enqueue(unitId);
+
+        _production.Clear();
     }
 
     /// <summary>Каркас разбит: вывести из игры. Место и EntityStore освобождает Spawner.</summary>
@@ -135,6 +320,12 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     private void Retire()
     {
         ReleaseWorkers();
+
+        // Отпускаем ветку приказов: при достройке преемник к этому мигу уже подписан
+        // на неё сам, а при сносе работать по ней от лица каркаса больше некому
+        Orders.Clear();
+
+        _production.Clear();
         SetProcess(false);
         Visible = false;
         QueueFree();

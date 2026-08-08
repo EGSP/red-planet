@@ -11,7 +11,7 @@ using Godot;
 /// Одновременно из корпуса выезжает не больше одного юнита: следующий слот и пауза
 /// factory_cooldown начинаются только после снятия Leaving у текущего.
 /// </summary>
-public partial class Plant : Building
+public partial class Plant : Building, IProducer
 {
     private readonly List<string> _queue = new();
 
@@ -45,6 +45,9 @@ public partial class Plant : Building
     public int Revision { get; private set; }
 
     public IReadOnlyList<string> Queue => _queue;
+
+    /// <summary>Готовый завод производит всегда — на то он и построен.</summary>
+    public bool CanProduce => true;
 
     public float ProgressRatio
     {
