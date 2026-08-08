@@ -3,7 +3,7 @@
 id    = "dox"
 base  = "/units/base_unit.toml"
 name  = "Докс"
-color = [0.4, 0.75, 1.0]
+color = [0.41, 0.6, 0.82]
 tools = ["dox_smg"]
 
 [footprint]

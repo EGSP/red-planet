@@ -4,7 +4,7 @@ id    = "inferno"
 base  = "/units/base_unit.toml"
 name  = "Инферно"
 class = "vehicle"
-color = [0.95, 0.45, 0.25]
+color = [0.41, 0.6, 0.82]
 tools = ["inferno_flamer"]
 
 [footprint]
@@ -15,7 +15,7 @@ max_health   = 1000.0
 radius       = 0.48
 vision_range = 8.0
 hull         = "rect"
-hull_aspect  = 1.2
+hull_aspect  = 1.1
 armor_rings  = 1
 front_plate  = true
 

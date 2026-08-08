@@ -3,14 +3,15 @@
 id    = "enforcer"
 base  = "/units/enemies/base_enemy.toml"
 name  = "Каратель"
-color = [0.7, 0.25, 0.4]
+color = [0.62, 0.23, 0.2]
 tags  = ["mobile", "enemy", "t2"]
 tools = ["enforcer_guns"]
 
 [body]
 max_health  = 450.0
 radius      = 0.42
-hull        = "hex"
+hull        = "circle"
+hull_trim   = "shoulders"
 armor_rings = 1
 
 [movement]

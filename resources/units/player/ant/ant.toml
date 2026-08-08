@@ -4,7 +4,7 @@ id    = "ant"
 base  = "/units/base_unit.toml"
 name  = "Ант"
 class = "vehicle"
-color = [0.35, 0.7, 0.55]
+color = [0.41, 0.6, 0.82]
 tools = ["ant_cannon"]
 
 [footprint]
@@ -14,7 +14,7 @@ rows = ["#"]
 max_health  = 250.0
 radius      = 0.38
 hull        = "rect"
-hull_aspect = 1.35
+hull_aspect = 1.5
 
 [movement]
 speed      = 2.0

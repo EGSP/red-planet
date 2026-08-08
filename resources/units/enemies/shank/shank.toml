@@ -3,12 +3,13 @@
 id    = "shank"
 base  = "/units/enemies/base_enemy.toml"
 name  = "Шэнк"
-color = [0.75, 0.4, 0.35]
+color = [0.82, 0.44, 0.41]
 tools = ["shank_cannon"]
 
 [body]
-max_health = 300.0
-hull       = "hex"
+max_health  = 300.0
+hull        = "rect"
+hull_aspect = 1.55
 
 [movement]
 speed      = 2.0

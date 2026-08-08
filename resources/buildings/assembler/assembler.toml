@@ -4,7 +4,7 @@ id    = "assembler"
 base  = "/buildings/base_building.toml"
 name  = "Башня-сборщик"
 class = "assembler"
-color = [0.45, 0.85, 0.6]
+color = [0.3, 0.74, 0.46]
 tags  = ["structure", "builder", "t1"]
 tools = ["assembler_arm"]
 

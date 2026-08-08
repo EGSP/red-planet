@@ -11,4 +11,4 @@ projectile_speed  = 8.3
 spread_degrees    = 3.0
 aim_cone_degrees  = 10.0
 projectile_radius = 0.09
-projectile_color  = [0.55, 0.85, 1.0]
+projectile_color  = [0.76, 0.9, 1]

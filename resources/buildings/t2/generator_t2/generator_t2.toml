@@ -3,7 +3,7 @@
 id    = "generator_t2"
 base  = "/buildings/base_building.toml"
 name  = "Реактор"
-color = [1.0, 0.62, 0.2]
+color = [0.09, 0.43, 0.56]
 tags  = ["structure", "economy", "t2", "important"]
 
 [footprint]

@@ -3,7 +3,7 @@
 id       = "fabricator"
 base     = "/units/base_unit.toml"
 name     = "Фабрикатор"
-color    = [0.4, 0.9, 0.5]
+color    = [0.41, 0.82, 0.61]
 buildbar = "fabricator_buildbar"
 tags     = ["mobile", "builder"]
 tools    = ["fabricator_arm"]

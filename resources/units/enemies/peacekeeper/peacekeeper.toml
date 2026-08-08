@@ -3,7 +3,7 @@
 id    = "peacekeeper"
 base  = "/units/enemies/base_enemy.toml"
 name  = "Миротворец"
-color = [0.95, 0.6, 0.2]
+color = [0.82, 0.44, 0.41]
 tools = ["peacekeeper_smg"]
 
 [body]

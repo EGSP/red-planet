@@ -3,7 +3,7 @@
 id    = "metal_storage"
 base  = "/buildings/base_building.toml"
 name  = "Склад металла"
-color = [0.7, 0.45, 0.28]
+color = [0.53, 0.7, 0.68]
 tags  = ["structure", "economy", "t1"]
 
 [footprint]

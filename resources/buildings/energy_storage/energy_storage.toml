@@ -3,7 +3,7 @@
 id    = "energy_storage"
 base  = "/buildings/base_building.toml"
 name  = "Батарея"
-color = [0.45, 0.75, 0.95]
+color = [0.53, 0.67, 0.72]
 tags  = ["structure", "economy", "t1"]
 
 [footprint]

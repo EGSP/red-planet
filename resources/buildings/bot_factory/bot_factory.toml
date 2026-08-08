@@ -4,7 +4,7 @@ id       = "bot_factory"
 base     = "/buildings/base_building.toml"
 name     = "Завод ботов"
 class    = "plant"
-color    = [0.45, 0.55, 0.7]
+color    = [0.53, 0.8, 0.66]
 buildbar = "bot_factory_buildbar"
 tags     = ["structure", "t1"]
 

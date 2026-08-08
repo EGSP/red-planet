@@ -7,7 +7,7 @@
 id       = "fabricator_t2"
 base     = "/units/base_unit.toml"
 name     = "Тяжёлый фабрикатор"
-color    = [0.35, 0.8, 0.7]
+color    = [0.2, 0.62, 0.41]
 buildbar = "fabricator_t2_buildbar"
 tags     = ["mobile", "builder", "t2"]
 tools    = ["fabricator_t2_arm"]
@@ -20,6 +20,7 @@ max_health   = 150.0
 radius       = 0.42
 vision_range = 10.0
 hull         = "hex"
+hull_trim    = "shoulders"
 
 [movement]
 speed      = 3.0

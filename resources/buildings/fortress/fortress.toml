@@ -4,7 +4,7 @@
 id    = "fortress"
 base  = "/buildings/base_building.toml"
 name  = "Крепость"
-color = [0.35, 0.4, 0.55]
+color = [0.46, 0.52, 0.7]
 tags  = ["structure", "economy", "important"]
 
 [footprint]
