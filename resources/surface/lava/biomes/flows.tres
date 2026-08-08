@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="SurfaceBiome" format=3 uid="uid://cjy5jdob15tvo"]
+
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
+[ext_resource type="Resource" uid="uid://b523kri2qb240" path="res://resources/surface/lava/decals/hot_cracks.tres" id="4_hot_cracks"]
+
+[resource]
+script = ExtResource("1_biome")
+Id = "lava · потоки"
+Enabled = false
+Decals = [ExtResource("4_hot_cracks")]

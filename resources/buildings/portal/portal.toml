@@ -3,7 +3,7 @@
 id    = "portal"
 base  = "/buildings/base_building.toml"
 name  = "Портал"
-color = [0.35, 0.78, 0.92]
+color = [0.23, 0.81, 0.88]
 tags  = ["structure", "important"]
 
 [footprint]

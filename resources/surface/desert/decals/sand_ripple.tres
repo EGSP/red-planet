@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://cao0428aknnpi"]
+
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="1_ojgmu"]
+[ext_resource type="Texture2D" uid="uid://e78l8xerr73l" path="res://assets/sprites/terrain/lava/lava_decal_01_diffuse.png" id="2_ojgmu"]
+
+[resource]
+script = ExtResource("1_decal")
+Id = "desert · пески · рябь"
+Texture = ExtResource("2_ojgmu")
+Layer = 2
+Noise = ExtResource("1_ojgmu")
+TemperatureRange = Vector2(0.75, 1)
+Spacing = 0.031
+Chance = 0.36
+Jitter = 0.9
+Size = 0.1707
+SizeVariation = 0.35
+Tint = Color(1.3807716, 1.3807716, 1.3807716, 1)

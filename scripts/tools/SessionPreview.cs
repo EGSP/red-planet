@@ -384,6 +384,32 @@ public partial class SessionPreview : Node2D
                 ShapeDraw.Circle(this, position, radius, style);
                 break;
         }
+
+        DrawTrimSilhouette(position, definition, radius);
+    }
+
+    /// <summary>
+    /// Надстройка тира поверх силуэта. В предпросмотре она нужна затем же, зачем в игре:
+    /// состав волны читается по тиру, а не только по числу машин.
+    /// </summary>
+    private void DrawTrimSilhouette(Vector2 position, UnitDefinition definition, float radius)
+    {
+        var parts = HullGeometry.Trim(definition.HullTrim, radius);
+
+        if (parts.Length == 0)
+            return;
+
+        var style = ShapeStyle.Solid(definition.Color.Lightened(0.2f));
+
+        foreach (var part in parts)
+        {
+            var moved = new Vector2[part.Length];
+
+            for (int i = 0; i < part.Length; i++)
+                moved[i] = position + part[i];
+
+            ShapeDraw.Polygon(this, moved, style);
+        }
     }
 
     private void DrawWaveSector(WaveShape shape, float center)

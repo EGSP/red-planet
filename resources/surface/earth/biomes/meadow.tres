@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SurfaceBiome" format=3 uid="uid://bafxbgtxhg1ue"]
+
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
+[ext_resource type="Resource" uid="uid://ip6aal51ey8k" path="res://resources/surface/earth/decals/earth_decal_03.tres" id="3_gl72s"]
+[ext_resource type="Resource" uid="uid://byaeeipicfd6r" path="res://resources/surface/earth/tiles/dirt.tres" id="4_gl72s"]
+[ext_resource type="Resource" uid="uid://c1t7ttubr8772" path="res://resources/surface/earth/decals/meadow_growth.tres" id="4_meadow_growth"]
+[ext_resource type="Resource" uid="uid://c5nx82mumqw0j" path="res://resources/surface/earth/decals/meadow_bald.tres" id="5_meadow_bald"]
+
+[resource]
+script = ExtResource("1_biome")
+Id = "earth · луг"
+Tiles = [ExtResource("4_gl72s")]
+Decals = [ExtResource("5_meadow_bald"), ExtResource("4_meadow_growth"), ExtResource("3_gl72s")]

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://f34gxjdv7ib6"]
+
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="1_t2b2f"]
+[ext_resource type="Texture2D" uid="uid://wbow43rfnmj8" path="res://assets/sprites/terrain/lava/lava_decal_yellowSpots_diffuse.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_decal")
+Id = "lava · потоки · жёлтые налёты"
+Texture = ExtResource("2_tex")
+Layer = 5
+Noise = ExtResource("1_t2b2f")
+NoiseRange = Vector2(0.5, 1)
+Spacing = 0.1068
+Chance = 0.35
+Jitter = 0.9
+Size = 0.0237
+SizeVariation = 0.55
+Tint = Color(1, 1, 1, 0.85)
+TintVariation = 0.14

@@ -362,6 +362,7 @@ public static class ContentCompiler
             definition.Radius = body.Float("radius", basis.Radius);
             definition.VisionRange = body.Float("vision_range", basis.VisionRange);
             definition.Hull = body.Enum("hull", basis.Hull);
+            definition.HullTrim = body.Enum("hull_trim", basis.HullTrim);
             definition.HullAspect = body.Float("hull_aspect", basis.HullAspect);
             definition.ArmorRings = body.Int("armor_rings", basis.ArmorRings);
             definition.FrontPlate = body.Bool("front_plate", basis.FrontPlate);

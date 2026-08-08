@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="CameraSettings" format=3 uid="uid://5bo3xkxq5bvu"]
+
+[ext_resource type="Script" uid="uid://bhrtegskj5mvq" path="res://scripts/world/CameraSettings.cs" id="1_camera"]
+
+[resource]
+script = ExtResource("1_camera")
+ZoomMin = 0.3
+ZoomMax = 0.8

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="SurfaceSettings" format=3 uid="uid://cj1eanqkijrtf"]
+
+[ext_resource type="Script" uid="uid://ct2qu3ueuenor" path="res://scripts/world/surface/SurfaceSettings.cs" id="1_settings"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="2_coarse"]
+[ext_resource type="Resource" uid="uid://bfr8cr7pg3aky" path="res://resources/surface/noise/relief.tres" id="4_relief"]
+[ext_resource type="Resource" uid="uid://c1xlfkd4e4385" path="res://resources/surface/desert/biomes/sands.tres" id="7_biome_sands"]
+[ext_resource type="Resource" uid="uid://orhdw7ot615v" path="res://resources/surface/desert/clouds_desert.tres" id="9_clouds"]
+[ext_resource type="Resource" path="res://resources/surface/noise/warp.tres" id="10_warp"]
+[ext_resource type="Resource" uid="uid://bgerd5kudkrc7" path="res://resources/surface/desert/shadows_desert.tres" id="11_shadows"]
+
+[resource]
+script = ExtResource("1_settings")
+Id = "desert"
+BaseNoise = ExtResource("2_coarse")
+Smoothness = 0.115
+Ambient = Color(0.99999934, 0.9610074, 0.8885687, 1)
+IsothermCurvature = 2.0
+IsothermOffset = 0.0
+TemperatureWarp = 0.08
+TemperatureWarpNoise = ExtResource("10_warp")
+HeightNoise = ExtResource("4_relief")
+Biomes = [ExtResource("7_biome_sands")]
+Clouds = ExtResource("9_clouds")
+Shadows = ExtResource("11_shadows")

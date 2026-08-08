@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://b523kri2qb240"]
+
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="1_wr3bm"]
+[ext_resource type="Texture2D" uid="uid://djop8b8hkmmph" path="res://assets/sprites/terrain/lava/lava_decal_cracks_04_diffuse.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_decal")
+Id = "lava · потоки · раскалённые трещины"
+Texture = ExtResource("2_tex")
+Layer = 4
+Noise = ExtResource("1_wr3bm")
+HeightRange = Vector2(0.65, 1)
+Spacing = 0.0399
+Chance = 0.53
+CountMax = 4
+Jitter = 0.85
+Size = 0.2206
+SizeVariation = 0.59
+Tint = Color(0.87758666, 0.7364384, 0.6423396, 0.7254902)
+TintVariation = 0.17

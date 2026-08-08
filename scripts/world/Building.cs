@@ -198,6 +198,10 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         // ноду держит за собой турель, у которой в Rotation ось башни
         DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
 
+        // Площадка ложится под корпус: она принадлежит постройке, а не поверхности,
+        // и потому исчезает вместе с ней
+        BuildingSkirt.Draw(this, rect);
+
         ShapeDraw.Rect(this, rect,
             ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f, WidthMode.Screen));
 

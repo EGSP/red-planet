@@ -22,7 +22,7 @@ using Godot;
 /// Расстояние считается чемфером 3-4 и насыщается <see cref="NavSettings.MaxClearance"/>,
 /// поэтому влияние правки конечно.
 /// </summary>
-public sealed class NavGrid
+public sealed class NavGrid : IClearanceField
 {
     public const int Cell = Const.NavCell;
 
@@ -531,6 +531,9 @@ public sealed class NavGrid
     }
 
     // ── чтение для отрисовки ──────────────────────────────────────────────────────
+
+    /// <summary>Сторона растра. Свойство статическое, отсюда явная реализация интерфейса.</summary>
+    int IClearanceField.Width => Width;
 
     /// <summary>Непроходимость по номеру ячейки. Перед массовым чтением нужен <see cref="Fresh"/>.</summary>
     public bool BlockedAt(int index) => IsBlocked(index);

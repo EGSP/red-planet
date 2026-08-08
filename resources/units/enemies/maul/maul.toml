@@ -3,7 +3,7 @@
 id    = "maul"
 base  = "/units/enemies/base_enemy.toml"
 name  = "Молот"
-color = [0.85, 0.3, 0.25]
+color = [0.82, 0.44, 0.41]
 tools = ["maul_cannon"]
 
 [body]

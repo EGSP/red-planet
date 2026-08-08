@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="SurfaceTile" format=3 uid="uid://dh1n5bvl33akh"]
+
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="1_tile"]
+[ext_resource type="Texture2D" uid="uid://m86knpdqmvcd" path="res://assets/sprites/terrain/lava/lava_tile.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_tile")
+Id = "lava · тёмная порода"
+Texture = ExtResource("2_tex")
+SizePx = 544.0
+Tint = Color(0.61, 0.57584, 0.5673, 1)

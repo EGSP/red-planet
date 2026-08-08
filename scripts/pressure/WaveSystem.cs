@@ -106,8 +106,23 @@ public partial class WaveSystem : GameSystem
     /// <summary>Сколько осталось до ближайшей волны, секунд. Показывается в отладочной панели.</summary>
     public float TimeLeft => Mathf.Max(_timer, 0f);
 
+    /// <summary>
+    /// Время партии, секунд. По этой же шкале записано <see cref="WaveRecord.GameTime"/>,
+    /// поэтому полоса событий сравнивает историю с текущим мигом напрямую.
+    /// </summary>
+    public float GameTime => _gameTime;
+
     /// <summary>Прошедшие волны, от старых к новым.</summary>
     public IReadOnlyList<WaveRecord> History => _history;
+
+    /// <summary>Сколько очагов уже набрано, но ещё не выведено на карту.</summary>
+    public int PendingCount => _pending.Count;
+
+    /// <summary>
+    /// Через сколько секунд выйдет очаг с этим номером. Порядок в списке произвольный:
+    /// очаги удаляются по мере выхода, поэтому номер служит только перебору.
+    /// </summary>
+    public float PendingIn(int index) => Mathf.Max(_pending[index].Remaining, 0f);
 
     protected override void OnRegister()
     {

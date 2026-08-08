@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ShadowSettings" format=3 uid="uid://bgerl1npukrc7"]
+
+[ext_resource type="Script" uid="uid://3rpke1nhqh1d" path="res://scripts/world/ShadowSettings.cs" id="1_shadow"]
+
+[sub_resource type="Gradient" id="Gradient_shadow"]
+offsets = PackedFloat32Array(0, 0.49086758, 1)
+colors = PackedColorArray(0.1984545, 0.045039378, 0.10253746, 0.4392157, 0.16, 0.050960004, 0.020799998, 0.23921569, 0, 0, 0, 0)
+
+[resource]
+script = ExtResource("1_shadow")
+Tint = SubResource("Gradient_shadow")
+WidthPx = 64.0
+Falloff = 1.2

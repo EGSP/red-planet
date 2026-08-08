@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SurfaceBiome" format=3 uid="uid://bc4ptg0thjwnc"]
+
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
+[ext_resource type="Resource" uid="uid://cghcim1dmnk51" path="res://resources/surface/lava/decals/plains_plates.tres" id="3_plains_plates"]
+[ext_resource type="Resource" uid="uid://bv6nstucsxvfk" path="res://resources/surface/lava/tiles/lava_tile_01.tres" id="5_ue618"]
+[ext_resource type="Resource" uid="uid://2j5sek7n0iyo" path="res://resources/surface/lava/decals/plains_cracks.tres" id="6_plains_cracks"]
+[ext_resource type="Resource" uid="uid://d2igjpphsn8d5" path="res://resources/surface/lava/tiles/lava_tile_02.tres" id="6_swknr"]
+
+[resource]
+script = ExtResource("1_biome")
+Id = "lava · равнина"
+Tiles = [ExtResource("5_ue618"), ExtResource("6_swknr")]
+Decals = [ExtResource("3_plains_plates"), ExtResource("6_plains_cracks")]

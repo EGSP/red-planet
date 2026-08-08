@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="CloudSettings" format=3 uid="uid://orhes64kd15v"]
+
+[ext_resource type="Script" uid="uid://cuposhk15xco4" path="res://scripts/world/CloudSettings.cs" id="1_clouds"]
+[ext_resource type="Resource" uid="uid://c0oomfade01rp" path="res://resources/tuning/cloud_zoom_fade.tres" id="2_zoom"]
+
+[sub_resource type="Gradient" id="Gradient_body"]
+offsets = PackedFloat32Array(0, 0.55, 1)
+colors = PackedColorArray(0.85, 0.87, 0.94, 0, 0.85, 0.87, 0.94, 0.05, 0.85, 0.87, 0.94, 0.14)
+
+[sub_resource type="Gradient" id="Gradient_shade"]
+offsets = PackedFloat32Array(0, 0.52582157, 0.9810427)
+colors = PackedColorArray(0.17050001, 0.210025, 0.31, 0, 0.16065001, 0.17, 0.057799995, 0.09019608, 0.15264001, 0.18, 0.0936, 0.2901961)
+
+[resource]
+script = ExtResource("1_clouds")
+Shade = SubResource("Gradient_shade")
+Body = SubResource("Gradient_body")
+ZoomFade = ExtResource("2_zoom")
+Coverage = 0.63
+Erosion = 0.0
+Zoom = 3088.0
+ScaleX = 4.0
+ScaleY = 5.0
+WindSpeedPx = 48.5

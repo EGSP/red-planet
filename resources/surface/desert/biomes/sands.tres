@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SurfaceBiome" format=3 uid="uid://c1xlfkd4e4385"]
+
+[ext_resource type="Script" uid="uid://liac3lj4m3c" path="res://scripts/world/surface/SurfaceBiome.cs" id="1_biome"]
+[ext_resource type="Resource" uid="uid://baaxqmrogt4gy" path="res://resources/surface/desert/tiles/sand.tres" id="2_tile_sand"]
+[ext_resource type="Resource" uid="uid://bce2hqlabfnjg" path="res://resources/surface/desert/decals/sand_drift.tres" id="3_sand_drift"]
+[ext_resource type="Resource" uid="uid://cao0428aknnpi" path="res://resources/surface/desert/decals/sand_ripple.tres" id="4_sand_ripple"]
+[ext_resource type="Resource" uid="uid://cm67an7o7be3v" path="res://resources/surface/desert/tiles/crust.tres" id="5_1u0cu"]
+[ext_resource type="Resource" uid="uid://b00iqo8rse08m" path="res://resources/surface/desert/decals/sand_patch.tres" id="5_sand_patch"]
+
+[resource]
+script = ExtResource("1_biome")
+Id = "desert · пески"
+Tiles = [ExtResource("2_tile_sand"), ExtResource("5_1u0cu")]
+Decals = [ExtResource("3_sand_drift"), ExtResource("5_sand_patch"), ExtResource("4_sand_ripple")]

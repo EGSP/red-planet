@@ -4,7 +4,7 @@ using System.Collections.Generic;
 /// Неизменяемый снимок навигационного растра на одну ревизию источника.
 /// Массив тайлов копируется при публикации; неизменённые тайлы разделяются по ссылке.
 /// </summary>
-public sealed class NavSnapshot
+public sealed class NavSnapshot : IClearanceField
 {
     public readonly int SourceRevision;
     public readonly int Width;
@@ -63,6 +63,15 @@ public sealed class NavSnapshot
 
     public int DistanceAt(int cellIndex) =>
         TryIndex(cellIndex, out var tile, out int local) ? tile.Distance[local] : 0;
+
+    /// <summary>Сторона растра. Поле объявлено раньше интерфейса, отсюда явная реализация.</summary>
+    int IClearanceField.Width => Width;
+
+    /// <summary>
+    /// Меткой состояния служит ревизия источника: снимок неизменяем, поэтому иной метки
+    /// у него быть и не может.
+    /// </summary>
+    int IClearanceField.Revision => SourceRevision;
 
     public int ComponentAt(int cellIndex, int required) =>
         Components != null && Components.TryGetValue(required, out var labels) &&

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://bntvvhvh0n4jl"]
+
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
+[ext_resource type="Texture2D" uid="uid://c0ewkwkw15d61" path="res://assets/sprites/terrain/earth/grass_decal_water_01_diffuse.png" id="2_tex"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="3_noise"]
+
+[resource]
+script = ExtResource("1_decal")
+Id = "earth · низина · мочажина"
+Enabled = false
+Texture = ExtResource("2_tex")
+Layer = 4
+Noise = ExtResource("3_noise")
+NoiseRange = Vector2(0.55, 1)
+HeightRange = Vector2(0, 0.55)
+Spacing = 0.0514
+Chance = 0.45
+Jitter = 0.85
+Size = 0.0475
+SizeVariation = 0.3
+Tint = Color(1, 1, 1, 0.8)

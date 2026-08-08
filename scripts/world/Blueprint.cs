@@ -156,6 +156,9 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         // и показывать его иначе, чем оно занято, нельзя
         DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
 
+        // Площадка принадлежит каркасу так же, как готовой постройке: исчезает вместе с ним
+        BuildingSkirt.Draw(this, rect);
+
         ShapeDraw.Rect(this, rect, ShapeStyle.Solid(new Color(Definition.Color, 0.15f)));
 
         // Заполнение снизу вверх по прогрессу

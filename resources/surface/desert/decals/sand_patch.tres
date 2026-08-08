@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://b00iqo8rse08m"]
+
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="1_734be"]
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
+[ext_resource type="Texture2D" uid="uid://bgr557katrktu" path="res://assets/sprites/terrain/desert/desert_sand_decal_03_diffuse.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_decal")
+Id = "desert · пески · песчаное пятно"
+Texture = ExtResource("2_tex")
+Layer = 3
+Noise = ExtResource("1_734be")
+TemperatureRange = Vector2(0, 0.5)
+HeightRange = Vector2(0.6, 1)
+Spacing = 0.0187
+Chance = 1.0
+Jitter = 0.0
+Size = 0.0761
+SizeVariation = 0.49
+Tint = Color(0.52, 0.49504, 0.45759997, 1)
+TintVariation = 0.16

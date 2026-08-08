@@ -5,7 +5,7 @@
 id       = "atlas"
 base     = "/units/base_unit.toml"
 name     = "Атлас"
-color    = [0.55, 0.85, 0.75]
+color    = [0.07, 0.25, 0.46]
 tags     = ["mobile", "titan", "important"]
 tools    = ["atlas_hammer"]
 

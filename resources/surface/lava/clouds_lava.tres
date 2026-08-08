@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="CloudSettings" format=3 uid="uid://crpqmk2i4it1r"]
+
+[ext_resource type="Script" uid="uid://cuposhk15xco4" path="res://scripts/world/CloudSettings.cs" id="1_clouds"]
+[ext_resource type="Gradient" uid="uid://bgi2thl12fgfp" path="res://resources/surface/lava/clouds_lava_gradient.tres" id="1_eywrs"]
+[ext_resource type="Gradient" uid="uid://uftlwdco4vcw" path="res://resources/surface/lava/clouds_lava_body_gradient.tres" id="1_nohhy"]
+[ext_resource type="Resource" uid="uid://c0oomfade01rp" path="res://resources/tuning/cloud_zoom_fade.tres" id="2_zoom"]
+
+[resource]
+script = ExtResource("1_clouds")
+Shade = ExtResource("1_eywrs")
+Body = ExtResource("1_nohhy")
+ZoomFade = ExtResource("2_zoom")
+Zoom = 3088.0
+ScaleX = 4.0
+ScaleY = 4.0
+WindSpeedPx = 48.5

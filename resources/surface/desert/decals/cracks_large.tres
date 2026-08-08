@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://cnfcfc30oho3f"]
+
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
+[ext_resource type="Texture2D" uid="uid://baxypgkugbjrq" path="res://assets/sprites/terrain/desert/desert_cracks_decal_01_diffuse.png" id="2_tex"]
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="3_noise"]
+
+[resource]
+script = ExtResource("1_decal")
+Id = "desert · каменистая пустошь · трещины крупные"
+Enabled = false
+Texture = ExtResource("2_tex")
+Layer = 2
+Noise = ExtResource("3_noise")
+NoiseRange = Vector2(0.2, 0.65)
+Spacing = 0.0455
+Chance = 0.45
+Jitter = 0.85
+Size = 0.0415
+SizeVariation = 0.3
+Tint = Color(1, 1, 1, 0.9)
+TintVariation = 0.09

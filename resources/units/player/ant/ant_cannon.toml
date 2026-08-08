@@ -10,4 +10,4 @@ fire_interval     = 1.818
 projectile_speed  = 10.0
 spread_degrees    = 2.0
 projectile_radius = 0.08
-projectile_color  = [0.4, 0.95, 0.55]
+projectile_color  = [0.68, 0.83, 1]

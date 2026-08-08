@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SurfaceDecal" format=3 uid="uid://bdsuat0xi4vke"]
+
+[ext_resource type="Resource" uid="uid://583taehhv6po" path="res://resources/surface/noise/coarse.tres" id="1_3cwwr"]
+[ext_resource type="Script" uid="uid://cr6m8cos3g6i5" path="res://scripts/world/surface/SurfaceDecal.cs" id="1_decal"]
+[ext_resource type="Texture2D" uid="uid://byvfrfjx6xtol" path="res://assets/sprites/terrain/lava/lava_decal_bigRocks_diffuse.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_decal")
+Id = "lava · потоки · крупные камни"
+Enabled = false
+Texture = ExtResource("2_tex")
+Layer = 6
+Noise = ExtResource("1_3cwwr")
+NoiseRange = Vector2(0.6, 1)
+Spacing = 0.0336
+Chance = 0.3
+Jitter = 0.9
+Size = 0.0267
+SizeVariation = 0.35
+TintVariation = 0.12

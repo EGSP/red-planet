@@ -4,7 +4,7 @@ id    = "metal_maker"
 base  = "/buildings/base_building.toml"
 name  = "Синтезатор"
 class = "factory"
-color = [0.55, 0.62, 0.72]
+color = [0.4, 0.72, 0.74]
 tags  = ["structure", "economy", "t1"]
 
 [footprint]

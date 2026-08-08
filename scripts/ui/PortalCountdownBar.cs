@@ -9,10 +9,12 @@ public partial class PortalCountdownBar : CanvasLayer
     private static readonly Color Accent = new(0.35f, 0.78f, 0.92f);
     private static readonly Color Dim = new(0.55f, 0.6f, 0.65f);
 
-    private Control _panel;
+    private PanelContainer _panel;
+    private MarginContainer _margin;
     private ProgressBar _fill;
     private Label _caption;
     private Label _time;
+    private int _top = HudLayout.TopMargin;
 
     public override void _Ready()
     {
@@ -27,21 +29,23 @@ public partial class PortalCountdownBar : CanvasLayer
         frame.AddChild(column);
         column.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 
-        var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        margin.AddThemeConstantOverride("margin_top", 56);
-        column.AddChild(margin);
+        // Третий ярус стопки: полоса событий, под ней ресурсы, под ними эта.
+        // Точная величина отступа ставится в _Process по измеренному краю полосы ресурсов
+        _margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _margin.AddThemeConstantOverride("margin_top", _top);
+        column.AddChild(_margin);
 
         var center = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        margin.AddChild(center);
+        _margin.AddChild(center);
 
         _panel = new PanelContainer { Visible = false };
         center.AddChild(_panel);
 
-        var rows = new VBoxContainer { CustomMinimumSize = new Vector2(320, 0) };
+        var rows = new VBoxContainer { CustomMinimumSize = new Vector2(HudLayout.CenterWidth, 0) };
         rows.AddThemeConstantOverride("separation", 4);
         _panel.AddChild(rows);
 
@@ -74,6 +78,8 @@ public partial class PortalCountdownBar : CanvasLayer
 
     public override void _Process(double delta)
     {
+        HudLayout.StackUnder(_margin, ref _top, this.Sibling<ResourceBar>()?.BottomEdge ?? 0f);
+
         var outcome = GameManager.I?.System<VictorySystem>();
         var session = this.Ancestor<Session>();
 

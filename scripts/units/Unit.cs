@@ -800,6 +800,11 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         DrawHullShape(radius, fill);
 
+        // Надстройка тира ложится сразу за корпусом, до контуров брони: борта плеч выходят
+        // на те же 1.12 радиуса, где идёт первый контур, и охватывающая линия поверх плеч
+        // читается как броня по всему силуэту, а не как черта, рассёкшая надстройку
+        DrawHullTrim(radius);
+
         // Дополнительные контуры брони. У составных силуэтов повтор самого силуэта дал бы
         // обводку по каждой части, то есть ту же сетку по стыкам, ради снятия которой корпус
         // и рисуется без обводки. Поэтому там броня выражена окружностью, а цвет ей берётся
@@ -828,6 +833,28 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             ShapeDraw.Rect(this, new Rect2(radius * 0.15f, -tip * 0.7f, tip, tip * 1.4f),
                 ShapeStyle.Solid(Definition.Color.Lightened(0.15f)));
         }
+    }
+
+    /// <summary>
+    /// Надстройка тира поверх корпуса: части из <see cref="HullGeometry.Trim"/> заливкой
+    /// светлее корпуса и с тёмной обводкой.
+    ///
+    /// ПОЧЕМУ ОБВОДКА ЕСТЬ, А У СОСТАВНЫХ ЧАСТЕЙ КОРПУСА НЕТ. Там обводка проходила бы по
+    /// стыкам частей одного силуэта; здесь надстройка выступает за край корпуса, и её
+    /// внешняя граница проходит по фону, а не по стыку.
+    /// </summary>
+    private void DrawHullTrim(float radius)
+    {
+        var parts = HullGeometry.Trim(Definition.HullTrim, radius);
+
+        if (parts.Length == 0)
+            return;
+
+        var style = ShapeStyle.Filled(Definition.Color.Lightened(0.2f),
+            new Color(0f, 0f, 0f, 0.45f), 1.5f, WidthMode.Screen);
+
+        foreach (var part in parts)
+            ShapeDraw.Polygon(this, part, style);
     }
 
     /// <summary>Один силуэт заданным стилем. Общее место для корпуса и контуров брони.</summary>

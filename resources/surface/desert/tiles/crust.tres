@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="SurfaceTile" format=3 uid="uid://cm67an7o7be3v"]
+
+[ext_resource type="Script" uid="uid://da4qmnvh573ri" path="res://scripts/world/surface/SurfaceTile.cs" id="1_tile"]
+[ext_resource type="Texture2D" uid="uid://bpvac1jbxb1ws" path="res://assets/sprites/terrain/desert/desert_tile_diffuse.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_tile")
+Id = "desert · растрескавшаяся корка"
+Texture = ExtResource("2_tex")
+SizePx = 600.0
+TemperatureRange = Vector2(0.7, 1)
+Tint = Color(0.39767787, 0.4543289, 0.6360467, 1)

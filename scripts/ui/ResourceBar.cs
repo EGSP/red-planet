@@ -15,6 +15,12 @@ public partial class ResourceBar : CanvasLayer
     private Gauge _metal;
     private Gauge _energy;
     private Label _efficiency;
+    private PanelContainer _panel;
+    private MarginContainer _margin;
+    private int _top = HudLayout.TopMargin;
+
+    /// <summary>Нижний край полосы: по нему выравнивается <see cref="PortalCountdownBar"/>.</summary>
+    public float BottomEdge => HudLayout.BottomOf(_panel);
 
     /// <summary>Показ одного ресурса: запас из потолка, полоска и баланс прихода с расходом.</summary>
     private sealed class Gauge
@@ -39,23 +45,26 @@ public partial class ResourceBar : CanvasLayer
         frame.AddChild(column);
         column.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 
-        var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        margin.AddThemeConstantOverride("margin_top", 8);
-        column.AddChild(margin);
+        // Отступ сверху оставляет место под <see cref="EventBar"/>: самый верх занят
+        // полосой событий, потому что срок волны читается вместе с запасом ресурсов.
+        // Точная величина ставится в _Process по измеренному краю той полосы
+        _margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _margin.AddThemeConstantOverride("margin_top", _top);
+        column.AddChild(_margin);
 
         var center = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        margin.AddChild(center);
+        _margin.AddChild(center);
 
-        var panel = new PanelContainer();
-        center.AddChild(panel);
+        _panel = new PanelContainer();
+        center.AddChild(_panel);
 
-        var row = new HBoxContainer();
+        var row = new HBoxContainer { CustomMinimumSize = new Vector2(HudLayout.CenterWidth, 0) };
         row.AddThemeConstantOverride("separation", 18);
-        panel.AddChild(row);
+        _panel.AddChild(row);
 
         _metal = AddGauge(row, "МЕТАЛ", MetalColor);
 
@@ -91,7 +100,14 @@ public partial class ResourceBar : CanvasLayer
 
     private static Gauge AddGauge(Node parent, string caption, Color color)
     {
-        var column = new VBoxContainer { CustomMinimumSize = new Vector2(220, 0) };
+        // Наименьшая ширина взята с запасом вниз, а излишек строки делится между обоими
+        // ресурсами поровну: общая ширина блока задана снаружи, и подгонять под неё
+        // числа отдельных столбцов пришлось бы при каждой правке раскладки
+        var column = new VBoxContainer
+        {
+            CustomMinimumSize = new Vector2(190, 0),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
         column.AddThemeConstantOverride("separation", 2);
         parent.AddChild(column);
 
@@ -132,6 +148,8 @@ public partial class ResourceBar : CanvasLayer
 
     public override void _Process(double delta)
     {
+        HudLayout.StackUnder(_margin, ref _top, this.Sibling<EventBar>()?.BottomEdge ?? 0f);
+
         var gm = GameManager.I;
         if (gm == null)
             return;

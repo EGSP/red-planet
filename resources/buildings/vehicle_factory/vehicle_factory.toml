@@ -5,7 +5,7 @@ id       = "vehicle_factory"
 base     = "/buildings/base_building.toml"
 name     = "Завод машин"
 class    = "plant"
-color    = [0.55, 0.5, 0.4]
+color    = [0.29, 0.7, 0.58]
 buildbar = "vehicle_factory_buildbar"
 tags     = ["structure", "t1"]
 
