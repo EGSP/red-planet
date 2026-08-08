@@ -158,11 +158,12 @@ script = ExtResource("3_playground")
 
 [node name="Terrain" type="Node2D" parent="Playground" unique_id=304019415]
 
-[node name="Surface" type="Node2D" parent="Playground/Terrain" unique_id=304019416]
+[node name="Surface" type="Node2D" parent="Playground/Terrain" unique_id=304019416 node_paths=PackedStringArray("CloudRenderer", "ShadowRenderer")]
 script = ExtResource("4_surface")
 Terrain = ExtResource("33_5575j")
 TerrainChoices = [ExtResource("33_5575j"), ExtResource("33_desert"), ExtResource("33_earth")]
 CloudRenderer = NodePath("../../Clouds/Sky")
+ShadowRenderer = NodePath("../../Shadows/Obstacles")
 
 [node name="Grid" type="Node2D" parent="Playground/Terrain" unique_id=1875590808]
 visible = false
@@ -177,6 +178,7 @@ visible = false
 material = SubResource("ShaderMaterial_kv8ms")
 script = ExtResource("46_shadow")
 Settings = ExtResource("47_shadowsettings")
+Pixelated = true
 
 [node name="Structures" type="Node2D" parent="Playground" unique_id=539201372]
 

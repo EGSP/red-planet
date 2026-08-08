@@ -7,16 +7,15 @@
 [resource]
 script = ExtResource("1_decal")
 Id = "desert · пески · песчаное пятно"
-Enabled = false
 Texture = ExtResource("2_tex")
 Layer = 3
 Noise = ExtResource("1_734be")
-NoiseRange = Vector2(0.7, 1)
-TemperatureRange = Vector2(0.65, 0.75)
-Spacing = 0.005
-Chance = 0.46
+TemperatureRange = Vector2(0, 0.5)
+HeightRange = Vector2(0.6, 1)
+Spacing = 0.0187
+Chance = 1.0
 Jitter = 0.0
-Size = 0.0555
-SizeVariation = 0.34
-Tint = Color(0.8941038, 0.8505641, 0.78387976, 1)
+Size = 0.0761
+SizeVariation = 0.49
+Tint = Color(0.52, 0.49504, 0.45759997, 1)
 TintVariation = 0.16

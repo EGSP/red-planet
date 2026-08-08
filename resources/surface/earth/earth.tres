@@ -6,6 +6,7 @@
 [ext_resource type="Resource" uid="uid://bafxbgtxhg1ue" path="res://resources/surface/earth/biomes/meadow.tres" id="8_biome_meadow"]
 [ext_resource type="Resource" uid="uid://orhes64kd15v" path="res://resources/surface/earth/clouds_earth.tres" id="10_clouds"]
 [ext_resource type="Resource" path="res://resources/surface/noise/warp.tres" id="11_warp"]
+[ext_resource type="Resource" uid="uid://bgere1ka2krc7" path="res://resources/surface/earth/shadows_earth.tres" id="12_shadows"]
 
 [resource]
 script = ExtResource("1_settings")
@@ -18,3 +19,4 @@ TemperatureWarpNoise = ExtResource("11_warp")
 HeightNoise = ExtResource("4_relief")
 Biomes = [ExtResource("8_biome_meadow")]
 Clouds = ExtResource("10_clouds")
+Shadows = ExtResource("12_shadows")

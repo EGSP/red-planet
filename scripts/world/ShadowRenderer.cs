@@ -36,8 +36,22 @@ public partial class ShadowRenderer : Node2D
     /// <summary>Ступенчатая подача: плотность меняется по ячейкам растра.</summary>
     private const string PixelShader = "res://resources/shaders/shadow_pixel.gdshader";
 
-    /// <summary>Настройки вида. Читаются каждый кадр: их правят по ходу партии.</summary>
+    /// <summary>
+    /// Настройки вида: цвет, ширина, угасание. В партии их подставляет
+    /// <see cref="SurfaceRenderer"/> из <see cref="SurfaceSettings.Shadows"/> текущей
+    /// местности; в предпросмотре застройки назначают напрямую.
+    /// </summary>
     [Export] public ShadowSettings Settings;
+
+    /// <summary>
+    /// Ступенчатая тень вместо плавной: подача сменяется с <c>shadow.gdshader</c> на
+    /// <c>shadow_pixel.gdshader</c>, а фильтрация растра — на «ближайший сосед».
+    ///
+    /// Ступеней столько, сколько ячеек растра укладывается в <see cref="ShadowSettings.WidthPx"/>.
+    /// Признак лежит здесь, а не в настройках местности: язык подачи общий для всех
+    /// поверхностей, тогда как цвет и плотность зависят от палитры.
+    /// </summary>
+    [Export] public bool Pixelated;
 
     /// <summary>
     /// Источник расстояний. Не назначен — берётся растр текущей сессии. Назначают его там,
@@ -173,7 +187,7 @@ public partial class ShadowRenderer : Node2D
     /// <summary>Передать шейдеру шкалу и величины, по которым он переводит расстояние в цвет.</summary>
     private void Apply()
     {
-        Present(Settings.Pixelated);
+        Present(Pixelated);
 
         if (_ramp == null || _ramp.Gradient != Settings.Tint)
         {

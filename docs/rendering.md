@@ -225,7 +225,8 @@
 
 **Раскладка файлов.** Каждая местность занимает свою папку `resources/surface/<имя>/`: сам
 `SurfaceSettings` лежит в её корне, а составные части разнесены по `tiles/`, `biomes/` и
-`decals/`. Отдельные файлы вместо встроенных ресурсов нужны затем, чтобы на одно покрытие или
+`decals/`; вид облаков и тени препятствий — `clouds_<имя>.tres` и `shadows_<имя>.tres` в
+корне папки. Отдельные файлы вместо встроенных ресурсов нужны затем, чтобы на одно покрытие или
 одну декаль ссылались и описание местности, и стенд шумов
 ([preview.md](preview.md)), и чтобы правка отзывалась во всех местах сразу. Поля шума общие для
 всех местностей и лежат в `resources/surface/noise/`.
@@ -238,6 +239,15 @@
 между видами — общий файл `resources/tuning/cloud_zoom_fade.tres`.
 [`SurfaceRenderer`](../scripts/world/surface/SurfaceRenderer.cs) передаёт `Terrain.Clouds`
 в связанный [`CloudRenderer`](../scripts/world/CloudRenderer.cs) после выбора местности.
+
+**Тень препятствий принадлежит местности.** У `SurfaceSettings` есть ссылка `Shadows` на
+[`ShadowSettings`](../scripts/world/ShadowSettings.cs): цвет, ширина полосы и угасание
+зависят от палитры поверхности. Файл вида лежит в папке местности (`shadows_lava.tres`,
+`shadows_desert.tres`, `shadows_earth.tres`). Язык подачи — ступенчатый или плавный —
+остаётся на [`ShadowRenderer`](../scripts/world/ShadowRenderer.cs) (`Pixelated`) и общий
+для всех местностей. `SurfaceRenderer` передаёт `Terrain.Shadows` в связанный
+`ShadowRenderer` после выбора местности; запасной ресурс `resources/tuning/shadow.tres`
+нужен стенду предпросмотра застройки, где местности нет.
 
 **Выбор местности в партии.** У [`SurfaceRenderer`](../scripts/world/surface/SurfaceRenderer.cs)
 в сцене сессии задан массив кандидатов (`TerrainChoices`). При старте партии, вне редактора, из

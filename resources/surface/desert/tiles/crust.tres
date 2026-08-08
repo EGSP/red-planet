@@ -9,3 +9,4 @@ Id = "desert · растрескавшаяся корка"
 Texture = ExtResource("2_tex")
 SizePx = 600.0
 TemperatureRange = Vector2(0.7, 1)
+Tint = Color(0.39767787, 0.4543289, 0.6360467, 1)

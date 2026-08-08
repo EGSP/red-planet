@@ -70,6 +70,15 @@ public partial class SurfaceRenderer : Node2D
     /// </summary>
     [Export] public CloudRenderer CloudRenderer;
 
+    [ExportGroup("Тени")]
+
+    /// <summary>
+    /// Узел отрисовки тени препятствий. При смене <see cref="Terrain"/> получает
+    /// <see cref="SurfaceSettings.Shadows"/>, если они заданы. На стенде предпросмотра
+    /// застройки ссылка не нужна: там настройки назначаются напрямую.
+    /// </summary>
+    [Export] public ShadowRenderer ShadowRenderer;
+
     [ExportGroup("Показывать")]
 
     /// <summary>Рисовать базовый слой покрытий.</summary>
@@ -133,6 +142,7 @@ public partial class SurfaceRenderer : Node2D
     {
         PickTerrain();
         ApplyClouds();
+        ApplyShadows();
 
         // Ноль означает «ещё не задано»: иначе поверхность брала бы запасное зерно 1
         // из правила в _Process, и партии отличались бы только типом местности
@@ -189,6 +199,21 @@ public partial class SurfaceRenderer : Node2D
     }
 
     /// <summary>
+    /// Передать отрисовщику теней вид из текущей местности. Пустые Shadows у местности
+    /// не затирают уже назначенные настройки: стенд предпросмотра застройки и запасной
+    /// ресурс в сцене остаются в силе. Язык подачи (<see cref="ShadowRenderer.Pixelated"/>)
+    /// здесь не трогается.
+    /// </summary>
+    private void ApplyShadows()
+    {
+        if (ShadowRenderer == null || Terrain?.Shadows == null)
+            return;
+
+        if (ShadowRenderer.Settings != Terrain.Shadows)
+            ShadowRenderer.Settings = Terrain.Shadows;
+    }
+
+    /// <summary>
     /// Снять вещество перед сохранением сцены и собрать заново после.
     ///
     /// ЗАЧЕМ ЭТО НУЖНО. Редактор сохраняет всё, что лежит в свойствах узла, а в веществе
@@ -208,6 +233,7 @@ public partial class SurfaceRenderer : Node2D
     public override void _Process(double delta)
     {
         ApplyClouds();
+        ApplyShadows();
 
         Visible = Terrain != null && (ShowBaseLayer || ShowDecalLayer);
 

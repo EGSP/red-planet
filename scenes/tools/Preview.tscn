@@ -1,10 +1,10 @@
 [gd_scene format=3 uid="uid://cdrjiwky3sbh3"]
 
 [ext_resource type="Script" uid="uid://3kpl2w4knl1c" path="res://scripts/tools/SessionPreview.cs" id="1_preview"]
-[ext_resource type="Resource" uid="uid://ctvqauj7073p" path="res://resources/surface/earth/earth.tres" id="2_jjcxy"]
+[ext_resource type="Resource" uid="uid://cj1eanqkijrtf" path="res://resources/surface/desert/desert.tres" id="2_jjcxy"]
 [ext_resource type="Resource" uid="uid://dxh016jrpgobj" path="res://resources/tuning/world.tres" id="2_world"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="3_waves"]
-[ext_resource type="Resource" uid="uid://orhes64kd15v" path="res://resources/surface/earth/clouds_earth.tres" id="4_hiljl"]
+[ext_resource type="Resource" uid="uid://orhdw7ot615v" path="res://resources/surface/desert/clouds_desert.tres" id="4_hiljl"]
 [ext_resource type="Script" uid="uid://d2ynvft64bh21" path="res://scripts/world/surface/SurfaceRenderer.cs" id="4_surface"]
 [ext_resource type="Script" uid="uid://0lfllbrf4q87" path="res://scripts/world/CloudRenderer.cs" id="6_clouds"]
 
@@ -18,7 +18,7 @@ zoom = Vector2(0.22, 0.22)
 script = ExtResource("4_surface")
 Terrain = ExtResource("2_jjcxy")
 TerrainChoices = []
-SurfaceSeed = 2398831357
+SurfaceSeed = 3622354441
 CloudRenderer = NodePath("../Clouds")
 
 [node name="Clouds" type="Node2D" parent="." unique_id=1031185750]

@@ -11,12 +11,12 @@
 offsets = PackedFloat32Array(0, 0.47887325, 1)
 colors = PackedColorArray(0, 0, 0, 0.15686275, 0, 0, 0, 0.1254902, 0, 0, 0, 0)
 
-[sub_resource type="GradientTexture1D" id="GradientTexture1D_u6gq2"]
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_lk3mf"]
 gradient = SubResource("Gradient_shadow")
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_u6gq2"]
 shader = ExtResource("5_lk3mf")
-shader_parameter/ramp = SubResource("GradientTexture1D_u6gq2")
+shader_parameter/ramp = SubResource("GradientTexture1D_lk3mf")
 shader_parameter/width_px = 56.0
 shader_parameter/falloff = 1.2
 shader_parameter/cell_px = 16.0
@@ -42,3 +42,4 @@ texture_filter = 1
 material = SubResource("ShaderMaterial_u6gq2")
 script = ExtResource("2_shadow")
 Settings = ExtResource("5_shadowtuning")
+Pixelated = true

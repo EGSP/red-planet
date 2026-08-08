@@ -8,3 +8,4 @@ script = ExtResource("1_tile")
 Id = "desert · песок"
 Texture = ExtResource("2_tex")
 SizePx = 480.0
+Tint = Color(0.5588021, 0.43576014, 0.5313136, 1)

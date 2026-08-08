@@ -360,9 +360,16 @@ public partial class DebugPanel : CanvasLayer
         Check(box, "ступенчатая подача",
             "Плотность меняется ступенями по ячейкам растра вместо плавного спада. Ступень " +
             "проходит там же, где меняется решение навигации о проходимости, поэтому такая " +
-            "подача честнее к устройству растра; плавная выглядит мягче.",
-            () => Shade()?.Pixelated ?? false,
-            on => SetShade(settings => settings.Pixelated = on));
+            "подача честнее к устройству растра; плавная выглядит мягче. Признак общий для " +
+            "всех местностей и лежит на отрисовщике, а не в настройках поверхности.",
+            () => ShadeRenderer()?.Pixelated ?? false,
+            on =>
+            {
+                var renderer = ShadeRenderer();
+
+                if (renderer != null)
+                    renderer.Pixelated = on;
+            });
 
         Slide(box, "ширина полосы", 0f, 64f, 1f,
             "Насколько далеко тень уходит от края препятствия, пикселей. Меряется свободным " +
@@ -384,9 +391,9 @@ public partial class DebugPanel : CanvasLayer
             () => Ramp(false), value => SetRamp(false, value));
 
         Colour(box, "цвет на границе",
-            "Крайняя правая точка шкалы. Промежуточные точки правятся в ресурсе " +
-            "resources/tuning/shadow.tres: здесь их редактировать нечем, а трогать вслепую " +
-            "нельзя.",
+            "Крайняя правая точка шкалы. Промежуточные точки правятся в ресурсе тени " +
+            "текущей местности (resources/surface/<имя>/shadows_*.tres): здесь их " +
+            "редактировать нечем, а трогать вслепую нельзя.",
             () => Ramp(true), value => SetRamp(true, value));
     }
 
@@ -817,10 +824,10 @@ public partial class DebugPanel : CanvasLayer
     private static FogSettings Fog() => GameManager.I?.System<VisionSystem>()?.Settings;
 
     /// <summary>
-    /// Настройки тени берутся у отрисовщика на слое теней — по тем же основаниям, по каким
-    /// настройки тумана берутся у системы зрения.
+    /// Отрисовщик тени на слое теней. Из него берутся и настройки вида текущей местности,
+    /// и общий признак ступенчатой подачи.
     /// </summary>
-    private static ShadowSettings Shade()
+    private static ShadowRenderer ShadeRenderer()
     {
         var layer = GameManager.I?.Playground?.Layer(WorldLayer.Shadows);
 
@@ -830,11 +837,17 @@ public partial class DebugPanel : CanvasLayer
         foreach (var child in layer.GetChildren())
         {
             if (child is ShadowRenderer renderer)
-                return renderer.Settings;
+                return renderer;
         }
 
         return null;
     }
+
+    /// <summary>
+    /// Настройки вида тени берутся у отрисовщика на слое теней — по тем же основаниям,
+    /// по каким настройки тумана берутся у системы зрения.
+    /// </summary>
+    private static ShadowSettings Shade() => ShadeRenderer()?.Settings;
 
     /// <summary>Правка настроек тени, безопасная к отсутствию слоя в сцене.</summary>
     private static void SetShade(Action<ShadowSettings> change)
