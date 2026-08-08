@@ -59,7 +59,28 @@ public sealed class Catalog
     public BuildbarDefinition Buildbar(string id) =>
         id != null && _buildbars.TryGetValue(id, out var bar) ? bar : null;
 
-    public bool AddUnit(UnitDefinition definition) => _units.TryAdd(definition.Id, definition);
+    /// <summary>
+    /// Половина диагонали самого крупного определения в пикселях: насколько далеко край
+    /// сущности вообще может отстоять от её центра.
+    ///
+    /// Нужна поиску целей. Перебор кандидатов сравнивает расстояния между центрами, потому
+    /// что точный расчёт до поверхности (см. <see cref="Reach"/>) на каждом кандидате стоил бы
+    /// поворота вектора, а кандидатов в разрезе бывают сотни. Чтобы крупная цель, чей край
+    /// лежит в пределах досягаемости, не отсеялась серединой, предел поиска расширяют на эту
+    /// величину, а точную проверку делают уже над выбранным.
+    /// </summary>
+    public float LargestFootprintPx { get; private set; } = Const.Unit;
+
+    public bool AddUnit(UnitDefinition definition)
+    {
+        if (!_units.TryAdd(definition.Id, definition))
+            return false;
+
+        var half = new Vector2(definition.Width, definition.Height) * Const.Unit * 0.5f;
+        LargestFootprintPx = Mathf.Max(LargestFootprintPx, half.Length());
+
+        return true;
+    }
 
     public bool AddTool(ToolDefinition tool) => _tools.TryAdd(tool.Id, tool);
 

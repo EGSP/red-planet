@@ -72,8 +72,9 @@ public partial class Assembler : Building, IWorker
     {
         var site = order.Target;
 
-        if (site == null
-            || GlobalPosition.DistanceTo(site.GlobalPosition) > Definition.WorkRangePx)
+        // Дотягивается манипулятор до КРАЯ размеченного места, а не до его середины:
+        // иначе крупный каркас, задевающий круг углом, башне был бы недоступен
+        if (site == null || !Reach.Within(GlobalPosition, site, Definition.WorkRangePx))
         {
             Detach();
             Orders.DropCurrent();

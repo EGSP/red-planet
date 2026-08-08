@@ -92,7 +92,7 @@ public partial class PlayerAiSystem : GameSystem
         // то, что попало под манипулятор
         if (def.CanBuild && !def.IsMobile)
         {
-            var site = Jobs.NearestSite(worker.GlobalPosition, def.WorkRangePx);
+            var site = Jobs.NearestSite(worker.GlobalPosition, SearchLimit(def.WorkRangePx));
 
             if (site != null)
                 return Order.Work(OrderKind.Build, site);
@@ -139,8 +139,20 @@ public partial class PlayerAiSystem : GameSystem
     /// бегать через полкарты чинить забор не то поведение, которого от него ждёшь.
     /// У неподвижного предел — длина манипулятора: дальше он не дотянется.
     /// </summary>
-    private static float RepairReach(UnitDefinition def) =>
-        def.IsMobile ? def.AttentionRadiusPx : def.WorkRangePx;
+    private float RepairReach(UnitDefinition def) =>
+        def.IsMobile ? def.AttentionRadiusPx : SearchLimit(def.WorkRangePx);
+
+    /// <summary>
+    /// Предел ПОИСКА, соответствующий досягаемости инструмента.
+    ///
+    /// Досягаемость меряется до края цели (см. <see cref="Reach"/>), а перебор кандидатов
+    /// сравнивает расстояния между центрами: точный расчёт на каждом кандидате стоил бы
+    /// поворота вектора, а кандидатов бывают сотни. Поэтому предел расширяется на наибольший
+    /// возможный габарит — иначе крупный каркас, до которого манипулятор дотягивается углом,
+    /// в выборку не попал бы вовсе. Отобранного проверяет уже точный расчёт: у неподвижного
+    /// это <see cref="Assembler"/>, у подвижного — обработчик приказа.
+    /// </summary>
+    private float SearchLimit(float reach) => reach + GM.Catalog.LargestFootprintPx;
 
     /// <summary>
     /// Кого бить, если работы нет. Цель ищется ТОЛЬКО В ПРЕДЕЛАХ ВНИМАНИЯ вокруг якоря —

@@ -23,7 +23,7 @@ using Godot;
 /// (см. <see cref="ReleaseAbandoned"/>). Поэтому план — сущность мира, а приказ на неё —
 /// обычный <see cref="OrderKind.Build"/>.
 /// </summary>
-public partial class BuildPlan : Node2D, IWorkSite, IFacing
+public partial class BuildPlan : Node2D, IWorkSite, IFacing, IFootprint
 {
     public int Id { get; set; }
 
@@ -57,8 +57,10 @@ public partial class BuildPlan : Node2D, IWorkSite, IFacing
 
     /// <summary>
     /// Место, которое план держит за собой. В карту препятствий не попадает: занятость
-    /// там означает «здесь стоит нечто твёрдое», а план не твёрд. Читает эту форму только
-    /// <see cref="Placement"/>.
+    /// там означает «здесь стоит нечто твёрдое», а план не твёрд, — потому здесь
+    /// <see cref="IFootprint"/>, а не <see cref="IObstacle"/>. Форму читают
+    /// <see cref="Placement"/> и расчёт досягаемости <see cref="Reach"/>: строитель ставит
+    /// каркас, дотянувшись до края размеченного места, а не до его середины.
     /// </summary>
     public Obb Footprint => Definition == null
         ? new Obb(GlobalPosition, Vector2.Zero)

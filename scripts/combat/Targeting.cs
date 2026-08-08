@@ -32,15 +32,22 @@ public static class Targeting
     private static readonly float ApproachMargin = Const.Unit * 0.5f;
 
     /// <summary>
-    /// Дальность, с которой ствол достаёт до цели. Меряется до КРАЯ цели, а не до центра:
-    /// по стене завода стреляют с угла, иначе крупные постройки было бы не достать.
+    /// Дальность, с которой ствол достаёт до цели, отсчитанная ОТ ЦЕНТРА цели. Меряется
+    /// до края цели, а не до середины: по стене завода стреляют с угла, иначе крупные
+    /// постройки было бы не достать.
+    ///
+    /// Поправка на габарит берётся у <see cref="Reach"/> и потому зависит от того, с какой
+    /// стороны стреляют: у постройки два на четыре край вдоль корпуса и край поперёк отстоят
+    /// от центра на разное. Прежде здесь стоял радиус описанной окружности, одинаковый во все
+    /// стороны, и поперёк длинного корпуса он разрешал огонь из точки, откуда до стены ещё
+    /// далеко.
     ///
     /// Единственная формула огневой границы во всём проекте. Всё, что связано с подходом
     /// к бою, обязано выводиться отсюда вычитанием, а не считаться отдельно: две формулы
     /// неизбежно разойдутся, и юнит остановится там, где стрелять ещё нельзя.
     /// </summary>
-    public static float FiringDistance(WeaponDefinition weapon, IDamageable target) =>
-        weapon == null ? 0f : weapon.RangePx + (target?.HitRadius ?? 0f);
+    public static float FiringDistance(WeaponDefinition weapon, Vector2 from, IDamageable target) =>
+        weapon == null ? 0f : Reach.StopDistance(from, target, weapon.RangePx);
 
     /// <summary>
     /// На какую дистанцию подходить, чтобы вести огонь наверняка.
@@ -54,8 +61,8 @@ public static class Targeting
     /// из построек сдвигает его на радиус корпуса. Остановка ровно на границе означала бы,
     /// что огонь прекращается от любого из этих смещений.
     /// </summary>
-    public static float ApproachDistance(WeaponDefinition weapon, IDamageable target,
-        float approachHoldFraction)
+    public static float ApproachDistance(WeaponDefinition weapon, Vector2 from,
+        IDamageable target, float approachHoldFraction)
     {
         if (weapon == null)
             return 0f;
@@ -64,7 +71,7 @@ public static class Targeting
         float slack = Mathf.Max(
             reach * (1f - Mathf.Clamp(approachHoldFraction, 0f, 1f)), ApproachMargin);
 
-        return Mathf.Max(reach - slack, 0f) + (target?.HitRadius ?? 0f);
+        return Reach.StopDistance(from, target, Mathf.Max(reach - slack, 0f));
     }
 
     /// <summary>
@@ -76,7 +83,7 @@ public static class Targeting
         if (weapon == null || target == null)
             return false;
 
-        return from.DistanceTo(target.GlobalPosition) <= FiringDistance(weapon, target);
+        return from.DistanceTo(target.GlobalPosition) <= FiringDistance(weapon, from, target);
     }
 
     /// <summary>Годится ли цель: жива, не помечена на удаление, прочность не кончилась.</summary>

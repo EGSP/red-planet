@@ -439,10 +439,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         var tool = Definition.BuildTool;
         float reach = tool?.RangePx ?? Const.Unit;
 
-        if (GlobalPosition.DistanceTo(target) > reach)
+        // Дистанция меряется до КРАЯ места работы, а не до его середины: строитель,
+        // вставший по диагонали от постройки, дотягивается до её угла, и отвергать его
+        // на этом основании нельзя. Поправку на габарит цели держит Reach, а сюда она
+        // приходит уже перенесённой на расстояние от центра — движение ведёт к центру
+        float stop = Reach.StopDistance(GlobalPosition, order.Body, reach);
+
+        if (GlobalPosition.DistanceTo(target) > stop)
         {
             Detach();
-            Movement.Seek(target, reach);
+            Movement.Seek(target, stop);
             return;
         }
 
@@ -507,8 +513,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // откуда любое смещение цели или толчок соседа выводили его из радиуса.
         // Безоружный подходит на длину инструмента: приказ хотя бы не зависает
         float stop = Weapon != null
-            ? Targeting.ApproachDistance(Weapon, target, Definition.ApproachHoldFraction)
-            : Definition.WorkRangePx;
+            ? Targeting.ApproachDistance(Weapon, GlobalPosition, target,
+                Definition.ApproachHoldFraction)
+            : Reach.StopDistance(GlobalPosition, victim, Definition.WorkRangePx);
 
         if (GlobalPosition.DistanceTo(to) > stop)
             Movement.Seek(to, stop);
@@ -523,7 +530,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Detach();
 
         var to = order.Entity.GlobalPosition;
-        float stop = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
+        float reach = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
+        float stop = Reach.StopDistance(GlobalPosition, order.Body, reach);
 
         if (GlobalPosition.DistanceTo(to) > stop)
             Movement.Seek(to, stop);
@@ -609,7 +617,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         Detach();
 
-        float stop = Targeting.ApproachDistance(Weapon, victim as IDamageable,
+        float stop = Targeting.ApproachDistance(Weapon, GlobalPosition, victim as IDamageable,
             Definition.ApproachHoldFraction);
 
         if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
@@ -651,12 +659,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         _assisted = work;
 
-        float reach = Definition.BuildTool.RangePx;
+        // До края того, над чем работает ведущий, а не до середины: помощник, оказавшийся
+        // с дальней стороны каркаса, дотягивается до ближней к нему стены
+        float stop = Reach.StopDistance(GlobalPosition, work.Body, Definition.BuildTool.RangePx);
 
-        if (GlobalPosition.DistanceTo(point) > reach)
+        if (GlobalPosition.DistanceTo(point) > stop)
         {
             Detach();
-            Movement.Seek(point, reach);
+            Movement.Seek(point, stop);
             return true;
         }
 
@@ -726,10 +736,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (order.Entity is Unit && !Definition.CanRepairUnits)
             return null;
 
-        float reach = Definition.BuildTool.RangePx;
-        return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
-            ? repairable
-            : null;
+        // Запас в пиксель: проверка обязана соглашаться там, где остановка уже разрешена,
+        // а движение встаёт не ровно в заданной точке
+        float reach = Definition.BuildTool.RangePx + 1f;
+        return Reach.Within(GlobalPosition, order.Entity, reach) ? repairable : null;
     }
 
     private void Detach()
