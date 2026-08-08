@@ -43,6 +43,11 @@ public sealed class WaveRecord
 /// по своему таймеру, включая миг прихода волны. Останавливать его значило бы вводить
 /// между подсистемами связь, которой в замысле нет, и подбирать их пришлось бы вместе.
 ///
+/// ПОРТАЛ ВЫЗЫВАЕТ ВОЛНУ ВНЕ ОЧЕРЕДИ. Достройка портала — заявка на победу, и ответ на неё
+/// не должен зависеть от того, сколько случайно осталось до конца отдыха. Отбор при этом
+/// обычный: приходит та волна, которая пришла бы и так, только немедленно. Отдых после неё
+/// назначается заново, поэтому очередная волна на вызванную не накладывается.
+///
 /// ОБЩЕЙ ЦЕЛИ У ВОЛНЫ НЕТ. Выйдя на карту, её юниты живут по той же логике, что и фоновые:
 /// цель каждому раздаёт <see cref="EnemyAiSystem"/> поштучно. Поэтому форма появления
 /// определяет только первые секунды — какая часть периметра встречает удар, — а дальше
@@ -103,6 +108,13 @@ public partial class WaveSystem : GameSystem
     private float _timer;
     private float _gameTime;
 
+    /// <summary>
+    /// Портал появился в мире, и очередная волна должна выйти вне отдыха. Флаг, а не запуск
+    /// прямо из обработчика: достройка каркаса идёт в середине кадра, и создавать там же
+    /// два десятка противников значило бы менять состав мира внутри чужого шага.
+    /// </summary>
+    private bool _portalCall;
+
     /// <summary>Сколько осталось до ближайшей волны, секунд. Показывается в отладочной панели.</summary>
     public float TimeLeft => Mathf.Max(_timer, 0f);
 
@@ -143,6 +155,23 @@ public partial class WaveSystem : GameSystem
         _timer = Settings.FirstDelay;
     }
 
+    protected override void OnLink()
+    {
+        GM.Events.Stream<BuildingSpawned>().Appended += OnBuildingSpawned;
+    }
+
+    /// <summary>
+    /// Достроенный портал вызывает волну немедленно. Смысл в том, что портал есть заявка
+    /// на победу, и ответ на неё не должен зависеть от того, сколько случайно осталось
+    /// до конца отдыха: иначе один и тот же поступок игрока стоил бы то полутора минут
+    /// спокойствия, то ничего.
+    /// </summary>
+    private void OnBuildingSpawned(BuildingSpawned record)
+    {
+        if (record.DefinitionId == VictorySystem.PortalId)
+            _portalCall = true;
+    }
+
     public override void Step(double dt)
     {
         if (GM.Playground == null)
@@ -157,7 +186,12 @@ public partial class WaveSystem : GameSystem
 
         _timer -= step;
 
-        if (_timer > 0f)
+        // Вызов порталом расходуется здесь же, вне зависимости от исхода отбора: повторно
+        // он придёт только со следующим порталом
+        bool called = _portalCall;
+        _portalCall = false;
+
+        if (_timer > 0f && !called)
             return;
 
         float terror = GM.System<TerrorSystem>()?.Smoothed ?? 0f;
@@ -171,7 +205,7 @@ public partial class WaveSystem : GameSystem
             return;
         }
 
-        Launch(wave, terror);
+        Launch(wave, terror, called);
     }
 
     // ── Отбор ─────────────────────────────────────────────────────────────────────
@@ -227,7 +261,13 @@ public partial class WaveSystem : GameSystem
 
     // ── Запуск ────────────────────────────────────────────────────────────────────
 
-    private void Launch(WaveDefinition wave, float terror)
+    /// <summary>
+    /// Вывести волну на карту. <paramref name="byPortal"/> означает, что волна пришла
+    /// по достройке портала, а не по отдыху; на состав и форму это не влияет — различие
+    /// видно только в журнале. Отдых назначается заново в любом случае, поэтому вызванная
+    /// порталом волна не накладывается на очередную.
+    /// </summary>
+    private void Launch(WaveDefinition wave, float terror, bool byPortal = false)
     {
         float budget = wave.Budget(terror);
 
@@ -243,7 +283,7 @@ public partial class WaveSystem : GameSystem
         _timer = chill;
         _preferred = wave.PreferNext;
 
-        Record(wave, terror, budget, spent, shape, center, chill, extraRows);
+        Record(wave, terror, budget, spent, shape, center, chill, extraRows, byPortal);
     }
 
     // ── Расстановка ───────────────────────────────────────────────────────────────
@@ -343,7 +383,7 @@ public partial class WaveSystem : GameSystem
     // ── Запись ────────────────────────────────────────────────────────────────────
 
     private void Record(WaveDefinition wave, float terror, float budget, float spent,
-        WaveShape shape, float center, float chill, int extraRows)
+        WaveShape shape, float center, float chill, int extraRows, bool byPortal)
     {
         string composition = _composer.Describe();
         float degrees = Mathf.RadToDeg(center);
@@ -368,7 +408,9 @@ public partial class WaveSystem : GameSystem
         // Одна строка на волну. Печать здесь уместна не ради отладки: волна — редкое
         // и крупное событие партии, и по журналу разбора должно быть видно, что именно
         // пришло, не открывая панель
-        GD.Print($"[Волна] {wave.Id}: террор {terror:0.0}, бюджет {budget:0.0}, " +
+        string cause = byPortal ? " (вызвана порталом)" : string.Empty;
+
+        GD.Print($"[Волна] {wave.Id}{cause}: террор {terror:0.0}, бюджет {budget:0.0}, " +
                  $"потрачено {spent:0.0} — {composition}. Отдых {chill:0} с");
 
         GM.Events.Append(new WaveStarted
