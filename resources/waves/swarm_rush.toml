@@ -15,8 +15,9 @@ prefer_next = ["heavy_group"]
 
 terror_range = [-1, -1]
 
-army_power_budget     = 2.0
-army_power_per_terror = 0.5
+army_power_budget     = 1.0
+# Основной бюджет волны идет с общего террора. (120%)
+army_power_per_terror = 1.2
 
 chill_interval_multiplier = 0.6
 

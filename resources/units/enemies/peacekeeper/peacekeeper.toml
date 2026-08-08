@@ -15,4 +15,4 @@ speed      = 3.6
 turn_speed = 220.0
 
 [terror]
-army_power = 1.0
+army_power = 2.0

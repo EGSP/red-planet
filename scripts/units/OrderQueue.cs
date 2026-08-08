@@ -141,7 +141,7 @@ public sealed class OrderQueue : IOrderFollower
     /// двигает указатель, а двигать чужие указатели уборка не вправе: она обходит подписчиков
     /// ветки, среди которых наш — чужой. Поэтому смотрим наперёд, но состояние не меняем.
     /// </summary>
-    public bool Awaits(Order order) => order != null && ReferenceEquals(Ahead, order);
+    public bool Awaits(Order order) => order != null && ReferenceEquals(Ahead(out _), order);
 
     public bool Within(List<IOrderable> allowed) => allowed.Contains(_owner);
 
@@ -161,6 +161,8 @@ public sealed class OrderQueue : IOrderFollower
         if (!Acceptable(orders))
             return false;
 
+        var marked = Marked();
+
         // Свою собственную ветку переиспользуем: заводить новую сущность на каждую
         // самостоятельно выбранную цель значило бы сорить ими каждые полторы секунды
         if (Personal)
@@ -179,33 +181,23 @@ public sealed class OrderQueue : IOrderFollower
 
         _done = null;
         _current = _list.At(0);
+
+        BuildPlan.ReleaseAbandoned(marked);
         return true;
     }
 
     /// <summary>
     /// Подписаться на ветку и встать в её начало, отпустив прежнюю.
     ///
-    /// Вместе с брошенным остатком снимаются планы построек, на которые больше никто
-    /// не нацелен: отказ от приказа — отказ и от размеченного намерения. Гибель
-    /// исполнителя идёт через <see cref="Clear"/> и планы не трогает.
+    /// Вместе с брошенным остатком снимаются планы построек, до которых больше никто
+    /// не дойдёт: отказ от приказа — отказ и от размеченного намерения.
     /// </summary>
     public void Adopt(OrderList list)
     {
         if (list == null || list == _list)
             return;
 
-        List<BuildPlan> abandoned = null;
-
-        foreach (var order in Remaining)
-        {
-            if (order.Kind != OrderKind.Build || order.Target is not BuildPlan { NeedsWork: true } plan)
-                continue;
-
-            abandoned ??= new List<BuildPlan>();
-
-            if (!abandoned.Contains(plan))
-                abandoned.Add(plan);
-        }
+        var marked = Marked();
 
         Leave();
 
@@ -214,7 +206,7 @@ public sealed class OrderQueue : IOrderFollower
         list.Subscribe(this);
         _current = list.At(0);
 
-        BuildPlan.ReleaseAbandoned(abandoned);
+        BuildPlan.ReleaseAbandoned(marked);
     }
 
     /// <summary>
@@ -232,6 +224,7 @@ public sealed class OrderQueue : IOrderFollower
         if (_list == null || Personal)
             return;
 
+        var marked = Marked();
         var carried = new List<Order>(Remaining);
 
         Leave();
@@ -244,9 +237,88 @@ public sealed class OrderQueue : IOrderFollower
 
         _done = null;
         _current = _list.At(0);
+
+        // Отделение приказов не теряет — весь остаток унесён в личную ветку, и проверка
+        // находит их там же. Она стоит здесь не ради обычного хода дел, а ради того, чтобы
+        // правило снятия было одним на все пути ухода из ветки, а не тремя из четырёх
+        BuildPlan.ReleaseAbandoned(marked);
     }
 
-    public void Clear() => Leave();
+    /// <summary>
+    /// Уйти из ветки, никуда не переходя: исполнитель погиб либо каркас достроен и передал
+    /// ветку преемнику. Планы, до которых после этого не дойдёт никто, снимаются — размеченное
+    /// намерение живёт ровно столько, сколько живёт поручение.
+    /// </summary>
+    public void Clear()
+    {
+        var marked = Marked();
+
+        Leave();
+
+        BuildPlan.ReleaseAbandoned(marked);
+    }
+
+    /// <summary>
+    /// Планы построек, поручённые этому исполнителю: снимок для проверки после ухода
+    /// из ветки. Делается ДО ухода, потому что после него ни ветки, ни указателя уже нет,
+    /// а проверка — ПОСЛЕ, потому что до подписки на новую ветку приказ не лежит нигде,
+    /// и любой поручённый план выглядел бы брошенным.
+    /// </summary>
+    private List<BuildPlan> Marked()
+    {
+        List<BuildPlan> marked = null;
+
+        foreach (var order in Remaining)
+        {
+            if (order.Kind != OrderKind.Build || order.Target is not BuildPlan { NeedsWork: true } plan)
+                continue;
+
+            marked ??= new List<BuildPlan>();
+
+            if (!marked.Contains(plan))
+                marked.Add(plan);
+        }
+
+        return marked;
+    }
+
+    /// <summary>
+    /// Поручена ли исполнителю работа на этом месте: приказ на неё стоит под указателем
+    /// либо впереди по цепочке веток. Пройденное сюда не входит — до него исполнитель
+    /// уже не вернётся.
+    ///
+    /// СПРАШИВАЮТ СО СТОРОНЫ, ПОЭТОМУ УКАЗАТЕЛЬ НЕ ДВИГАЕТСЯ. Обращение к
+    /// <see cref="Remaining"/> двигало бы чужие указатели при уборке планов, а уборка
+    /// на это не вправе — по той же причине, по какой смотрит наперёд <see cref="Awaits"/>.
+    /// </summary>
+    public bool Assigned(IWorkSite site)
+    {
+        if (site == null)
+            return false;
+
+        var start = Ahead(out var list);
+
+        if (start == null || list == null)
+            return false;
+
+        int position = list.IndexOf(start);
+
+        for (int step = 0; step < OrderList.ChainLimit && list != null && position >= 0; step++)
+        {
+            for (int i = position; i < list.Count; i++)
+            {
+                var order = list.Items[i];
+
+                if (order.Kind == OrderKind.Build && ReferenceEquals(order.Target, site))
+                    return true;
+            }
+
+            list = list.Next;
+            position = 0;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Шагнуть на следующий приказ. Список общий, поэтому шагает только указатель,
@@ -254,11 +326,16 @@ public sealed class OrderQueue : IOrderFollower
     /// </summary>
     public void DropCurrent()
     {
+        // Указатель мог остаться на приказе, снятом из ветки помимо нас. Шагать с него
+        // некуда: место в ветке ищется заново при первом же обращении к текущему приказу
+        Reseat();
+
         if (_list == null || _current == null)
             return;
 
         int position = _list.IndexOf(_current);
         var left = _list;
+        var dropped = _current;
 
         _current.Dismiss(_owner.EntityId);
         _done = _current;
@@ -270,6 +347,13 @@ public sealed class OrderQueue : IOrderFollower
 
         // Пройденное держится в ветке, пока на него смотрит хоть кто-то ещё
         left.Compact();
+
+        // Отказ от рабочего приказа тоже оставляет план без исполнителя: башня-сборщик
+        // снимает приказ на место вне манипулятора, а исполнитель без инструмента — приказ,
+        // который ему нечем выполнить. Проверка стоит только на этом случае: обычно рабочий
+        // приказ снимают потому, что работа кончилась, и плана к тому мигу уже нет
+        if (dropped.Kind == OrderKind.Build && dropped.Target is BuildPlan { NeedsWork: true } plan)
+            BuildPlan.ReleaseAbandoned(new[] { plan });
     }
 
     /// <summary>
@@ -350,6 +434,8 @@ public sealed class OrderQueue : IOrderFollower
     /// </summary>
     private void Advance()
     {
+        Reseat();
+
         if (_current != null || _list == null)
             return;
 
@@ -368,7 +454,40 @@ public sealed class OrderQueue : IOrderFollower
     /// Куда указатель встанет: тот же обход, что и в <see cref="Advance"/>, но ничего
     /// не меняющий. Отсюда же берёт ответ <see cref="Awaits"/>.
     /// </summary>
-    private Order Ahead => _current ?? Seek(out _);
+    private Order Ahead(out OrderList where)
+    {
+        if (!Seated)
+            return Seek(out where);
+
+        where = _list;
+        return _current;
+    }
+
+    /// <summary>
+    /// Стоит ли указатель на приказе, который в ветке ещё есть.
+    ///
+    /// Приказ уходит из ветки не только по воле его хозяина: когда цель покидает мир,
+    /// приказы на неё снимаются у всех разом, и делает это тот исполнитель, которого
+    /// уведомили первым. У остальных указатель остаётся на приказе, которого в ветке
+    /// больше нет, и по номеру такой приказ уже не находится.
+    /// </summary>
+    private bool Seated => _current != null && _list != null && _list.IndexOf(_current) >= 0;
+
+    /// <summary>
+    /// Снять указатель со снятого приказа, чтобы место в ветке искалось заново.
+    ///
+    /// ЗАЧЕМ ЭТО НУЖНО. Обход остатка (<see cref="Remaining"/>) ищет текущий приказ по номеру
+    /// и при неудаче возвращает пустоту. Пустой остаток означает «ветка доделана», и тогда
+    /// исполнитель вставал в её конец и больше за неё не брался. Отсюда и получалось, что
+    /// из группы строителей работу продолжал один: достроенный каркас отпускает исполнителей
+    /// по очереди, первый снимает общий приказ из ветки, а всем следующим ветка кажется
+    /// пройденной до конца — вместе с приказами на ещё не начатые планы.
+    /// </summary>
+    private void Reseat()
+    {
+        if (_current != null && !Seated)
+            _current = null;
+    }
 
     /// <summary>
     /// Первый приказ, до которого указателю есть дело: сперва в своей ветке за последним

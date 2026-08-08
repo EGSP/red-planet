@@ -15,10 +15,10 @@ pattern_alt  = "diamond"
 pattern_step = "margin"
 
 [body]
-max_health = 400.0
+max_health = 700.0
 
 [movement]
-turn_speed = 90.0
+turn_speed = 120.0
 
 [terror]
 expansion_power = 8.0
