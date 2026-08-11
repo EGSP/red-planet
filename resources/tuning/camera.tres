@@ -4,5 +4,6 @@
 
 [resource]
 script = ExtResource("1_camera")
-ZoomMin = 0.3
-ZoomMax = 0.8
+ZoomFar = 0.15
+ZoomNear = 0.8
+ZoomSteps = PackedFloat32Array(0.3, 0.5, 1)

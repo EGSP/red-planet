@@ -98,6 +98,16 @@ public static class InputActions
 
     public const string SelectBuilders = "select_builders";
 
+    // ── камера ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Переход на соседнюю ступень зума. Читается всегда: камера не спрашивает,
+    /// выделен ли кто-нибудь, и оспорить эти клавиши может любое другое действие.
+    /// </summary>
+    public const string CameraZoomIn = "camera_zoom_in";
+
+    public const string CameraZoomOut = "camera_zoom_out";
+
     // ── отображение, игра, отладка ─────────────────────────────────────────────
 
     public const string ViewOrdersAll = "view_orders_all";
@@ -130,7 +140,7 @@ public static class InputActions
 
     private static InputAction[] Build()
     {
-        var list = new InputAction[12 + GroupKeys.Length];
+        var list = new InputAction[14 + GroupKeys.Length];
         int i = 0;
 
         list[i++] = new(UnitAttack, InputSection.Units, "Атаковать", Key.A,
@@ -152,6 +162,9 @@ public static class InputActions
         for (int slot = 0; slot < GroupKeys.Length; slot++)
             list[i++] = new(GroupAction(slot), InputSection.Groups,
                 $"Группа {ControlGroups.Label(slot)}", GroupKeys[slot]);
+
+        list[i++] = new(CameraZoomIn, InputSection.Camera, "Приблизить", Key.Z);
+        list[i++] = new(CameraZoomOut, InputSection.Camera, "Отдалить", Key.X);
 
         list[i++] = new(ViewOrdersAll, InputSection.View, "Очереди всех своих", Key.C);
         list[i++] = new(GameCancel, InputSection.Game, "Отмена, меню паузы", Key.Escape);

@@ -1,7 +1,7 @@
 using Godot;
 
 /// <summary>
-/// Кнопка паузы в правом нижнем углу — всё, что осталось за HUD.
+/// Правый нижний угол: шкала зума и кнопка паузы под нею.
 ///
 /// Прежде здесь висела панель со счётом боя и подсказками управления. Она занимала левый
 /// верхний угол постоянно, хотя нужна редко, и потому переехала в <see cref="DebugPanel"/>.
@@ -37,8 +37,12 @@ public partial class Hud : CanvasLayer
             Alignment = BoxContainer.AlignmentMode.End,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
+        column.AddThemeConstantOverride("separation", 6);
         row.AddChild(column);
 
+        // Шкала стоит над кнопкой, а не сбоку от неё: угол уже занят по ширине кнопкой,
+        // и вертикальная шкала рядом с нею отодвинула бы кнопку от края
+        column.AddChild(new ZoomScale());
         column.AddChild(PauseButton());
     }
 
