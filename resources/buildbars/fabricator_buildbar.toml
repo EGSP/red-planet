@@ -33,10 +33,4 @@ cells = [
 	{ x = 0, y = 0, build = "turret" },
 ]
 
-[[sections]]
-id = "special"
-title = "Особое"
-order = 3
-cells = [
-	{ x = 0, y = 0, build = "portal" },
-]
+# Портала здесь нет: его ставит только тяжёлый фабрикатор (fabricator_t2_buildbar).
