@@ -514,6 +514,7 @@ public static class ContentCompiler
             case UnitClass.Plant:
                 return set
                     .With(OrderKind.Move)
+                    .With(OrderKind.AttackMove)
                     .With(OrderKind.Follow)
                     .With(OrderKind.Attack);
 
@@ -534,6 +535,10 @@ public static class ContentCompiler
                     .With(OrderKind.Move, definition.IsMobile)
                     .With(OrderKind.Follow, definition.IsMobile)
                     .With(OrderKind.Attack, definition.Weapon != null)
+                    // Идти с боем умеет всякий подвижный: безоружный просто дойдёт, никого
+                    // по дороге не задерживаясь, — отказывать ему значило бы разбивать
+                    // смешанный отряд на тех, кто приказ принял, и тех, кто остался стоять
+                    .With(OrderKind.AttackMove, definition.IsMobile)
                     .With(OrderKind.Build, definition.CanBuild)
                     .With(OrderKind.Repair, definition.CanRepair);
         }

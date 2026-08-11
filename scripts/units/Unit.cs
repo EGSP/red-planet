@@ -43,6 +43,12 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     private float _retarget;
 
     /// <summary>
+    /// Цель, на которую исполнитель отвлёкся по дороге при приказе «идти с боем».
+    /// Приказу не принадлежит: он общий на отряд, а отвлекается каждый на своё.
+    /// </summary>
+    private IDamageable _engaged;
+
+    /// <summary>
     /// Якорь внимания — см. <see cref="IWorker.Anchor"/>. Ставится при рождении и меняется
     /// только приказом игрока: занятие, выбранное самостоятельно, якоря не сдвигает,
     /// иначе отлучка за целью переносила бы участок вслед за юнитом.
@@ -340,6 +346,11 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // сопровождения мог смениться, а ведущий — закончить работу
         _assisted = null;
 
+        // Цель, выбранная по дороге, принадлежит одному приказу и одному исполнителю:
+        // сменился приказ — прежняя цель ничего не значит
+        if (order.Kind != OrderKind.AttackMove)
+            _engaged = null;
+
         switch (order.Kind)
         {
             case OrderKind.Move:
@@ -348,6 +359,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
             case OrderKind.Attack:
                 RunAttack(order, dt);
+                return;
+
+            case OrderKind.AttackMove:
+                RunAttackMove(order, dt);
                 return;
 
             case OrderKind.Repair:
@@ -521,6 +536,57 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         if (GlobalPosition.DistanceTo(to) > stop)
             Movement.Seek(to, stop);
+    }
+
+    /// <summary>
+    /// Идти с боем: то же движение, но с остановками на всякую цель, попавшую в поле
+    /// внимания по дороге.
+    ///
+    /// СТРЕЛЯЕТ НЕ ЭТОТ КОД. Огонь ведёт <see cref="WeaponSystem"/>, и ведёт он его сам,
+    /// без всякого приказа: цель в пределах ствола и обзора обстреливается любым, кто
+    /// не занят работой. Здесь решается единственное — стоять или идти дальше, потому что
+    /// без остановки отряд проезжал бы мимо противника, огрызаясь на ходу.
+    ///
+    /// ЦЕЛЬ ИЩЕТСЯ НЕ КАЖДЫЙ КАДР. Перебор врагов стоит дорого, а обстановка за доли секунды
+    /// не меняется, поэтому используется общий отсчёт переигровки (<see cref="NeedsTarget"/>),
+    /// тот же, которым пользуется выдача задач. Найденная цель держится, пока жива
+    /// и не ушла за пределы внимания.
+    ///
+    /// ПРИКАЗ ОТ ГИБЕЛИ ЦЕЛИ НЕ КОНЧАЕТСЯ: цели по дороге ему не принадлежат, и он живёт
+    /// до прихода в точку, как обычное движение.
+    /// </summary>
+    private void RunAttackMove(Order order, double dt)
+    {
+        Detach();
+
+        float attention = Definition.AttentionRadiusPx;
+
+        // Цель, павшая или отставшая, перестаёт задерживать: приказ ведёт дальше
+        if (_engaged != null
+            && (!Targeting.IsValid(_engaged as GodotObject)
+                || GlobalPosition.DistanceTo(_engaged.GlobalPosition) > attention))
+            _engaged = null;
+
+        if (_engaged == null && Weapon != null && NeedsTarget)
+        {
+            _engaged = Targeting.Nearest(GlobalPosition, Faction.Opposite(), attention);
+            NoteTargeted();
+        }
+
+        if (_engaged != null)
+        {
+            // Подходим на ту же дистанцию, что и по приказу атаки: правило огневой границы
+            // одно, и расходиться в нём два вида приказа не должны
+            float hold = Targeting.ApproachDistance(Weapon, GlobalPosition, _engaged,
+                Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
+
+            if (GlobalPosition.DistanceTo(_engaged.GlobalPosition) > hold)
+                Movement.Seek(_engaged.GlobalPosition, hold);
+
+            return;
+        }
+
+        RunMove(order, dt);
     }
 
     /// <summary>
@@ -745,8 +811,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // а помощь ведущему, чинящему как раз этого помощника, ни одним отсевом
         // при выдаче приказа не ловится.
         //
-        // Источники приказа отсеивают этот случай и сами (CommandSystem.IssueOrder,
-        // Jobs.NearestDamaged): без этого приказ выдавался бы и висел в очереди, ничего
+        // Источники приказа отсеивают этот случай и сами (CommandSystem.IssueResolved
+        // и IssueForced, Jobs.NearestDamaged): без этого приказ выдавался бы и висел, ничего
         // не делая, — а исполнитель считался бы занятым
         if (ReferenceEquals(order.Entity, this))
             return null;

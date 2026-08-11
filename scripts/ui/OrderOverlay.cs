@@ -52,7 +52,7 @@ public partial class OrderOverlay : Node2D
             }
         }
 
-        if (command.Banding)
+        if (command.State == CommandState.Banding)
             DrawBand(command.Band);
     }
 

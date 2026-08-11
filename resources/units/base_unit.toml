@@ -32,4 +32,4 @@ approach_hold = "/content/units.vars.toml/approach_hold"
 # Полный перечень: пересечение с фактическими умениями отсекает лишнее.
 # Потомок снимает лишнее через deny, не перечисляя allow заново.
 [orders]
-allow = ["move", "follow", "attack", "build", "repair", "delete"]
+allow = ["move", "attack_move", "follow", "attack", "build", "repair", "delete"]

@@ -6,6 +6,7 @@ public enum OrderKind
     Move,
     Build,
     Attack,
+    AttackMove,
     Repair,
     Follow,
     Delete,
@@ -92,6 +93,17 @@ public sealed class Order
         Entity = victim,
         Pos = victim.GlobalPosition,
     };
+
+    /// <summary>
+    /// Идти с боем: то же движение, но по дороге исполнитель останавливается на всякую
+    /// цель в пределах внимания и продолжает путь, когда её не станет.
+    ///
+    /// ОТДЕЛЬНЫЙ ВИД, А НЕ ТОЧКА У ПРИКАЗА АТАКИ. У атаки выполнимость завязана на живость
+    /// цели, а здесь цели нет вовсе и приказ живёт до прихода в точку; расходятся у них
+    /// и <see cref="Point"/>, и <see cref="Body"/>. Смешение двух видов в одном потребовало
+    /// бы ветвления в четырёх местах вместо одного значения перечисления.
+    /// </summary>
+    public static Order AttackMove(Vector2 pos) => new() { Kind = OrderKind.AttackMove, Pos = pos };
 
     public static Order Repair(Node2D target) => new()
     {
@@ -234,7 +246,10 @@ public sealed class Order
     {
         switch (Kind)
         {
+            // Идти с боем кончается приходом в точку, как и обычное движение: цели
+            // по дороге приказу не принадлежат, и гибель любой из них его не исчерпывает
             case OrderKind.Move:
+            case OrderKind.AttackMove:
             case OrderKind.Delete:
                 return true;
 
@@ -262,6 +277,7 @@ public sealed class Order
         OrderKind.Move => "идти",
         OrderKind.Build => "строить",
         OrderKind.Attack => "атаковать",
+        OrderKind.AttackMove => "идти с боем",
         OrderKind.Repair => "чинить",
         OrderKind.Follow => "следовать",
         OrderKind.Delete => "снос",
@@ -274,6 +290,8 @@ public sealed class Order
         OrderKind.Move => VizKind.OrderMove,
         OrderKind.Build => VizKind.OrderBuild,
         OrderKind.Attack => VizKind.OrderAttack,
+        // Тем же цветом, что и атака: смысл у них один, различается только цель
+        OrderKind.AttackMove => VizKind.OrderAttack,
         OrderKind.Repair => VizKind.OrderRepair,
         OrderKind.Follow => VizKind.OrderFollow,
         OrderKind.Delete => VizKind.OrderDelete,

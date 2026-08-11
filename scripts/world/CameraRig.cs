@@ -1,7 +1,14 @@
 using Godot;
 
 /// <summary>
-/// Камера: WASD или перетаскивание средней кнопкой, зум колесом.
+/// Камера: сдвиг по границам экрана, перетаскивание средней кнопкой, зум колесом.
+///
+/// КЛАВИАТУРУ КАМЕРА НЕ ЧИТАЕТ. Прежде она двигалась по WASD, и это занимало три клавиши
+/// из тех, на которые просятся приказы. Причём занимало намертво: направление бралось
+/// опросом состояния клавиши в <see cref="_Process"/>, а не из события, поэтому
+/// <c>SetInputAsHandled</c> камеру не остановил бы — какая бы система ни приняла событие,
+/// камера всё равно сместилась бы. Сдвиг по границам экрана заодно избавляет от чтения
+/// ввода вовсе: он выводится из положения курсора.
 ///
 /// В РЕДАКТОРЕ рисуются две рамки — видимая область при дальнем и ближнем упоре зума из
 /// <see cref="CameraSettings"/>. По ним видно, что попадёт в кадр. В запущенной игре рамки
@@ -53,6 +60,7 @@ public partial class CameraRig : Camera2D
     }
 
     private float PanSpeed => Settings != null ? Settings.PanSpeed : 700f;
+    private float EdgePanMargin => Settings != null ? Settings.EdgePanMarginPx : 24f;
     private float ZoomStep => Settings != null ? Settings.ZoomStep : 1.12f;
     private float ZoomMin => Settings != null ? Settings.ZoomMin : 0.25f;
     private float ZoomMax => Settings != null ? Settings.ZoomMax : 2.5f;
@@ -77,15 +85,56 @@ public partial class CameraRig : Camera2D
             return;
         }
 
-        var dir = Vector2.Zero;
-
-        if (Input.IsKeyPressed(Key.W)) dir.Y -= 1f;
-        if (Input.IsKeyPressed(Key.S)) dir.Y += 1f;
-        if (Input.IsKeyPressed(Key.A)) dir.X -= 1f;
-        if (Input.IsKeyPressed(Key.D)) dir.X += 1f;
+        var dir = EdgeDirection();
 
         if (dir != Vector2.Zero)
             Position += dir.Normalized() * PanSpeed * (float)dt / Zoom.X;
+    }
+
+    /// <summary>
+    /// Направление сдвига по границам окна. Курсор, попавший в полосу шириной
+    /// <see cref="EdgePanMargin"/> от края, толкает камеру в сторону этого края; в углу
+    /// складываются обе оси, и движение идёт по диагонали.
+    ///
+    /// СДВИГ МОЛЧИТ, ПОКА ОКНО НЕ В ФОКУСЕ ИЛИ КУРСОР ВНЕ ЕГО. Иначе камера ехала бы
+    /// всё время, что игрок работает в другом окне: указатель, оставленный у края,
+    /// от потери фокуса никуда не девается, а на втором мониторе он и вовсе лежит
+    /// за границей вьюпорта.
+    ///
+    /// Полоса шире половины окна сама себя гасит: обе противоположные проверки срабатывают
+    /// разом и дают ноль по этой оси. Отдельной проверки на такую настройку поэтому нет.
+    /// </summary>
+    private Vector2 EdgeDirection()
+    {
+        float margin = EdgePanMargin;
+
+        if (margin <= 0f)
+            return Vector2.Zero;
+
+        var window = GetWindow();
+
+        if (window == null || !window.HasFocus())
+            return Vector2.Zero;
+
+        var viewport = GetViewport();
+
+        if (viewport == null)
+            return Vector2.Zero;
+
+        var rect = viewport.GetVisibleRect();
+        var mouse = viewport.GetMousePosition();
+
+        if (!rect.HasPoint(mouse))
+            return Vector2.Zero;
+
+        var dir = Vector2.Zero;
+
+        if (mouse.X - rect.Position.X <= margin) dir.X -= 1f;
+        if (rect.End.X - mouse.X <= margin) dir.X += 1f;
+        if (mouse.Y - rect.Position.Y <= margin) dir.Y -= 1f;
+        if (rect.End.Y - mouse.Y <= margin) dir.Y += 1f;
+
+        return dir;
     }
 
     public override void _UnhandledInput(InputEvent @event)

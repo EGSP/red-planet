@@ -35,6 +35,12 @@ public partial class CommandSystem : GameSystem
     /// <summary>Дальше этого протаскивания клик считается рамкой, а не выбором одного.</summary>
     private const float BandThreshold = 8f;
 
+    /// <summary>Как часто пересчитывается вид курсора в обычном состоянии, секунды.</summary>
+    private const float CursorPollInterval = 0.05f;
+
+    /// <summary>Сколько осталось до следующего пересчёта курсора.</summary>
+    private float _cursorPoll;
+
     private CursorSystem _cursor;
     private PlacementGhost _ghost;
     private OrderOverlay _overlay;
@@ -58,7 +64,22 @@ public partial class CommandSystem : GameSystem
     public ControlGroups Groups { get; } = new();
 
     private Vector2 _bandStart;
-    private bool _banding;
+
+    /// <summary>
+    /// Чем занят ввод прямо сейчас. Читают наведение и отрисовка рамки; сам разбор
+    /// нажатий ведётся по нему же, а не по порядку ветвей.
+    /// </summary>
+    public CommandState State { get; private set; } = CommandState.Idle;
+
+    /// <summary>Вид приказа, выбранный игроком. Значим только в состоянии Aiming.</summary>
+    private OrderKind _aimed;
+
+    /// <summary>
+    /// Выбранный вид приказа либо null, если режим не включён. Читает панель приказов:
+    /// форма курсора — не единственный признак включённого режима, подсветка в панели
+    /// говорит то же самое словами.
+    /// </summary>
+    public OrderKind? Aimed => State == CommandState.Aiming ? _aimed : null;
 
     /// <summary>Что выбрано в строительной панели. Держится до отмены выбора.</summary>
     public UnitDefinition Pending { get; private set; }
@@ -72,8 +93,6 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private Vector2 _buildAnchor;
 
-    private bool _dragging;
-
     /// <summary>План застройки: то, что нарисовано призраком, и то, что встанет по отпусканию.</summary>
     private readonly List<BuildSpot> _plan = new();
 
@@ -86,8 +105,13 @@ public partial class CommandSystem : GameSystem
     /// Серия же строится под зажатым Shift — тем же, которым в очередь ставятся
     /// приказы. Shift здесь именно переключатель: нажимать и отпускать его можно
     /// сколько угодно, пока выбор в панели не снят.
+    ///
+    /// Клавиатура здесь спрашивается опросом, а не читается из события, потому что
+    /// признак решает не переход, а показ призрака, и пересчитывается он каждый кадр.
+    /// Переход же решается тем же правилом, но по модификатору самого нажатия.
     /// </summary>
-    public bool Building => Pending != null && (!_placed || Input.IsKeyPressed(Key.Shift));
+    private bool ReadyToPlace =>
+        State == CommandState.Placing && (!_placed || Input.IsKeyPressed(Key.Shift));
 
     /// <summary>Кто сейчас выделен — читают оверлей и HUD.</summary>
     public IReadOnlyList<IOrderable> Selected => _selected;
@@ -97,9 +121,6 @@ public partial class CommandSystem : GameSystem
     /// Переключается клавишей C.
     /// </summary>
     public bool ShowAllOrders { get; private set; }
-
-    /// <summary>Рамка выделения, пока её тянут.</summary>
-    public bool Banding => _banding;
 
     /// <summary>
     /// Рамка для отрисовки: конец берётся из визуальной позиции курсора, чтобы при
@@ -128,20 +149,30 @@ public partial class CommandSystem : GameSystem
             EnsureNodes();
     }
 
+    /// <summary>
+    /// Выбор постройки в панели. Зовёт <see cref="Buildbar"/>, поэтому состояние ставится
+    /// безусловно: щелчок по панели до систем не доходит, и жест мышью в мире к этому мигу
+    /// не начат.
+    /// </summary>
     public void BeginBuild(UnitDefinition def)
     {
         Pending = def;
         _placed = false;
+        State = CommandState.Placing;
         EnsureNodes();
         _ghost.Definition = def;
         _ghost.Visible = true;
     }
 
-    public void CancelBuild()
+    /// <summary>
+    /// Убрать всё, что относится к постройке. Состояния не меняет: переход — дело того
+    /// места, где он решается, и делать его заодно с уборкой значило бы иметь два
+    /// источника состояния.
+    /// </summary>
+    private void CancelBuild()
     {
         Pending = null;
         _placed = false;
-        _dragging = false;
         _plan.Clear();
 
         if (_ghost != null)
@@ -162,10 +193,28 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     public bool CancelContext()
     {
-        if (Pending != null)
+        switch (State)
         {
-            CancelBuild();
-            return true;
+            // Раскладка отменяется, а выбор в панели остаётся: следующее нажатие начинает
+            // её заново. Прежде Escape снимал заодно и выбор, тогда как правая кнопка
+            // в том же положении его сохраняла; поведение приведено к одному
+            case CommandState.Laying:
+                _plan.Clear();
+                State = CommandState.Placing;
+                return true;
+
+            case CommandState.Placing:
+                CancelBuild();
+                State = CommandState.Idle;
+                return true;
+
+            case CommandState.Aiming:
+                State = CommandState.Idle;
+                return true;
+
+            case CommandState.Banding:
+                State = CommandState.Idle;
+                return true;
         }
 
         if (_selected.Count > 0)
@@ -199,15 +248,22 @@ public partial class CommandSystem : GameSystem
         _selected.RemoveAll(actor => !Alive.Is(actor as Node));
         Groups.Sweep();
 
+        // Выделение могло погибнуть целиком: приказывать стало некому, и режим приказа
+        // держаться не на чем
+        if (State == CommandState.Aiming && _selected.Count == 0)
+            State = CommandState.Idle;
+
         // Условия показа областей: Ctrl при выделении и покрытие турелей при стройке
         GizmoGate.Refresh(_selected, Pending);
+
+        RefreshCursor(dt);
 
         if (Pending == null)
             return;
 
         // Призрак показывает не выбор, а готовность поставить: пока режим спит,
         // место под курсором не подсвечивается, и щелчок обещает обычное выделение
-        _ghost.Visible = Building || _dragging;
+        _ghost.Visible = ReadyToPlace || State == CommandState.Laying;
 
         if (!_ghost.Visible)
         {
@@ -218,13 +274,40 @@ public partial class CommandSystem : GameSystem
         // Представление читает визуальную позицию: при прогнозе призрак упреждает задержку,
         // при движении камеры без мыши точку уже пересчитал CursorSystem
         var visual = _cursor.VisualWorldPosition;
-        var anchor = _dragging ? _buildAnchor : visual;
+        var anchor = State == CommandState.Laying ? _buildAnchor : visual;
         bool alt = Input.IsKeyPressed(Key.Alt);
 
         BuildLayout.Compute(GM, Pending, anchor, visual, alt, _plan);
         UpdateStretchGhost(anchor, visual, alt);
 
         _ghost.QueueRedraw();
+    }
+
+    /// <summary>
+    /// Обновить курсор, но не в каждом кадре.
+    ///
+    /// ПОЧЕМУ С ПРОМЕЖУТКОМ. В обычном состоянии вид курсора выводится из того, что лежит
+    /// под указателем, а разбор цели обходит врагов, планы, своих и всё выделяемое — пять
+    /// проходов по разрезам. Делать их шестьдесят раз в секунду ради картинки, которую глаз
+    /// всё равно не различит чаще двадцати, было бы платой ни за что. Режим приказа при этом
+    /// отзывается сразу: там разбирать нечего, вид уже выбран.
+    /// </summary>
+    private void RefreshCursor(double dt)
+    {
+        if (State == CommandState.Aiming)
+        {
+            _cursorPoll = 0f;
+            _cursor.Kind = CursorArt.Of(_aimed);
+            return;
+        }
+
+        _cursorPoll -= (float)dt;
+
+        if (_cursorPoll > 0f)
+            return;
+
+        _cursorPoll = CursorPollInterval;
+        _cursor.Kind = DesiredCursor();
     }
 
     /// <summary>
@@ -248,37 +331,23 @@ public partial class CommandSystem : GameSystem
         _ghost.StretchRadius = radius;
     }
 
+    /// <summary>
+    /// Разбор ввода ведётся ПО СОСТОЯНИЮ, а не по порядку ветвей. Прежде правило «нажатие
+    /// в режиме постройки начинает раскладку, а не рамку» нигде не было записано — оно
+    /// следовало из того, что одна строка стояла выше другой. Теперь у каждого состояния
+    /// свой разбор, и что означает кнопка, видно прямо в нём.
+    /// </summary>
     public override void _UnhandledInput(InputEvent @event)
     {
         if (GM?.Playground == null || _cursor == null)
             return;
 
-        if (@event is InputEventKey { Pressed: true, Echo: false } key)
+        if (@event is InputEventKey key)
         {
-            if (key.Keycode == Key.C)
-            {
-                ShowAllOrders = !ShowAllOrders;
+            if (HandleKey(key))
                 GetViewport().SetInputAsHandled();
-                return;
-            }
 
-            if (key.Keycode == Key.Delete)
-            {
-                IssueDelete();
-                GetViewport().SetInputAsHandled();
-                return;
-            }
-
-            if (ControlGroups.SlotOf(key.Keycode) is var slot and >= 0)
-            {
-                if (key.CtrlPressed)
-                    AssignGroup(slot);
-                else
-                    SelectGroup(slot);
-
-                GetViewport().SetInputAsHandled();
-                return;
-            }
+            return;
         }
 
         if (@event is not InputEventMouseButton mouse)
@@ -288,49 +357,270 @@ public partial class CommandSystem : GameSystem
         // приказ обязан уйти туда, куда ткнули
         var point = _cursor.WorldFromEvent(mouse);
 
-        switch (mouse.ButtonIndex)
+        switch (State)
+        {
+            case CommandState.Idle:
+                IdleInput(mouse, point);
+                break;
+
+            case CommandState.Banding:
+                BandingInput(mouse, point);
+                break;
+
+            case CommandState.Placing:
+                PlacingInput(mouse, point);
+                break;
+
+            case CommandState.Laying:
+                LayingInput(mouse, point);
+                break;
+
+            case CommandState.Aiming:
+                AimingInput(mouse, point);
+                break;
+        }
+    }
+
+    // ── разбор по состояниям ───────────────────────────────────────────────────
+
+    private void IdleInput(InputEventMouseButton mouse, Vector2 point)
+    {
+        // Рамку начинаем сразу: одиночный щелчок — её вырожденный случай, и различаются
+        // они только тем, сколько мышь успела проехать
+        if (mouse is { ButtonIndex: MouseButton.Left, Pressed: true })
+        {
+            _bandStart = point;
+            State = CommandState.Banding;
+            return;
+        }
+
+        if (mouse is { ButtonIndex: MouseButton.Right, Pressed: true })
+            IssueResolved(point, mouse.ShiftPressed);
+    }
+
+    private void BandingInput(InputEventMouseButton mouse, Vector2 point)
+    {
+        if (mouse is { ButtonIndex: MouseButton.Left, Pressed: false })
+        {
+            FinishBand(point, mouse.ShiftPressed);
+            State = CommandState.Idle;
+            return;
+        }
+
+        // Правая кнопка посреди рамки отменяет её. Прежде она выдавала приказ, а рамка
+        // оставалась висеть до отпускания левой, — но это следовало из порядка ветвей,
+        // а не из решения
+        if (mouse is { ButtonIndex: MouseButton.Right, Pressed: true })
+            State = CommandState.Idle;
+    }
+
+    private void PlacingInput(InputEventMouseButton mouse, Vector2 point)
+    {
+        if (mouse is { ButtonIndex: MouseButton.Left, Pressed: true })
         {
             // Постройка ставится не по нажатию, а по отпусканию: между ними игрок задаёт
             // угол и раскладку, и до отпускания решение не принято
-            case MouseButton.Left when mouse.Pressed && Building:
+            if (!_placed || mouse.ShiftPressed)
+            {
                 _buildAnchor = point;
-                _dragging = true;
-                break;
+                State = CommandState.Laying;
+                return;
+            }
 
-            case MouseButton.Left when _dragging:
-                PlaceBatch(point);
-                break;
-
-            // Рамку начинаем сразу: одиночный клик — это её вырожденный случай,
-            // и различаются они только тем, сколько мышь успела проехать.
-            //
             // Уснувший выбор панели снимается этим же щелчком: игрок вернулся
             // к управлению отрядом, и держать за ним постройку больше незачем
-            case MouseButton.Left when mouse.Pressed:
-                CancelBuild();
-                _bandStart = point;
-                _banding = true;
-                break;
-
-            case MouseButton.Left:
-                FinishBand(point);
-                break;
-
-            // Правая кнопка посреди протаскивания отменяет только его: выбор в панели
-            // остаётся, и следующее нажатие начинает раскладку заново
-            case MouseButton.Right when mouse.Pressed && _dragging:
-                _dragging = false;
-                break;
-
-            case MouseButton.Right when mouse.Pressed && Building:
-                CancelBuild();
-                break;
-
-            case MouseButton.Right when mouse.Pressed:
-                CancelBuild();
-                IssueOrder(point);
-                break;
+            CancelBuild();
+            _bandStart = point;
+            State = CommandState.Banding;
+            return;
         }
+
+        if (mouse is { ButtonIndex: MouseButton.Right, Pressed: true })
+        {
+            CancelBuild();
+            State = CommandState.Idle;
+        }
+    }
+
+    private void LayingInput(InputEventMouseButton mouse, Vector2 point)
+    {
+        if (mouse is { ButtonIndex: MouseButton.Left, Pressed: false })
+        {
+            PlaceBatch(point, mouse.ShiftPressed);
+            State = CommandState.Placing;
+            return;
+        }
+
+        // Правая кнопка посреди протаскивания отменяет только его: выбор в панели
+        // остаётся, и следующее нажатие начинает раскладку заново
+        if (mouse is { ButtonIndex: MouseButton.Right, Pressed: true })
+        {
+            _plan.Clear();
+            State = CommandState.Placing;
+        }
+    }
+
+    /// <summary>
+    /// Режим приказа: ПРАВАЯ кнопка указывает цель, ЛЕВАЯ отменяет режим.
+    ///
+    /// РАСПРЕДЕЛЕНИЕ ТО ЖЕ, ЧТО И БЕЗ РЕЖИМА, и в этом весь смысл. В обычном управлении
+    /// правая кнопка заставляет действовать, левая — выделяет и сбрасывает; поменяй их
+    /// местами в режиме приказа — и рука игрока, привыкшая отдавать приказы правой, стала бы
+    /// отменять то, что он только что выбрал. Режим меняет, КАКОЙ приказ уйдёт, а не то,
+    /// какой кнопкой его отдают.
+    ///
+    /// Левая кнопка при этом не выделяет, а только снимает режим: щелчок отменяет выбор,
+    /// и понимать его вторым способом разом было бы двусмысленно.
+    ///
+    /// Режим снимается после выдачи, если не зажат Shift, — то же правило, что у постройки:
+    /// одиночный приказ есть обычный случай, серия набирается под зажатым Shift.
+    /// </summary>
+    private void AimingInput(InputEventMouseButton mouse, Vector2 point)
+    {
+        if (mouse is { ButtonIndex: MouseButton.Right, Pressed: true })
+        {
+            IssueForced(_aimed, point, mouse.ShiftPressed);
+
+            if (!mouse.ShiftPressed)
+                State = CommandState.Idle;
+
+            return;
+        }
+
+        if (mouse is { ButtonIndex: MouseButton.Left, Pressed: true })
+            State = CommandState.Idle;
+    }
+
+    // ── клавиши ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Смысл, в котором разбирается нажатие. Вычисляется, а не хранится: отдельное поле
+    /// было бы вторым источником истины, который пришлось бы согласовывать с состоянием
+    /// при каждом переходе.
+    /// </summary>
+    private InputContext Context => State switch
+    {
+        CommandState.Banding or CommandState.Placing or CommandState.Laying
+            => InputContext.Gesture,
+        CommandState.Aiming => InputContext.Aiming,
+        _ => _selected.Count > 0 ? InputContext.Orders : InputContext.Selection,
+    };
+
+    /// <summary>
+    /// Разбор клавиши. Возвращает true, если нажатие израсходовано, — только тогда событие
+    /// помечается обработанным, и клавиша, ничего не сделавшая, достаётся другим слушателям.
+    ///
+    /// Боевые группы и показ очередей читаются в любом контексте: они не спорят ни с приказами,
+    /// ни с отбором и означают одно и то же всегда.
+    /// </summary>
+    private bool HandleKey(InputEventKey key)
+    {
+        if (key.IsActionPressed(InputActions.ViewOrdersAll))
+        {
+            ShowAllOrders = !ShowAllOrders;
+            return true;
+        }
+
+        // Ctrl читается у самого события, а не опросом клавиатуры: состояние клавиш
+        // спрашивается в момент разбора, а событие несёт то, что было в момент нажатия
+        if (InputActions.GroupSlot(key) is var slot and >= 0)
+        {
+            if (key.CtrlPressed)
+                AssignGroup(slot);
+            else
+                SelectGroup(slot);
+
+            return true;
+        }
+
+        return Context switch
+        {
+            InputContext.Selection => SelectByKey(key),
+            InputContext.Orders or InputContext.Aiming => OrderByKey(key),
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Клавиши приказов. Снос выдаётся сразу и цели не требует, остальные включают режим
+    /// указания цели.
+    /// </summary>
+    private bool OrderByKey(InputEventKey key)
+    {
+        if (key.IsActionPressed(InputActions.UnitDelete))
+        {
+            IssueDelete();
+            return true;
+        }
+
+        if (AimedKind(key) is not { } kind)
+            return false;
+
+        _aimed = kind;
+        State = CommandState.Aiming;
+        return true;
+    }
+
+    private static OrderKind? AimedKind(InputEventKey key)
+    {
+        foreach (var (kind, action) in InputActions.OrderActions)
+            if (key.IsActionPressed(action))
+                return kind;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Клавиши отбора. Читаются только при пустом выделении: приказывать некому, и клавиша
+    /// достаётся второму своему смыслу.
+    ///
+    /// ДОБАВЛЕНИЯ ПО SHIFT ЗДЕСЬ НЕТ, и не по недосмотру: раз отбор возможен только при
+    /// пустом выделении, добавлять ему не к чему. Стоит отобрать хоть кого-то — и та же
+    /// клавиша означает уже приказ, потому что смысл её решает наличие выделения, а не его
+    /// состав. Иначе предсказать, что сделает нажатие, игрок бы не смог.
+    /// </summary>
+    private bool SelectByKey(InputEventKey key)
+    {
+        if (key.IsActionPressed(InputActions.SelectArmy))
+        {
+            SelectVisible(SelectionFilter.Army);
+            return true;
+        }
+
+        if (key.IsActionPressed(InputActions.SelectBuilders))
+        {
+            SelectVisible(SelectionFilter.Builders);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Какой курсор показать. В режиме приказа — выбранный вид, в обычном — тот, что уйдёт
+    /// по нажатию в нынешней точке, поэтому курсор меняется сам, стоит навести его на врага,
+    /// на каркас или на подбитого своего.
+    ///
+    /// Во время жеста мышью курсор обычный: рамка и раскладка построек показывают себя сами,
+    /// а приказ в это время не отдаётся.
+    /// </summary>
+    private CursorKind DesiredCursor()
+    {
+        if (State == CommandState.Aiming)
+            return CursorArt.Of(_aimed);
+
+        if (State != CommandState.Idle)
+            return CursorKind.Arrow;
+
+        // Над элементом интерфейса приказа не будет, и обещать его курсором нельзя.
+        // Спрашивается тот элемент, который принимает мышь, поэтому панели
+        // с MouseFilter.Ignore курсор не гасят — сквозь них мир виден по-прежнему
+        if (GetViewport()?.GuiGetHoveredControl() != null)
+            return CursorKind.Arrow;
+
+        return ResolvedKind(_cursor.ActualWorldPosition) is { } kind
+            ? CursorArt.Of(kind)
+            : CursorKind.Arrow;
     }
 
     // ── боевые группы ──────────────────────────────────────────────────────────
@@ -370,15 +660,8 @@ public partial class CommandSystem : GameSystem
 
     // ── выделение ──────────────────────────────────────────────────────────────
 
-    private void FinishBand(Vector2 point)
+    private void FinishBand(Vector2 point, bool add)
     {
-        if (!_banding)
-            return;
-
-        _banding = false;
-
-        bool add = Input.IsKeyPressed(Key.Shift);
-
         // Свободное выделение и выбор группы взаимно исключают друг друга: набирая
         // отряд заново, игрок уходит от группы, и подсветка гаснет. А вот добавление
         // по Shift группу не рушит — добранные попадают в выделение, но не в состав
@@ -424,11 +707,14 @@ public partial class CommandSystem : GameSystem
     }
 
     /// <summary>
-    /// Все такие же на карте. Область не ограничена видимой частью намеренно: «выделить
-    /// всех копателей» — приказ о составе отряда, а не о том, что сейчас попало в кадр,
-    /// и результат не должен меняться от положения камеры.
+    /// Все такие же на экране. Тип опознаём по DisplayName — по той же строке, которой
+    /// подписана панель выделения.
     ///
-    /// Тип опознаём по DisplayName — по той же строке, которой подписана панель выделения.
+    /// ОБЛАСТЬ ОГРАНИЧЕНА ВИДИМОЙ ЧАСТЬЮ КАРТЫ. Прежде она не ограничивалась намеренно,
+    /// и «выделить всех копателей» означало всех до единого, где бы они ни были. Решение
+    /// отменено: правило теперь одно на все выделения, сделанные не мышью, — жест мыши
+    /// задаёт свои границы сам, а выбор по признаку их не имеет вовсе и без ограничения
+    /// приводит в отряд юнитов с другого конца карты.
     /// </summary>
     private void SelectSameKind(IOrderable sample)
     {
@@ -437,9 +723,23 @@ public partial class CommandSystem : GameSystem
         if (!_selected.Contains(sample))
             _selected.Add(sample);
 
+        SelectVisible(actor => actor.DisplayName == kind, add: true);
+    }
+
+    /// <summary>Отбор по признаку в пределах видимой части карты.</summary>
+    private void SelectVisible(SelectionFilter filter) =>
+        SelectVisible(filter.Matches, add: false);
+
+    private void SelectVisible(System.Func<IOrderable, bool> match, bool add)
+    {
+        if (!add)
+            ClearSelection();
+
+        var view = _cursor.VisibleWorldRect;
+
         foreach (var actor in GM.Index.All<IOrderable>())
         {
-            if (!Commandable(actor) || actor.DisplayName != kind)
+            if (!Commandable(actor) || !match(actor) || !view.HasPoint(actor.GlobalPosition))
                 continue;
 
             if (!_selected.Contains(actor))
@@ -509,22 +809,14 @@ public partial class CommandSystem : GameSystem
     ///
     /// Снос под правило не подпадает: он и означает «уничтожь себя», цели у него нет вовсе.
     /// </summary>
-    private void IssueOrder(Vector2 point)
+    private void IssueResolved(Vector2 point, bool queue)
     {
         var recipients = Recipients();
         if (recipients.Count == 0)
             return;
 
-        bool queue = Input.IsKeyPressed(Key.Shift);
-
         // Цель разбираем один раз на всех: она общая, а вид приказа у каждого свой
-        var victim = EnemyAt(point);
-        var occupant = GM.Obstacles.At(point) as Node;
-        IWorkSite site = occupant is Blueprint { NeedsWork: true } frame
-            ? frame
-            : PlanAt(point);
-        var damaged = Repairable(occupant as Node2D) ?? DamagedUnitAt(point);
-        var leader = Leader(point, recipients);
+        var (victim, site, damaged, leader) = ResolveTargets(point, recipients);
 
         var attack = new Assignment(recipients, queue);
         var build = new Assignment(recipients, queue);
@@ -551,6 +843,71 @@ public partial class CommandSystem : GameSystem
 
             move.Give(actor, () => Order.MoveTo(point));
         }
+    }
+
+    /// <summary>
+    /// Приказ ЗАДАННОГО вида: игрок выбрал его клавишей, и цель под курсором даёт лишь
+    /// аргумент. Обратный порядок по отношению к <see cref="IssueResolved"/>, где вид
+    /// выводится из цели.
+    ///
+    /// ЦЕЛЬ БЕРЁТСЯ ТОЛЬКО ТА, ЧТО ВИДУ ПОДХОДИТ. Ремонт и сопровождение без цели
+    /// не выдаются вовсе: приказ, которому нечего исполнять, повис бы в очереди, а
+    /// исполнитель считался бы занятым. Атака же по пустому месту осмысленна и означает
+    /// «идти с боем» — приказ отдельного вида (<see cref="OrderKind.AttackMove"/>).
+    ///
+    /// Отсев цели, совпавшей с получателем, тот же, что и при выводе из контекста.
+    /// </summary>
+    private void IssueForced(OrderKind kind, Vector2 point, bool queue)
+    {
+        var recipients = Recipients();
+        if (recipients.Count == 0)
+            return;
+
+        var assignment = new Assignment(recipients, queue);
+
+        if (kind == OrderKind.Move)
+        {
+            Deal(assignment, recipients, null, () => Order.MoveTo(point));
+            return;
+        }
+
+        if (kind == OrderKind.Attack)
+        {
+            var victim = EnemyAt(point);
+
+            if (victim != null)
+                Deal(assignment, recipients, victim, () => Order.Attack(victim));
+            else
+                Deal(assignment, recipients, null, () => Order.AttackMove(point));
+
+            return;
+        }
+
+        if (kind == OrderKind.Repair)
+        {
+            var damaged = Repairable(GM.Obstacles.At(point) as Node2D) ?? DamagedUnitAt(point);
+
+            if (damaged != null)
+                Deal(assignment, recipients, damaged, () => Order.Repair(damaged));
+
+            return;
+        }
+
+        if (kind == OrderKind.Follow && Leader(point, recipients) is { } leader)
+            Deal(assignment, recipients, leader, () => Order.Follow(leader));
+    }
+
+    /// <summary>
+    /// Раздать один и тот же приказ всем получателям, пропустив того, кто сам оказался
+    /// целью. Вид приказа здесь уже выбран, поэтому перебора видов нет: не принявший
+    /// его получатель просто остаётся без приказа.
+    /// </summary>
+    private static void Deal(Assignment assignment, List<IOrderable> recipients,
+        object target, System.Func<Order> compose)
+    {
+        foreach (var actor in recipients)
+            if (target == null || Other(target, actor))
+                assignment.Give(actor, compose);
     }
 
     /// <summary>
@@ -679,6 +1036,66 @@ public partial class CommandSystem : GameSystem
     }
 
     /// <summary>
+    /// Всё, что лежит в точке и может стать целью приказа. Разбор один на два потребителя:
+    /// выдачу приказа и курсор, который показывает, что произойдёт по нажатию. Разойтись
+    /// им нельзя — курсор, обещающий не то, что случится, хуже отсутствия курсора.
+    /// </summary>
+    private (Node2D Victim, IWorkSite Site, Node2D Damaged, Node2D Leader) ResolveTargets(
+        Vector2 point, List<IOrderable> recipients)
+    {
+        var occupant = GM.Obstacles.At(point) as Node;
+
+        return (
+            EnemyAt(point),
+            occupant is Blueprint { NeedsWork: true } frame ? frame : PlanAt(point),
+            Repairable(occupant as Node2D) ?? DamagedUnitAt(point),
+            Leader(point, recipients));
+    }
+
+    /// <summary>
+    /// Какой приказ уйдёт по нажатию в этой точке, если вид его не задан игроком.
+    ///
+    /// ПОРЯДОК ТОТ ЖЕ, ЧТО У ВЫДАЧИ, и повторён он здесь не по недосмотру: выдача
+    /// перебирает получателей, у каждого спрашивая набор, а курсору нужен один ответ
+    /// на весь отряд. Общим у них остаётся разбор цели (<see cref="ResolveTargets"/>),
+    /// то есть та часть, расхождение в которой было бы враньём; выбор же вида различается
+    /// ровно тем, что здесь довольно одного согласного получателя.
+    /// </summary>
+    private OrderKind? ResolvedKind(Vector2 point)
+    {
+        var recipients = Recipients();
+
+        if (recipients.Count == 0)
+            return null;
+
+        var (victim, site, damaged, leader) = ResolveTargets(point, recipients);
+
+        if (victim != null && AnyTakes(recipients, OrderKind.Attack, victim))
+            return OrderKind.Attack;
+
+        if (site != null && AnyTakes(recipients, OrderKind.Build, site))
+            return OrderKind.Build;
+
+        if (damaged != null && AnyTakes(recipients, OrderKind.Repair, damaged))
+            return OrderKind.Repair;
+
+        if (leader != null && AnyTakes(recipients, OrderKind.Follow, leader))
+            return OrderKind.Follow;
+
+        return AnyTakes(recipients, OrderKind.Move, null) ? OrderKind.Move : null;
+    }
+
+    /// <summary>Возьмётся ли за такой приказ хоть кто-то из получателей.</summary>
+    private static bool AnyTakes(List<IOrderable> recipients, OrderKind kind, object target)
+    {
+        foreach (var actor in recipients)
+            if (actor.Orders.Allows(kind) && (target == null || Other(target, actor)))
+                return true;
+
+        return false;
+    }
+
+    /// <summary>
     /// Годится ли цель этому получателю: она не он сам.
     ///
     /// Одна проверка на все виды приказов, хотя сейчас сработать она может не у каждого:
@@ -766,10 +1183,8 @@ public partial class CommandSystem : GameSystem
     /// прогнозу и не по последнему кадру представления: между кадром и отпусканием курсор
     /// успевает сдвинуться, и поставить нужно то, куда игрок ткнул фактически.
     /// </summary>
-    private void PlaceBatch(Vector2 point)
+    private void PlaceBatch(Vector2 point, bool queue)
     {
-        _dragging = false;
-
         var def = Pending;
 
         if (def == null || BlueprintScene == null)
@@ -789,7 +1204,7 @@ public partial class CommandSystem : GameSystem
         // Раздача на всю партию одна: размеченное одним протаскиванием — это одна задача,
         // и ветка приказов у неё одна. Поэтому Shift здесь решает только то, заменяет ли
         // партия прежние дела или пристёгивается к ним
-        var assignment = new Assignment(Recipients(), Input.IsKeyPressed(Key.Shift));
+        var assignment = new Assignment(Recipients(), queue);
 
         foreach (var spot in _plan)
         {

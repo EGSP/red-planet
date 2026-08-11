@@ -59,7 +59,7 @@ public partial class PauseMenu : CanvasLayer
     /// </summary>
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
+        if (!@event.IsActionPressed(InputActions.GameCancel))
             return;
 
         if (_session == null || _session.Outcome != SessionOutcome.None)
@@ -111,6 +111,7 @@ public partial class PauseMenu : CanvasLayer
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 16) });
 
         AddButton(box, "Продолжить", () => _session.SetPaused(false));
+        AddButton(box, "Управление", () => this.Ancestor<Root>()?.OpenSettings());
         AddButton(box, "Перезапустить", Restart);
         AddButton(box, "Выйти в главное меню", ExitToMainMenu);
     }

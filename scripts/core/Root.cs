@@ -19,9 +19,6 @@ public partial class Root : Node
     /// <summary>Отладка: начинать игру сразу, минуя главное меню.</summary>
     [Export] public bool StartSessionOnLaunch;
 
-    /// <summary>Отладочная клавиша пересборки сессии: ею проверяется, что удаление чисто.</summary>
-    [Export] public Key RestartKey = Key.F5;
-
     /// <summary>Текущая сессия или null, если открыто главное меню.</summary>
     public Session Session { get; private set; }
 
@@ -30,6 +27,11 @@ public partial class Root : Node
 
     public override void _Ready()
     {
+        // Карта действий принадлежит приложению, а не сессии: клавиши работают и в главном
+        // меню, и в партии, и переживают пересборку сессии. Поэтому заносится она здесь,
+        // раньше, чем появится первый читатель ввода
+        InputActions.Ensure();
+
         if (StartSessionOnLaunch)
             NewGame();
         else
@@ -88,6 +90,23 @@ public partial class Root : Node
     public void QuitGame() => GetTree().Quit();
 
     /// <summary>
+    /// Открыть настройки. Экран принадлежит приложению, а не меню и не сессии: он нужен
+    /// обоим, а общего у них нет ничего, кроме него самого. Повторный вызов ничего
+    /// не делает — второй такой же экран поверх первого только сбивал бы с толку.
+    /// </summary>
+    public void OpenSettings()
+    {
+        if (Settings != null && IsInstanceValid(Settings))
+            return;
+
+        Settings = new SettingsMenu();
+        AddChild(Settings);
+    }
+
+    /// <summary>Открытые настройки или null.</summary>
+    public SettingsMenu Settings { get; private set; }
+
+    /// <summary>
     /// Удаление сессии. Сначала вынимаем из дерева, и только потом освобождаем: выход
     /// из дерева происходит здесь же, синхронно, поэтому GameManager успевает отпустить
     /// статическую ссылку на себя ДО того, как на его место встанет менеджер следующей
@@ -124,7 +143,7 @@ public partial class Root : Node
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false } key || key.Keycode != RestartKey)
+        if (!@event.IsActionPressed(InputActions.DebugRestart))
             return;
 
         RestartSession();

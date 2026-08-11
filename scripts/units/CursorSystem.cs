@@ -87,6 +87,12 @@ public partial class CursorSystem : GameSystem
         _priorUseAccumulated = Input.UseAccumulatedInput;
         Input.UseAccumulatedInput = UseAccumulatedInput;
         _appliedAccumulated = true;
+
+        // Стрелку ставим сразу и безусловно. Свойство Kind меняет картинку только
+        // при смене вида, а начальное значение и есть Arrow, поэтому без этой строки
+        // игра начиналась бы с системного курсора и меняла его лишь после того,
+        // как игрок наведёт указатель на цель и уведёт обратно
+        Apply(_kind);
     }
 
     public override void _ExitTree()
@@ -97,6 +103,12 @@ public partial class CursorSystem : GameSystem
             Input.UseAccumulatedInput = _priorUseAccumulated;
 
         _appliedAccumulated = false;
+
+        // Картинка курсора глобальна и сессию не переживает: выйдя в меню с включённым
+        // режимом приказа, игрок остался бы с прицелом вместо стрелки
+        Input.SetCustomMouseCursor(null);
+        _kind = CursorKind.Arrow;
+
         base._ExitTree();
     }
 
@@ -122,6 +134,163 @@ public partial class CursorSystem : GameSystem
     /// <summary>Экранная точка вьюпорта → мировые координаты площадки.</summary>
     public Vector2 WorldFromScreen(Vector2 screenPos) =>
         GetViewport().GetCanvasTransform().AffineInverse() * screenPos;
+
+    /// <summary>
+    /// Видимая часть мира прямоугольником. По ней ограничивается всякое выделение,
+    /// сделанное не мышью: жест мыши задаёт свои границы сам, а выбор по признаку
+    /// не имеет их вовсе и без ограничения приводил бы в отряд юнитов с другого конца
+    /// карты, о которых игрок в этот миг не думал.
+    ///
+    /// Хватает двух углов, поскольку камера не поворачивается: при повороте
+    /// описанный прямоугольник пришлось бы считать по всем четырём.
+    /// </summary>
+    public Rect2 VisibleWorldRect
+    {
+        get
+        {
+            var inverse = GetViewport().GetCanvasTransform().AffineInverse();
+            var screen = GetViewport().GetVisibleRect();
+            var a = inverse * screen.Position;
+            var b = inverse * screen.End;
+
+            return new Rect2(a, b - a).Abs();
+        }
+    }
+
+    /// <summary>
+    /// Вид курсора. Единственный владелец — эта система: она уже отвечает за всё,
+    /// что касается указателя, и заводить второе место, откуда вид меняется, незачем.
+    ///
+    /// Курсор показывает, что произойдёт по нажатию, — и в режиме выбранного приказа,
+    /// и в обычном, где вид выводится из того, что лежит под указателем. Поэтому он
+    /// и есть главный ответ на вопрос «что я сейчас прикажу»: панель приказов говорит
+    /// то же самое, но словами и в стороне от места действия.
+    /// </summary>
+    public CursorKind Kind
+    {
+        get => _kind;
+        set
+        {
+            if (_kind == value)
+                return;
+
+            _kind = value;
+            Apply(value);
+        }
+    }
+
+    private CursorKind _kind = CursorKind.Arrow;
+
+    /// <summary>
+    /// Наибольшая сторона стрелки в пикселях после подготовки.
+    ///
+    /// Стрелка мельче перекрестья намеренно: она сопровождает игрока постоянно и должна
+    /// указывать, не заслоняя того, на что указывает. Перекрестье же появляется тогда,
+    /// когда приказ вот-вот уйдёт, и обязано читаться с одного взгляда.
+    ///
+    /// Уменьшает картинки эта система, а не правка ассетов: исходные нарисованы крупно —
+    /// 56 и 64 пикселя в стороне, — и та же картинка может понадобиться панели
+    /// или подсказке в своём размере.
+    /// </summary>
+    private const int ArrowSide = 22;
+
+    /// <summary>Наибольшая сторона курсора приказа в пикселях после подготовки.</summary>
+    private const int CommandSide = 26;
+
+    /// <summary>Подготовленные курсоры: картинка и её горячая точка. Готовятся один раз.</summary>
+    private readonly System.Collections.Generic.Dictionary<CursorKind, (Texture2D Texture, Vector2 Hotspot)>
+        _art = new();
+
+    private void Apply(CursorKind kind)
+    {
+        var (texture, hotspot) = ArtOf(kind);
+
+        if (texture == null)
+        {
+            Input.SetCustomMouseCursor(null);
+            return;
+        }
+
+        Input.SetCustomMouseCursor(texture, Input.CursorShape.Arrow, hotspot);
+    }
+
+    private (Texture2D Texture, Vector2 Hotspot) ArtOf(CursorKind kind)
+    {
+        if (_art.TryGetValue(kind, out var cached))
+            return cached;
+
+        var prepared = Prepare(kind);
+        _art[kind] = prepared;
+
+        return prepared;
+    }
+
+    /// <summary>
+    /// Подготовить картинку курсора: обрезать поля, уменьшить и найти горячую точку.
+    ///
+    /// ПОЛЯ ОБРЕЗАЮТСЯ, И ЭТО НЕ УКРАШЕНИЕ. Стрелка нарисована не по всему полю картинки,
+    /// а в его правой нижней четверти, поэтому горячая точка, взятая от угла картинки,
+    /// промахивалась мимо острия на половину стороны — курсор рисовался в стороне от места,
+    /// куда игрок целился. После обрезки координаты рисунка и координаты картинки совпадают,
+    /// и промаху взяться неоткуда.
+    ///
+    /// ГОРЯЧАЯ ТОЧКА У СТРЕЛКИ НА ОСТРИЕ, У ПРОЧИХ В СЕРЕДИНЕ. Остриём служит первый
+    /// непрозрачный пиксель сверху: у стрелки он и есть та точка, которой указывают.
+    /// Перекрестье же указывает центром, а не краем рисунка.
+    /// </summary>
+    private static (Texture2D Texture, Vector2 Hotspot) Prepare(CursorKind kind)
+    {
+        string path = CursorArt.PathOf(kind);
+        var source = GD.Load<Texture2D>(path);
+        var image = source?.GetImage();
+
+        if (image == null)
+        {
+            GD.PushWarning($"[CursorSystem] нет картинки курсора: {path}");
+            return (null, Vector2.Zero);
+        }
+
+        if (image.IsCompressed())
+            image.Decompress();
+
+        var used = image.GetUsedRect();
+
+        if (used.Size.X > 0 && used.Size.Y > 0)
+            image = image.GetRegion(used);
+
+        int side = Mathf.Max(image.GetWidth(), image.GetHeight());
+        int target = kind == CursorKind.Arrow ? ArrowSide : CommandSide;
+
+        if (side > target)
+        {
+            float k = target / (float)side;
+
+            image.Resize(
+                Mathf.Max(1, Mathf.RoundToInt(image.GetWidth() * k)),
+                Mathf.Max(1, Mathf.RoundToInt(image.GetHeight() * k)),
+                Image.Interpolation.Lanczos);
+        }
+
+        var hotspot = kind == CursorKind.Arrow
+            ? Tip(image)
+            : new Vector2(image.GetWidth() / 2, image.GetHeight() / 2);
+
+        return (ImageTexture.CreateFromImage(image), hotspot);
+    }
+
+    /// <summary>
+    /// Остриё: первый непрозрачный пиксель при обходе сверху вниз. Уменьшение размывает
+    /// края, поэтому едва заметные точки за остриё не считаются.
+    /// </summary>
+    private static Vector2 Tip(Image image)
+    {
+        for (int y = 0; y < image.GetHeight(); y++)
+            for (int x = 0; x < image.GetWidth(); x++)
+                if (image.GetPixel(x, y).A > 0.25f)
+                    return new Vector2(x, y);
+
+        return Vector2.Zero;
+    }
 
     /// <summary>
     /// Точная мировая позиция кнопки или иного события мыши. Не использует прогноз:

@@ -21,16 +21,6 @@ public sealed class ControlGroups
     /// <summary>Слотов десять: клавиши 1…9 и 0 последней.</summary>
     public const int Count = 10;
 
-    /// <summary>
-    /// Клавиша слота. Ноль стоит в конце, а не в начале: на клавиатуре он справа
-    /// от девятки, и порядок в полосе групп должен совпадать с порядком под пальцами.
-    /// </summary>
-    private static readonly Key[] Keys =
-    {
-        Key.Key1, Key.Key2, Key.Key3, Key.Key4, Key.Key5,
-        Key.Key6, Key.Key7, Key.Key8, Key.Key9, Key.Key0,
-    };
-
     private readonly List<IOrderable>[] _slots = new List<IOrderable>[Count];
 
     /// <summary>Выбранный слот или -1, если выделение набрано вручную.</summary>
@@ -42,17 +32,11 @@ public sealed class ControlGroups
             _slots[slot] = new List<IOrderable>();
     }
 
-    /// <summary>Слот по клавише или -1, если клавиша не цифровая.</summary>
-    public static int SlotOf(Key keycode)
-    {
-        for (int slot = 0; slot < Keys.Length; slot++)
-            if (Keys[slot] == keycode)
-                return slot;
-
-        return -1;
-    }
-
-    /// <summary>Подпись слота — та же цифра, что и на клавише.</summary>
+    /// <summary>
+    /// Подпись слота. Совпадает с клавишей по умолчанию, но привязку не задаёт: клавиши
+    /// живут в <see cref="InputActions"/> и переназначаются, а подпись останется цифрой
+    /// слота, пока настройки не научатся показывать назначенную клавишу.
+    /// </summary>
     public static string Label(int slot) => slot == Count - 1 ? "0" : (slot + 1).ToString();
 
     public IReadOnlyList<IOrderable> Members(int slot) =>

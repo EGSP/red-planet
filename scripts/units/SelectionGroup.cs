@@ -19,6 +19,41 @@ public enum SelectionGroup
 }
 
 /// <summary>
+/// Отбор по признаку: кого выделяет горячая клавиша.
+///
+/// ЭТО НЕ РОД. Боевые машины родом выделены, а строители — нет: <see cref="SelectionGroup.Bots"/>
+/// объединяет коммандера, фабрикаторов, копателей и ремонтников, и отбирать строителей по нему
+/// значило бы захватить лишних. Поэтому отбор задаётся предикатом, а род служит ему лишь
+/// одним из оснований.
+/// </summary>
+public sealed class SelectionFilter
+{
+    private readonly System.Func<IOrderable, bool> _match;
+
+    private SelectionFilter(System.Func<IOrderable, bool> match) => _match = match;
+
+    public bool Matches(IOrderable actor) => _match(actor);
+
+    /// <summary>
+    /// Боевые машины. Оговорка «кроме коммандера» выполняется сама собой: в род
+    /// <see cref="SelectionGroup.Army"/> он не входит намеренно — см. пояснение к роду.
+    /// </summary>
+    public static readonly SelectionFilter Army =
+        new(actor => actor.SelectionGroup == SelectionGroup.Army);
+
+    /// <summary>
+    /// Всё, что умеет строить, кроме коммандера.
+    ///
+    /// КОММАНДЕР ИСКЛЮЧЁН НАМЕРЕННО. Строить он умеет и потому попал бы в отбор, а приказ,
+    /// отданный такому выделению, увёл бы его с базы через полкарты; потеря коммандера
+    /// означает поражение. Отдельного способа выделить его при этом не требуется: сессия
+    /// кладёт его в первую боевую группу при старте партии.
+    /// </summary>
+    public static readonly SelectionFilter Builders =
+        new(actor => actor is Unit { Definition.CanBuild: true } and not Commander);
+}
+
+/// <summary>
 /// Правило рамки: в выделение попадает только преобладающий род, а не всё подряд.
 ///
 /// ЗАЧЕМ. Рамка почти всегда захватывает лишнее. Тянешь её по отряду, стоящему у базы, —

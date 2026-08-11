@@ -70,7 +70,7 @@ public partial class DebugPanel : CanvasLayer
     /// </summary>
     public override void _UnhandledKeyInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.F3 })
+        if (!@event.IsActionPressed(InputActions.DebugToggle))
             return;
 
         _frame.Visible = !_frame.Visible;
@@ -479,7 +479,11 @@ public partial class DebugPanel : CanvasLayer
         var hints = new Label
         {
             Text = "ЛКМ — выделить или рамка, ПКМ — приказ по цели\n" +
-                   "Shift — дописать в очередь, WASD и колесо — камера\n" +
+                   "Shift — дописать в очередь\n" +
+                   "Выделено: A атака, M идти, R чинить, F следовать, Del снос\n" +
+                   "В режиме приказа: ПКМ — цель, ЛКМ или Escape — отмена\n" +
+                   "Пусто: A боевые на экране, F строители на экране\n" +
+                   "Камера: край экрана, СКМ — перетаскивание, колесо — зум\n" +
                    "C — очереди всех своих, F3 — эта панель",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
