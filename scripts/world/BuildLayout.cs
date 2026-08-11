@@ -46,8 +46,9 @@ public static class BuildLayout
     public const float AngleThreshold = 8f;
 
     /// <summary>
-    /// Рассчитать план. Список заполняется заново, первым в нём всегда идёт место
-    /// под точкой нажатия: оно и есть то, что игрок выбрал, а остальные к нему пристроены.
+    /// Рассчитать план. Список заполняется заново. Первым идёт место под точкой нажатия,
+    /// если оно входит в раскладку: игрок выбрал его, остальные к нему пристроены.
+    /// У квадрата с чётным числом рядов точка нажатия между рядами и в план не попадает.
     /// </summary>
     public static void Compute(GameManager gm, UnitDefinition def, Vector2 anchor, Vector2 cursor,
         bool alt, List<BuildSpot> into)
@@ -83,24 +84,30 @@ public static class BuildLayout
             return;
         }
 
-        Accept(gm, def, origin, facing, taken, into);
-
         if (pattern == BuildPattern.None || length < AngleThreshold)
+        {
+            Accept(gm, def, origin, facing, taken, into);
             return;
+        }
 
         var direction = drag / length;
 
         switch (pattern)
         {
             case BuildPattern.Line:
+                Accept(gm, def, origin, facing, taken, into);
                 Line(gm, def, origin, facing, direction, length, taken, into);
                 break;
 
             case BuildPattern.Diamond:
+                Accept(gm, def, origin, facing, taken, into);
                 Diamond(gm, def, origin, facing, direction, length, taken, into);
                 break;
 
             default:
+                // Квадрат сам решает, входит ли точка нажатия в решётку: при чётном
+                // числе рядов линия протаскивания проходит между ними, и отдельная
+                // постройка в начале давала бы лишнее место вне узлов.
                 Field(gm, def, origin, facing, direction, length, taken, into);
                 break;
         }
@@ -165,6 +172,8 @@ public static class BuildLayout
     ///
     /// Ряды расходятся от линии протаскивания в обе стороны поровну, поэтому застройка
     /// растёт вокруг того места, куда игрок ведёт мышь, а не сносит её вбок.
+    /// При нечётном числе рядов средний проходит через точку нажатия и она входит в план
+    /// первой; при чётном линия лежит между рядами, и отдельного места в начале нет.
     /// </summary>
     private static void Field(GameManager gm, UnitDefinition def, Vector2 origin, float facing,
         Vector2 direction, float length, List<Obb> taken, List<BuildSpot> into)
@@ -177,11 +186,19 @@ public static class BuildLayout
         int count = Mathf.FloorToInt(length / stepAlong) + 1;
 
         if (count < 2)
+        {
+            Accept(gm, def, origin, facing, taken, into);
             return;
+        }
 
         // Середина полосы приходится на линию протаскивания. При нечётном числе рядов
         // средний ряд ложится точно на неё, при чётном линия проходит между двумя рядами
         float middle = (count - 1) * 0.5f;
+
+        // Точка нажатия — узел решётки только при нечётном числе рядов. Заносим её
+        // первой, как требует контракт плана; в цикле ниже этот узел пропускается.
+        if ((count & 1) != 0)
+            Accept(gm, def, origin, facing, taken, into);
 
         for (int row = 0; row < count; row++)
         {
@@ -194,7 +211,6 @@ public static class BuildLayout
                              + direction * stepAlong * column
                              + across * stepAcross * (row - middle);
 
-                // Место под точкой нажатия занесено в план первым
                 if (center.DistanceSquaredTo(origin) < 1f)
                     continue;
 
