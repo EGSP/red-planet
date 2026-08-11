@@ -89,6 +89,9 @@ public partial class DebugPanel : CanvasLayer
 
     private void Build()
     {
+        // Выше паузы и экрана исхода: отладка читается поверх любого другого интерфейса
+        Layer = 30;
+
         _frame = new UiFrame();
         AddChild(_frame);
 
