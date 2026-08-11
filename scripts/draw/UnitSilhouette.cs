@@ -35,7 +35,7 @@ public static class UnitSilhouette
         if (placed)
             canvas.DrawSetTransform(origin, angle, Vector2.One);
 
-        DrawHull(canvas, def, radius);
+        DrawHull(canvas, def, radius, origin, angle);
         DrawMoveMark(canvas, def, radius);
         DrawToolMark(canvas, def, radius, origin, angle, toolLocal);
 
@@ -53,10 +53,15 @@ public static class UnitSilhouette
         if (def == null || radius <= 0f)
             return 0f;
 
-        float rings = 1f + 0.12f * Mathf.Max(def.ArmorRings, 0);
+        float rings = string.IsNullOrEmpty(def.Sprite)
+            ? 1f + 0.12f * Mathf.Max(def.ArmorRings, 0)
+            : 1f;
         float body = Mathf.Max(HullReach(def), 1f) * radius * rings;
 
-        body = Mathf.Max(body, TrimReach(def) * radius);
+        // Надстройка тира учитывается только у процедурного силуэта: спрайт уже содержит
+        // весь рисунок корпуса, и плечи поверх него не рисуются
+        if (string.IsNullOrEmpty(def.Sprite))
+            body = Mathf.Max(body, TrimReach(def) * radius);
 
         return Mathf.Max(body, ToolReach(def, radius));
     }
@@ -64,6 +69,11 @@ public static class UnitSilhouette
     /// <summary>Наибольшее удаление точки корпуса от центра в долях радиуса.</summary>
     private static float HullReach(UnitDefinition def)
     {
+        // Спрайт вписывается в квадрат со стороной 2·radius, поэтому край на расстоянии
+        // радиуса от центра; процедурные надстройки к нему не добавляются
+        if (!string.IsNullOrEmpty(def.Sprite))
+            return Mathf.Max(def.SpriteScale, 0.01f);
+
         if (HullGeometry.Composite(def.Hull))
             return Reach(HullGeometry.Parts(def.Hull, 1f));
 
@@ -104,11 +114,24 @@ public static class UnitSilhouette
     }
 
     /// <summary>
-    /// Корпус по силуэту из определения. Простые силуэты рисуются одной фигурой, составные
-    /// — набором выпуклых частей из <see cref="HullGeometry"/>.
+    /// Корпус по силуэту из определения. Если задан <see cref="UnitDefinition.Sprite"/>,
+    /// рисуется спрайт; иначе простые силуэты — одной фигурой, составные — набором
+    /// выпуклых частей из <see cref="HullGeometry"/>.
+    ///
+    /// <paramref name="origin"/> и <paramref name="angle"/> — тот же базис, что уже выставлен
+    /// в <see cref="Draw"/> для иконки: поворот спрайта наращивается на него и после
+    /// отрисовки базис восстанавливается, иначе метка курса рисовалась бы не там.
     /// </summary>
-    private static void DrawHull(CanvasItem canvas, UnitDefinition def, float radius)
+    private static void DrawHull(CanvasItem canvas, UnitDefinition def, float radius,
+        Vector2 origin, float angle)
     {
+        if (!string.IsNullOrEmpty(def.Sprite))
+        {
+            SpriteArt.DrawHull(canvas, def, new Rect2(-radius, -radius, radius * 2f, radius * 2f),
+                baseRadians: angle, baseOrigin: origin);
+            return;
+        }
+
         var fill = ShapeStyle.Filled(def.Color, new Color(0f, 0f, 0f, 0.4f), 2f,
             WidthMode.Screen);
 

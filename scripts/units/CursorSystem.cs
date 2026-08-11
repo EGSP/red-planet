@@ -250,13 +250,7 @@ public partial class CursorSystem : GameSystem
             return (null, Vector2.Zero);
         }
 
-        if (image.IsCompressed())
-            image.Decompress();
-
-        var used = image.GetUsedRect();
-
-        if (used.Size.X > 0 && used.Size.Y > 0)
-            image = image.GetRegion(used);
+        image = SpriteArt.TrimUsed(image);
 
         int side = Mathf.Max(image.GetWidth(), image.GetHeight());
         int target = kind == CursorKind.Arrow ? ArrowSide : CommandSide;

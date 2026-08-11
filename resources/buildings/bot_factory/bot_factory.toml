@@ -16,8 +16,11 @@ pattern_step   = "margin"
 facing_degrees = -90.0
 
 [body]
-max_health   = 6000.0
-vision_range = 8.0
+max_health       = 6000.0
+vision_range     = 8.0
+sprite           = "res://assets/sprites/buildings/bot_factory.png"
+sprite_scale     = 1.2
+sprite_rotation  = 90.0
 
 [plant]
 factory_cooldown    = 1.0

@@ -371,12 +371,22 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         // Площадка принадлежит каркасу так же, как готовой постройке: исчезает вместе с ним
         BuildingSkirt.Draw(this, rect);
 
-        ShapeDraw.Rect(this, rect, ShapeStyle.Solid(new Color(Definition.Color, 0.15f)));
+        if (!string.IsNullOrEmpty(Definition.Sprite))
+        {
+            // Непрозрачность растёт с прогрессом: каркас читается как тот же спрайт,
+            // что и готовая постройка, а не как цветной прямоугольник
+            SpriteArt.DrawHull(this, Definition, rect,
+                new Color(1f, 1f, 1f, 0.2f + 0.65f * Ratio), BodyFacing);
+        }
+        else
+        {
+            ShapeDraw.Rect(this, rect, ShapeStyle.Solid(new Color(Definition.Color, 0.15f)));
 
-        // Заполнение снизу вверх по прогрессу
-        float filled = size.Y * Ratio;
-        ShapeDraw.Rect(this, new Rect2(rect.Position.X, rect.End.Y - filled, size.X, filled),
-            ShapeStyle.Solid(new Color(Definition.Color, 0.55f)));
+            // Заполнение снизу вверх по прогрессу
+            float filled = size.Y * Ratio;
+            ShapeDraw.Rect(this, new Rect2(rect.Position.X, rect.End.Y - filled, size.X, filled),
+                ShapeStyle.Solid(new Color(Definition.Color, 0.55f)));
+        }
 
         ShapeDraw.Rect(this, rect,
             ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.7f), 2f, WidthMode.Screen));

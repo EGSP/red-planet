@@ -364,6 +364,14 @@ public static class ContentCompiler
             definition.Hull = body.Enum("hull", basis.Hull);
             definition.HullTrim = body.Enum("hull_trim", basis.HullTrim);
             definition.HullAspect = body.Float("hull_aspect", basis.HullAspect);
+            definition.Sprite = body.String("sprite", basis.Sprite);
+            definition.SpriteScale = body.Float("sprite_scale", basis.SpriteScale);
+            definition.SpriteRotationDegrees =
+                body.Float("sprite_rotation", basis.SpriteRotationDegrees);
+            definition.AmbientOcclusionInner =
+                body.Float("ao_inner", basis.AmbientOcclusionInner);
+            definition.AmbientOcclusionOuter =
+                body.Float("ao_outer", basis.AmbientOcclusionOuter);
             definition.ArmorRings = body.Int("armor_rings", basis.ArmorRings);
             definition.FrontPlate = body.Bool("front_plate", basis.FrontPlate);
         }
