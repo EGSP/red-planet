@@ -17,14 +17,15 @@ public enum CursorKind
     Repair,
     Assist,
     Build,
+    Patrol,
 }
 
 /// <summary>
 /// Картинки курсоров. Единственное место, где вид курсора связан с файлом на диске.
 ///
 /// Набор в <c>assets/sprites/ui/commands</c> шире того, что используется: заготовлены
-/// патрулирование, реклейм, остановка и повтор. Они появятся здесь вместе с приказами,
-/// которым отвечают, — заводить вид курсора раньше самого приказа незачем.
+/// реклейм, остановка и повтор. Они появятся здесь вместе с приказами, которым отвечают, —
+/// заводить вид курсора раньше самого приказа незачем.
 /// </summary>
 public static class CursorArt
 {
@@ -37,6 +38,7 @@ public static class CursorArt
         CursorKind.Repair => Commands + "icons_command_repair.png",
         CursorKind.Assist => Commands + "icons_command_assist.png",
         CursorKind.Build => Commands + "icons_command_use.png",
+        CursorKind.Patrol => Commands + "icons_command_patrol.png",
         _ => "res://assets/sprites/ui/cursor.png",
     };
 
@@ -51,6 +53,7 @@ public static class CursorArt
         OrderKind.Repair => CursorKind.Repair,
         OrderKind.Follow => CursorKind.Assist,
         OrderKind.Build => CursorKind.Build,
+        OrderKind.Patrol => CursorKind.Patrol,
         _ => CursorKind.Arrow,
     };
 }

@@ -43,6 +43,14 @@ public sealed class OrderGesture
     /// </summary>
     public const float Threshold = 12f;
 
+    /// <summary>
+    /// Наименьший радиус, при котором растягивание считается указанием области. Порог здесь
+    /// строже общего: щелчок от области отличает уже <see cref="Threshold"/>, а этот порог
+    /// отделяет намеренную область от круга, в котором исполнителю нечего делать. Живёт
+    /// в <see cref="настройках приказов"/> — величина мировая, а не свойство жеста.
+    /// </summary>
+    public static float MinRadius => Order.Settings.MinAreaRadiusPx;
+
     private readonly List<Vector2> _path = new();
     private readonly List<Vector2> _spots = new();
 
@@ -93,7 +101,7 @@ public sealed class OrderGesture
     public static GestureForm FormOf(OrderKind kind) => kind switch
     {
         OrderKind.Move => GestureForm.Line,
-        OrderKind.Attack or OrderKind.Build => GestureForm.Area,
+        OrderKind.Attack or OrderKind.Build or OrderKind.Patrol => GestureForm.Area,
         _ => GestureForm.Point,
     };
 
@@ -136,7 +144,7 @@ public sealed class OrderGesture
     /// </summary>
     public bool Stretched(Vector2 point) => Form switch
     {
-        GestureForm.Area => RadiusTo(point) >= Threshold,
+        GestureForm.Area => RadiusTo(point) >= MinRadius,
         GestureForm.Line => DrawnPath.Length(_path) >= Threshold,
         _ => false,
     };

@@ -119,6 +119,13 @@ public partial class CommandSystem : GameSystem
         ? 0f
         : _gesture.RadiusTo(_cursor.VisualWorldPosition);
 
+    /// <summary>
+    /// Достаточно ли растянута область, чтобы приказ ушёл областью, а не точкой. Читает
+    /// предпоказ: круг, который по отпусканию превратится в щелчок, обязан выглядеть иначе,
+    /// иначе игрок узнаёт о пороге только по итогу.
+    /// </summary>
+    public bool AreaReady => AreaRadius >= OrderGesture.MinRadius;
+
     /// <summary>Нарисованная линия для отрисовки. Тот же список, что и у выдачи приказа.</summary>
     public IReadOnlyList<Vector2> Path => _gesture.Path;
 
@@ -1039,6 +1046,13 @@ public partial class CommandSystem : GameSystem
             return;
         }
 
+        // Патруль по точке: цели не требует вовсе — точка обхода и есть весь приказ
+        if (kind == OrderKind.Patrol)
+        {
+            assignment.Deal(recipients, null, () => Order.Patrol(point));
+            return;
+        }
+
         // Помощь строительству по точке: план или каркас под указателем. Без цели приказ
         // не выдаётся — строить на пустом месте нечего, а вид постройки задаётся панелью
         if (kind == OrderKind.Build)
@@ -1085,18 +1099,49 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private void FinishSweep(Vector2 point)
     {
+        // СХЛОПНУТАЯ ОБЛАСТЬ УКАЗЫВАЕТ НА СВОЙ ЦЕНТР, а не на точку отпускания. Игрок целился
+        // серединой круга — там стоит противник, каркас или место, которое он хочет
+        // патрулировать, — а отпустил кнопку там, где кончился радиус. Взять точку отпускания
+        // значило бы, что приказ уходит мимо того, во что целились, и тем дальше, чем шире
+        // был неудавшийся круг
         if (!_gesture.Stretched(point))
         {
-            IssuePoint(point);
+            IssuePoint(_gesture.Anchor);
             return;
         }
 
         float radius = _gesture.RadiusTo(point);
 
-        if (_gesture.Kind == OrderKind.Attack)
-            IssueAttackArea(_gesture.Anchor, radius, _gesture.Queue);
-        else
-            IssueBuildArea(_gesture.Anchor, radius, _gesture.Queue);
+        switch (_gesture.Kind)
+        {
+            case OrderKind.Attack:
+                IssueAttackArea(_gesture.Anchor, radius, _gesture.Queue);
+                return;
+
+            case OrderKind.Patrol:
+                IssuePatrolArea(_gesture.Anchor, radius, _gesture.Queue);
+                return;
+
+            default:
+                IssueBuildArea(_gesture.Anchor, radius, _gesture.Queue);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Патруль по области: круг, внутри которого исполнители бегают по случайным местам.
+    /// Раздаётся общей веткой, как и всякий приказ по области, — а вот случайное место
+    /// и отсчёт пребывания у каждого свои, потому что приходят в круг они порознь.
+    /// </summary>
+    private void IssuePatrolArea(Vector2 center, float radius, bool queue)
+    {
+        var recipients = Recipients();
+
+        if (recipients.Count == 0)
+            return;
+
+        var assignment = new Assignment(recipients, queue);
+        assignment.Deal(recipients, null, () => Order.Patrol(center, radius));
     }
 
     /// <summary>

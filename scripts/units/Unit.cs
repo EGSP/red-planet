@@ -49,6 +49,22 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     private IDamageable _engaged;
 
     /// <summary>
+    /// Приказ патруля, который исполняется прямо сейчас. По смене ссылки обнуляются
+    /// случайная точка и отсчёт пребывания: они принадлежат одному приказу, и переход
+    /// к следующей точке маршрута начинает счёт заново.
+    /// </summary>
+    private Order _patrolled;
+
+    /// <summary>Случайное место внутри области патруля, к которому исполнитель идёт сейчас.</summary>
+    private Vector2? _patrolPoint;
+
+    /// <summary>Сколько секунд исполнитель провёл в области патруля.</summary>
+    private float _patrolFor;
+
+    /// <summary>Сколько секунд осталось стоять на выбранном месте внутри области.</summary>
+    private float _patrolPause;
+
+    /// <summary>
     /// Якорь внимания — см. <see cref="IWorker.Anchor"/>. Ставится при рождении и меняется
     /// только приказом игрока: занятие, выбранное самостоятельно, якоря не сдвигает,
     /// иначе отлучка за целью переносила бы участок вслед за юнитом.
@@ -348,7 +364,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         // Цель, выбранная по дороге или в круге, принадлежит одному приказу и одному
         // исполнителю: сменился приказ — прежняя цель ничего не значит
-        if (order.Kind is not (OrderKind.AttackMove or OrderKind.AttackArea))
+        if (order.Kind is not (OrderKind.AttackMove or OrderKind.AttackArea or OrderKind.Patrol))
             _engaged = null;
 
         switch (order.Kind)
@@ -367,6 +383,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
             case OrderKind.AttackArea:
                 RunAttackArea(order);
+                return;
+
+            case OrderKind.Patrol:
+                RunPatrol(order, dt);
                 return;
 
             case OrderKind.Repair:
@@ -631,6 +651,23 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     {
         Detach();
 
+        if (Engaged())
+            return;
+
+        RunMove(order, dt);
+    }
+
+    /// <summary>
+    /// Отвлечение на цель в поле внимания: правило, общее для приказов «идти с боем»
+    /// и «патрулировать». Возвращает true, если исполнитель занят боем и дальше идти
+    /// ему сейчас не следует.
+    ///
+    /// Цель принадлежит исполнителю, а не приказу: приказ общий на отряд, а отвлекается
+    /// каждый на своё. Подход считается той же формулой огневой границы, что и у приказа
+    /// атаки, — расходиться в ней виды приказов не должны.
+    /// </summary>
+    private bool Engaged()
+    {
         float attention = Definition.AttentionRadiusPx;
 
         // Цель, павшая или отставшая, перестаёт задерживать: приказ ведёт дальше
@@ -645,20 +682,135 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             NoteTargeted();
         }
 
-        if (_engaged != null)
+        if (_engaged == null)
+            return false;
+
+        float hold = Targeting.ApproachDistance(Weapon, GlobalPosition, _engaged,
+            Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
+
+        if (GlobalPosition.DistanceTo(_engaged.GlobalPosition) > hold)
+            Movement.Seek(_engaged.GlobalPosition, hold);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Патруль: обход точки либо беготня по области, а по дороге — бой со всяким, кто попал
+    /// в поле внимания.
+    ///
+    /// СОБСТВЕННОГО ОКОНЧАНИЯ У ПРИКАЗА НЕТ. Приказ, после которого идти некуда, не снимается
+    /// вовсе: исполнитель ходит по нему, пока игрок не отдаст другой. Это и есть «бегать,
+    /// пока не отменить явно», и никакого особого механизма отмены оно не требует — новый
+    /// приказ заменяет очередь, как и всякий другой. Кольцевание же живёт в очереди
+    /// (<see cref="OrderQueue.Ringed"/>), а не здесь: маршрут — свойство очереди, а не шага.
+    ///
+    /// ОТСЧЁТ ВРЕМЕНИ В ОБЛАСТИ НУЖЕН НЕ ВСЕГДА. Он ограничивает пребывание только тогда,
+    /// когда переходить есть куда, — то есть когда в маршруте больше одного приказа. Иначе
+    /// ограничивать нечем: уйти из единственной области означало бы бросить приказ.
+    ///
+    /// СОСТОЯНИЕ ПАТРУЛЯ ЛИЧНОЕ. Случайная точка внутри круга и отсчёт пребывания
+    /// принадлежат исполнителю, а не приказу: приказ общий на отряд, а в область юниты
+    /// приходят в разное время и бегают каждый по-своему.
+    /// </summary>
+    private void RunPatrol(Order order, double dt)
+    {
+        Detach();
+
+        if (!ReferenceEquals(_patrolled, order))
         {
-            // Подходим на ту же дистанцию, что и по приказу атаки: правило огневой границы
-            // одно, и расходиться в нём два вида приказа не должны
-            float hold = Targeting.ApproachDistance(Weapon, GlobalPosition, _engaged,
-                Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
+            _patrolled = order;
+            _patrolPoint = null;
+            _patrolFor = 0f;
+            _patrolPause = 0f;
+        }
 
-            if (GlobalPosition.DistanceTo(_engaged.GlobalPosition) > hold)
-                Movement.Seek(_engaged.GlobalPosition, hold);
+        if (Engaged())
+            return;
 
+        if (order.Radius > 0f)
+            RunPatrolArea(order, dt);
+        else
+            RunPatrolPoint(order);
+    }
+
+    /// <summary>Точка обхода: дойти и уступить место следующему приказу маршрута.</summary>
+    private void RunPatrolPoint(Order order)
+    {
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        {
+            Movement.Seek(order.Pos, reach);
             return;
         }
 
-        RunMove(order, dt);
+        // Прибытие в составе приказа здесь не отмечается: сбор отряда патрулю не нужен —
+        // маршрут каждый проходит сам, и подпись «ждём отставших» на нём означала бы
+        // ожидание, которого нет
+        if (Orders.HasMore)
+            Orders.DropCurrent();
+    }
+
+    /// <summary>
+    /// Область патруля: бегать по случайным местам внутри круга. Место выбирается заново,
+    /// как только исполнитель до него добрался или упёрся, — так получается непрерывный
+    /// обход без заданного маршрута.
+    ///
+    /// Отсчёт пребывания идёт с прихода в круг, а не с получения приказа: дорога до области
+    /// патрулём не является, и мерить её тем же временем значило бы, что дальняя область
+    /// охраняется меньше ближней.
+    /// </summary>
+    private void RunPatrolArea(Order order, double dt)
+    {
+        bool inside = GlobalPosition.DistanceTo(order.Pos) <= order.Radius;
+
+        if (inside)
+            _patrolFor += (float)dt;
+
+        if (Orders.HasMore && _patrolFor >= Order.Settings.PatrolDwell)
+        {
+            Orders.DropCurrent();
+            return;
+        }
+
+        // Передышка на месте: намерение движения не подтверждается, и юнит стоит.
+        // Без неё он менял бы место сразу по прибытии и метался бы по кругу без остановки
+        if (_patrolPause > 0f)
+        {
+            _patrolPause -= (float)dt;
+            return;
+        }
+
+        // Первое место выбирается без передышки: стоять до начала обхода не за чем
+        if (_patrolPoint is not { } point)
+        {
+            _patrolPoint = PatrolPoint(order);
+            return;
+        }
+
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(point) > reach)
+        {
+            Movement.Seek(point, reach);
+            return;
+        }
+
+        // Дошли или ближе не пройти: постоять, а следующее место выбрать после передышки
+        _patrolPoint = null;
+        _patrolPause = Order.Settings.PatrolPause;
+    }
+
+    /// <summary>
+    /// Случайное место внутри круга. Корень из случайной доли даёт равномерность по площади:
+    /// без него места сгущались бы к середине, и края области оставались бы без обхода.
+    /// </summary>
+    private static Vector2 PatrolPoint(Order order)
+    {
+        float angle = GD.Randf() * Mathf.Tau;
+        float distance = order.Radius * Mathf.Sqrt(GD.Randf());
+
+        return order.Pos + Vector2.Right.Rotated(angle) * distance;
     }
 
     /// <summary>

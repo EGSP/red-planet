@@ -17,6 +17,13 @@ public enum OrderKind
     /// биты всех последующих.
     /// </summary>
     AttackArea,
+
+    /// <summary>
+    /// Патруль: точка обхода либо область, внутри которой исполнитель бегает по случайным
+    /// местам. Приказ, за которым в очереди ничего не стоит, не кончается сам — см.
+    /// кольцевание в <see cref="OrderQueue"/>.
+    /// </summary>
+    Patrol,
 }
 
 /// <summary>
@@ -41,6 +48,17 @@ public enum OrderKind
 /// </summary>
 public sealed class Order
 {
+    /// <summary>
+    /// Действующие настройки приказов. Ставит <see cref="GameManager"/> при сборке сессии;
+    /// не назначены — берутся умолчания класса, поэтому обращение к ним не роняет ни игру,
+    /// ни предпросмотр в редакторе.
+    ///
+    /// Статическая ссылка по той же причине, что у <see cref="World.Settings"/>: настройки
+    /// спрашивают исполнители приказов и разбор жеста, то есть код, до которого ресурс
+    /// пришлось бы вести по цепочке зависимостей ради одного числа.
+    /// </summary>
+    public static OrderSettings Settings { get; set; } = new();
+
     public OrderKind Kind;
     public Vector2 Pos;
 
@@ -73,8 +91,9 @@ public sealed class Order
     public Node2D Entity;
 
     /// <summary>
-    /// Радиус области. Осмыслен только у <see cref="OrderKind.AttackArea"/>: там он задаёт
-    /// круг, внутри которого исполнитель бьёт всё, что найдёт.
+    /// Радиус области. У <see cref="OrderKind.AttackArea"/> задаёт круг, внутри которого
+    /// исполнитель бьёт всё, что найдёт; у <see cref="OrderKind.Patrol"/> — круг, внутри
+    /// которого он бегает по случайным местам. Нулевой радиус означает точку.
     /// </summary>
     public float Radius;
 
@@ -116,6 +135,19 @@ public sealed class Order
     {
         Kind = OrderKind.AttackArea,
         Pos = center,
+        Radius = radius,
+    };
+
+    /// <summary>
+    /// Патруль по точке либо по области. Нулевой радиус означает точку: отдельного вида
+    /// под неё не заведено, потому что различие в поведении сводится к тому, есть ли внутри
+    /// круга место для беготни, а всё остальное — бой по дороге, кольцевание, окончание —
+    /// у них общее.
+    /// </summary>
+    public static Order Patrol(Vector2 pos, float radius = 0f) => new()
+    {
+        Kind = OrderKind.Patrol,
+        Pos = pos,
         Radius = radius,
     };
 
@@ -289,9 +321,12 @@ public sealed class Order
             // по дороге приказу не принадлежат, и гибель любой из них его не исчерпывает
             // Атака по области кончается не гибелью цели, а опустевшим кругом, и решает это
             // сам исполнитель: цели приказу не принадлежат, а круг стоит на месте
+            // Патруль не кончается ни целью, ни приходом: решает исполнитель, а чаще
+            // не кончается вовсе — на то он и патруль
             case OrderKind.Move:
             case OrderKind.AttackMove:
             case OrderKind.AttackArea:
+            case OrderKind.Patrol:
             case OrderKind.Delete:
                 return true;
 
@@ -322,8 +357,16 @@ public sealed class Order
     /// определение придётся править ради права, которое и так следует из наличия ствола, —
     /// а забытая строка тихо отняла бы у юнита половину управления.
     /// </summary>
-    public static OrderKind Permission(OrderKind kind) =>
-        kind == OrderKind.AttackArea ? OrderKind.Attack : kind;
+    public static OrderKind Permission(OrderKind kind) => kind switch
+    {
+        OrderKind.AttackArea => OrderKind.Attack,
+
+        // Патруль есть обход, а не бой: принимает его всякий подвижный, и безоружный
+        // патрулирует наравне с вооружённым — просто ему не в кого стрелять по дороге
+        OrderKind.Patrol => OrderKind.Move,
+
+        _ => kind,
+    };
 
     /// <summary>Название для интерфейса.</summary>
     public static string Name(OrderKind kind) => kind switch
@@ -333,6 +376,7 @@ public sealed class Order
         OrderKind.Attack => "атаковать",
         OrderKind.AttackMove => "идти с боем",
         OrderKind.AttackArea => "атаковать область",
+        OrderKind.Patrol => "патрулировать",
         OrderKind.Repair => "чинить",
         OrderKind.Follow => "следовать",
         OrderKind.Delete => "снос",
@@ -347,6 +391,7 @@ public sealed class Order
         OrderKind.Attack => VizKind.OrderAttack,
         // Тем же цветом, что и атака: смысл у них один, различается только цель
         OrderKind.AttackMove or OrderKind.AttackArea => VizKind.OrderAttack,
+        OrderKind.Patrol => VizKind.OrderPatrol,
         OrderKind.Repair => VizKind.OrderRepair,
         OrderKind.Follow => VizKind.OrderFollow,
         OrderKind.Delete => VizKind.OrderDelete,

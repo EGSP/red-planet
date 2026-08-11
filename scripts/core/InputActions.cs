@@ -83,6 +83,12 @@ public static class InputActions
     public const string UnitRepair = "unit_repair";
 
     /// <summary>
+    /// Патруль: точка обхода щелчком, область — растягиванием. Маршрут набирается
+    /// цепочкой по Shift, как и всякий другой приказ.
+    /// </summary>
+    public const string UnitPatrol = "unit_patrol";
+
+    /// <summary>
     /// Помощь строительству: режим, в котором указывается не постройка из панели, а уже
     /// размеченное — план или каркас, которому нужна работа.
     /// </summary>
@@ -146,12 +152,14 @@ public static class InputActions
 
     private static InputAction[] Build()
     {
-        var list = new InputAction[15 + GroupKeys.Length];
+        var list = new InputAction[16 + GroupKeys.Length];
         int i = 0;
 
         list[i++] = new(UnitAttack, InputSection.Units, "Атаковать", Key.A,
             InputScope.WithSelection);
         list[i++] = new(UnitMove, InputSection.Units, "Идти", Key.M,
+            InputScope.WithSelection);
+        list[i++] = new(UnitPatrol, InputSection.Units, "Патрулировать", Key.P,
             InputScope.WithSelection);
         list[i++] = new(UnitRepair, InputSection.Units, "Чинить", Key.R,
             InputScope.WithSelection);
@@ -200,6 +208,7 @@ public static class InputActions
     {
         (OrderKind.Attack, UnitAttack),
         (OrderKind.Move, UnitMove),
+        (OrderKind.Patrol, UnitPatrol),
         (OrderKind.Build, UnitBuild),
         (OrderKind.Repair, UnitRepair),
         (OrderKind.Follow, UnitFollow),

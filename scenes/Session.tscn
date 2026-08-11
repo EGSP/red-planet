@@ -52,6 +52,7 @@
 [ext_resource type="Script" uid="uid://xosvhvgeak3m" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
 [ext_resource type="Script" uid="uid://ce4dufgxum148" path="res://scripts/world/ShadowRenderer.cs" id="46_shadow"]
 [ext_resource type="Script" uid="uid://b8bkh2kwhs8h" path="res://scripts/ui/EventBar.cs" id="48_eventbar"]
+[ext_resource type="Resource" uid="uid://lo25rs6paxsf" path="res://resources/tuning/orders.tres" id="49_ordersettings"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
@@ -93,6 +94,7 @@ StepOrder = 12
 
 [node name="OrderSystem" type="Node" parent="Systems" unique_id=134137026]
 script = ExtResource("7_order")
+Tuning = ExtResource("49_ordersettings")
 StepOrder = 20
 
 [node name="PathfindingSystem" type="Node" parent="Systems" unique_id=32615281]

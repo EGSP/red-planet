@@ -435,6 +435,7 @@ public partial class Plant : Building, IProducer
         {
             OrderKind.Move => source.Fluid ? Order.Drawn(source.Pos) : Order.MoveTo(source.Pos),
             OrderKind.AttackArea => Order.Area(source.Pos, source.Radius),
+            OrderKind.Patrol => Order.Patrol(source.Pos, source.Radius),
             OrderKind.Attack when Alive.Is(source.Entity) => Order.Attack(source.Entity),
             OrderKind.Follow when Alive.Is(source.Entity) => Order.Follow(source.Entity),
             OrderKind.Repair when Alive.Is(source.Entity) => Order.Repair(source.Entity),

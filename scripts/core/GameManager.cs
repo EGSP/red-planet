@@ -39,6 +39,7 @@ public partial class GameManager : Node
     /// </summary>
     [Export] public NavSettings NavTuning;
 
+
     /// <summary>Журнал документов — шина, через которую системы говорят друг с другом.</summary>
     public EventStore Events { get; } = new();
 
