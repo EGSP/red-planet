@@ -127,7 +127,12 @@ public sealed class OrderQueue : IOrderFollower
         }
     }
 
-    public bool Allows(OrderKind kind) => _owner.AllowedOrders.Allows(kind);
+    /// <summary>
+    /// Принимает ли очередь такой приказ. Спрашивается не сам вид, а вид, которым он
+    /// разрешается (см. <see cref="Order.Permission"/>): у приказа по области своего
+    /// разрешения нет, он наследует разрешение той же работы по точке.
+    /// </summary>
+    public bool Allows(OrderKind kind) => _owner.AllowedOrders.Allows(Order.Permission(kind));
 
     // ── роль подписчика ветки ──────────────────────────────────────────────────
 
@@ -548,10 +553,8 @@ public sealed class OrderQueue : IOrderFollower
         if (orders == null || orders.Length == 0)
             return false;
 
-        var allowed = _owner.AllowedOrders;
-
         foreach (var order in orders)
-            if (order == null || !allowed.Allows(order.Kind))
+            if (order == null || !Allows(order.Kind))
                 return false;
 
         return true;

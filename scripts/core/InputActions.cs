@@ -81,6 +81,12 @@ public static class InputActions
     public const string UnitAttack = "unit_attack";
     public const string UnitMove = "unit_move";
     public const string UnitRepair = "unit_repair";
+
+    /// <summary>
+    /// Помощь строительству: режим, в котором указывается не постройка из панели, а уже
+    /// размеченное — план или каркас, которому нужна работа.
+    /// </summary>
+    public const string UnitBuild = "unit_build";
     public const string UnitFollow = "unit_follow";
     public const string UnitDelete = "unit_delete";
 
@@ -140,7 +146,7 @@ public static class InputActions
 
     private static InputAction[] Build()
     {
-        var list = new InputAction[14 + GroupKeys.Length];
+        var list = new InputAction[15 + GroupKeys.Length];
         int i = 0;
 
         list[i++] = new(UnitAttack, InputSection.Units, "Атаковать", Key.A,
@@ -148,6 +154,8 @@ public static class InputActions
         list[i++] = new(UnitMove, InputSection.Units, "Идти", Key.M,
             InputScope.WithSelection);
         list[i++] = new(UnitRepair, InputSection.Units, "Чинить", Key.R,
+            InputScope.WithSelection);
+        list[i++] = new(UnitBuild, InputSection.Units, "Помощь строительству", Key.B,
             InputScope.WithSelection);
         list[i++] = new(UnitFollow, InputSection.Units, "Следовать", Key.F,
             InputScope.WithSelection);
@@ -182,13 +190,17 @@ public static class InputActions
     /// Единственное место этого соответствия: им пользуются и разбор нажатия,
     /// и панель приказов, где показана назначенная клавиша.
     ///
-    /// Стройка сюда не входит: вид постройки выбирается панелью, и клавиша ему не нужна.
+    /// Стройка входит сюда в единственном смысле — помощи уже размеченному: клавиша включает
+    /// режим, в котором указывается план или каркас, а не выбирается постройка. Выбор самой
+    /// постройки по-прежнему делается панелью и клавиши не имеет.
+    ///
     /// Снос не входит потому, что цели не требует и выдаётся сразу.
     /// </summary>
     public static readonly (OrderKind Kind, string Action)[] OrderActions =
     {
         (OrderKind.Attack, UnitAttack),
         (OrderKind.Move, UnitMove),
+        (OrderKind.Build, UnitBuild),
         (OrderKind.Repair, UnitRepair),
         (OrderKind.Follow, UnitFollow),
     };

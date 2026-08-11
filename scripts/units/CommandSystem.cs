@@ -14,9 +14,21 @@ using Godot;
 /// атака, по каркасу или плану — стройка, по повреждённому своему — ремонт, по здоровому
 /// своему — сопровождение с помощью, по земле — движение. Одна кнопка на всё, как в PA.
 ///
+/// КАК ПРИКАЗАТЬ, РЕШАЕТ ЖЕСТ. Нажатие правой кнопки начинает <see cref="OrderGesture"/>,
+/// а вид приказа задаёт способ указания: круг у атаки и помощи строительству, линия
+/// у движения, щелчок у остального. Режим приказа на это не влияет — он решает лишь, откуда
+/// взят вид: из клавиши или из цели под указателем.
+///
 /// КОМУ приказ уйдёт, решает выделение, а вид приказа отсеет набор самой сущности: копателю
 /// не уйдёт атака, турели — движение. Поэтому здесь не нужно разбираться, кто выделен, —
 /// достаточно предложить приказ каждому.
+///
+/// ЧТО ВЫНЕСЕНО ОТСЮДА. Система держит состояние ввода, разбор нажатий, выделение и выдачу
+/// приказов; всё, что имеет собственный предмет, живёт рядом отдельными сущностями:
+/// <see cref="OrderGesture"/> — что нарисовано между нажатием и отпусканием,
+/// <see cref="CursorTargets"/> — что лежит под указателем и во что это превращается,
+/// <see cref="Assignment"/> — как один приказ достаётся отряду с разными очередями.
+/// Ни одна из них о состоянии ввода не знает, поэтому проверять их можно по отдельности.
 /// </summary>
 public partial class CommandSystem : GameSystem
 {
@@ -28,9 +40,6 @@ public partial class CommandSystem : GameSystem
     /// двойного щелчка движку недоступна.
     /// </summary>
     [Export] public float DoubleTapInterval = 0.35f;
-
-    /// <summary>Насколько промахивается мышь: припуск к радиусу цели, в пикселях.</summary>
-    private const float PickSlack = Const.Unit * 0.25f;
 
     /// <summary>Дальше этого протаскивания клик считается рамкой, а не выбором одного.</summary>
     private const float BandThreshold = 8f;
@@ -71,15 +80,68 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     public CommandState State { get; private set; } = CommandState.Idle;
 
-    /// <summary>Вид приказа, выбранный игроком. Значим только в состоянии Aiming.</summary>
+    /// <summary>Вид приказа, выбранный клавишей. Значим только в состоянии Aiming.</summary>
     private OrderKind _aimed;
 
     /// <summary>
-    /// Выбранный вид приказа либо null, если режим не включён. Читает панель приказов:
-    /// форма курсора — не единственный признак включённого режима, подсветка в панели
-    /// говорит то же самое словами.
+    /// Жест указания: что игрок растягивает или рисует прямо сейчас. Значим в состояниях
+    /// Sweeping и Drawing, а между жестами хранит пустоту.
     /// </summary>
-    public OrderKind? Aimed => State == CommandState.Aiming ? _aimed : null;
+    private readonly OrderGesture _gesture = new();
+
+    /// <summary>Разбор того, что лежит под указателем. Заводится при связывании системы.</summary>
+    private CursorTargets _targets;
+
+    /// <summary>
+    /// Вид приказа, который отдаст нажатие прямо сейчас, либо null. Читает панель приказов:
+    /// форма курсора — не единственный признак того, что произойдёт, подсветка в панели
+    /// говорит то же самое словами.
+    ///
+    /// ВО ВРЕМЯ ЖЕСТА ЭТО ВИД ЖЕСТА, А НЕ ВЫБОР КЛАВИШЕЙ. Жест начинается и в режиме приказа,
+    /// и без него — тогда вид выведен из цели под указателем, — а показать игроку нужно
+    /// то, что сейчас указывается, независимо от того, откуда вид взялся.
+    /// </summary>
+    public OrderKind? Aimed => State switch
+    {
+        CommandState.Aiming => _aimed,
+        CommandState.Sweeping or CommandState.Drawing => _gesture.Kind,
+        _ => null,
+    };
+
+    /// <summary>Идёт ли жест указания области или линии.</summary>
+    private bool Gesturing => State is CommandState.Sweeping or CommandState.Drawing;
+
+    /// <summary>Центр указываемой области. Читает оверлей, пока идёт жест.</summary>
+    public Vector2 AreaCenter => _gesture.Anchor;
+
+    /// <summary>Радиус указываемой области прямо сейчас.</summary>
+    public float AreaRadius => _cursor == null
+        ? 0f
+        : _gesture.RadiusTo(_cursor.VisualWorldPosition);
+
+    /// <summary>Нарисованная линия для отрисовки. Тот же список, что и у выдачи приказа.</summary>
+    public IReadOnlyList<Vector2> Path => _gesture.Path;
+
+    /// <summary>Места вдоль линии для указанного числа исполнителей — предпоказ строя.</summary>
+    public IReadOnlyList<Vector2> Spots(int count) => _gesture.Spread(count);
+
+    /// <summary>
+    /// Сколько выделенных примут приказ движения. Читает предпоказ линии: мест на ней
+    /// столько, сколько исполнителей приказ получит, а не сколько их выделено вообще.
+    /// </summary>
+    public int MoverCount
+    {
+        get
+        {
+            int count = 0;
+
+            foreach (var actor in _selected)
+                if (actor.Orders.Allows(OrderKind.Move))
+                    count++;
+
+            return count;
+        }
+    }
 
     /// <summary>Что выбрано в строительной панели. Держится до отмены выбора.</summary>
     public UnitDefinition Pending { get; private set; }
@@ -144,6 +206,7 @@ public partial class CommandSystem : GameSystem
             GD.PushError("[CommandSystem] CursorSystem не найдена: мировые координаты мыши недоступны");
 
         _doubleTap.Interval = DoubleTapInterval;
+        _targets = new CursorTargets(GM);
 
         if (GM.Playground != null)
             EnsureNodes();
@@ -208,6 +271,15 @@ public partial class CommandSystem : GameSystem
                 State = CommandState.Idle;
                 return true;
 
+            // Жест отменяется, а режим приказа остаётся, если он был включён: следующее
+            // нажатие начинает указание заново — то же правило, что у раскладки построек.
+            // Жест, начатый без режима, возвращает в обычное состояние: возвращаться некуда
+            case CommandState.Sweeping:
+            case CommandState.Drawing:
+                State = _gesture.Forced ? CommandState.Aiming : CommandState.Idle;
+                _gesture.End();
+                return true;
+
             case CommandState.Aiming:
                 State = CommandState.Idle;
                 return true;
@@ -248,15 +320,21 @@ public partial class CommandSystem : GameSystem
         _selected.RemoveAll(actor => !Alive.Is(actor as Node));
         Groups.Sweep();
 
-        // Выделение могло погибнуть целиком: приказывать стало некому, и режим приказа
-        // держаться не на чем
-        if (State == CommandState.Aiming && _selected.Count == 0)
+        // Выделение могло погибнуть целиком: приказывать стало некому, и ни режим приказа,
+        // ни начатый жест держаться не на чем
+        if (_selected.Count == 0 && (Gesturing || State == CommandState.Aiming))
+        {
+            _gesture.End();
             State = CommandState.Idle;
+        }
 
         // Условия показа областей: Ctrl при выделении и покрытие турелей при стройке
         GizmoGate.Refresh(_selected, Pending);
 
         RefreshCursor(dt);
+
+        if (State == CommandState.Drawing)
+            TrackDrawing();
 
         if (Pending == null)
             return;
@@ -294,10 +372,10 @@ public partial class CommandSystem : GameSystem
     /// </summary>
     private void RefreshCursor(double dt)
     {
-        if (State == CommandState.Aiming)
+        if (Aimed is { } aimed)
         {
             _cursorPoll = 0f;
-            _cursor.Kind = CursorArt.Of(_aimed);
+            _cursor.Kind = CursorArt.Of(aimed);
             return;
         }
 
@@ -378,6 +456,14 @@ public partial class CommandSystem : GameSystem
             case CommandState.Aiming:
                 AimingInput(mouse, point);
                 break;
+
+            case CommandState.Sweeping:
+                SweepingInput(mouse, point);
+                break;
+
+            case CommandState.Drawing:
+                DrawingInput(mouse, point);
+                break;
         }
     }
 
@@ -394,9 +480,20 @@ public partial class CommandSystem : GameSystem
             return;
         }
 
+        // Правая кнопка начинает жест и без выбранного режима: вид выводится из цели
+        // под указателем, а способ указания у вида свой — щелчок, круг или линия
         if (mouse is { ButtonIndex: MouseButton.Right, Pressed: true })
-            IssueResolved(point, mouse.ShiftPressed);
+            BeginGesture(ContextKind(point), point, mouse.ShiftPressed, forced: false);
     }
+
+    /// <summary>
+    /// Вид приказа, выведенный из цели под указателем, для начала жеста. Пустота означает,
+    /// что приказывать некому или нечем, и вырождается в движение: жест всё равно не найдёт
+    /// получателя, а разбирать этот случай отдельно значило бы завести четвёртую ветвь ради
+    /// ничего.
+    /// </summary>
+    private OrderKind ContextKind(Vector2 point) =>
+        _targets.KindAt(point, Recipients()) ?? OrderKind.Move;
 
     private void BandingInput(InputEventMouseButton mouse, Vector2 point)
     {
@@ -479,16 +576,99 @@ public partial class CommandSystem : GameSystem
     {
         if (mouse is { ButtonIndex: MouseButton.Right, Pressed: true })
         {
-            IssueForced(_aimed, point, mouse.ShiftPressed);
-
-            if (!mouse.ShiftPressed)
-                State = CommandState.Idle;
-
+            BeginGesture(_aimed, point, mouse.ShiftPressed, forced: true);
             return;
         }
 
         if (mouse is { ButtonIndex: MouseButton.Left, Pressed: true })
             State = CommandState.Idle;
+    }
+
+    /// <summary>
+    /// Нажатие правой кнопки начинает ЖЕСТ, а не отдаёт приказ.
+    ///
+    /// ПОЧЕМУ РЕШЕНИЕ ОТЛОЖЕНО ДО ОТПУСКАНИЯ. У приказа два способа указания — точка
+    /// и растягивание, — и различает их то, сколько мышь проехала между нажатием
+    /// и отпусканием. Пока кнопка нажата, игрок ещё не сказал, чего хочет, поэтому щелчок
+    /// есть вырожденный случай жеста, ровно как одиночный выбор есть вырожденный случай рамки.
+    ///
+    /// РЕЖИМ ПРИКАЗА ДЛЯ ЖЕСТА НЕОБЯЗАТЕЛЕН. Вид приходит сюда либо выбранным клавишей, либо
+    /// выведенным из цели под указателем, а дальше разницы нет: способ указания принадлежит
+    /// самому виду (<see cref="OrderGesture.FormOf"/>), а не тому, как игрок этот вид назвал.
+    /// Поэтому растянуть круг по скоплению противника можно и без нажатия клавиши атаки —
+    /// требовать её значило бы, что альтернативный способ указания доступен только тому, кто
+    /// сперва вошёл в режим.
+    ///
+    /// Виды, у которых растягивания не бывает, отдаются сразу по нажатию: ремонт
+    /// и сопровождение требуют цели под указателем, и тянуть здесь нечего. Заводить жест ради
+    /// того, чтобы в конце отдать тот же приказ, значило бы задержать отклик без всякой пользы.
+    /// </summary>
+    private void BeginGesture(OrderKind kind, Vector2 point, bool queue, bool forced)
+    {
+        _gesture.Begin(kind, point, queue, forced);
+
+        switch (_gesture.Form)
+        {
+            case GestureForm.Line:
+                State = CommandState.Drawing;
+                return;
+
+            case GestureForm.Area:
+                State = CommandState.Sweeping;
+                return;
+
+            default:
+                IssuePoint(point);
+                Settle();
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Растягивание области: правая кнопка завершает жест, левая его отменяет.
+    /// </summary>
+    private void SweepingInput(InputEventMouseButton mouse, Vector2 point)
+    {
+        if (mouse is { ButtonIndex: MouseButton.Right, Pressed: false })
+        {
+            FinishSweep(point);
+            Settle();
+            return;
+        }
+
+        if (mouse is { ButtonIndex: MouseButton.Left, Pressed: true })
+            CancelGesture();
+    }
+
+    private void DrawingInput(InputEventMouseButton mouse, Vector2 point)
+    {
+        if (mouse is { ButtonIndex: MouseButton.Right, Pressed: false })
+        {
+            FinishDrawing(point);
+            Settle();
+            return;
+        }
+
+        if (mouse is { ButtonIndex: MouseButton.Left, Pressed: true })
+            CancelGesture();
+    }
+
+    /// <summary>
+    /// Куда перейти после отданного приказа. Режим приказа держится под зажатым Shift
+    /// и снимается без него — то же правило, что у постройки; жест, начатый без режима,
+    /// в режим и не переходит: игрок его не включал.
+    /// </summary>
+    private void Settle()
+    {
+        State = _gesture.Forced && _gesture.Queue ? CommandState.Aiming : CommandState.Idle;
+        _gesture.End();
+    }
+
+    /// <summary>Отказ от жеста: приказ не отдаётся, режим приказа сохраняется, если он был.</summary>
+    private void CancelGesture()
+    {
+        State = _gesture.Forced ? CommandState.Aiming : CommandState.Idle;
+        _gesture.End();
     }
 
     // ── клавиши ────────────────────────────────────────────────────────────────
@@ -501,6 +681,7 @@ public partial class CommandSystem : GameSystem
     private InputContext Context => State switch
     {
         CommandState.Banding or CommandState.Placing or CommandState.Laying
+            or CommandState.Sweeping or CommandState.Drawing
             => InputContext.Gesture,
         CommandState.Aiming => InputContext.Aiming,
         _ => _selected.Count > 0 ? InputContext.Orders : InputContext.Selection,
@@ -597,18 +778,15 @@ public partial class CommandSystem : GameSystem
     }
 
     /// <summary>
-    /// Какой курсор показать. В режиме приказа — выбранный вид, в обычном — тот, что уйдёт
-    /// по нажатию в нынешней точке, поэтому курсор меняется сам, стоит навести его на врага,
-    /// на каркас или на подбитого своего.
+    /// Какой курсор показать, когда вид приказа не выбран и не указывается: тот, что уйдёт
+    /// по нажатию в нынешней точке, — поэтому курсор меняется сам, стоит навести его
+    /// на врага, на каркас или на подбитого своего.
     ///
-    /// Во время жеста мышью курсор обычный: рамка и раскладка построек показывают себя сами,
+    /// Во время рамки и раскладки построек курсор обычный: они показывают себя сами,
     /// а приказ в это время не отдаётся.
     /// </summary>
     private CursorKind DesiredCursor()
     {
-        if (State == CommandState.Aiming)
-            return CursorArt.Of(_aimed);
-
         if (State != CommandState.Idle)
             return CursorKind.Arrow;
 
@@ -618,7 +796,7 @@ public partial class CommandSystem : GameSystem
         if (GetViewport()?.GuiGetHoveredControl() != null)
             return CursorKind.Arrow;
 
-        return ResolvedKind(_cursor.ActualWorldPosition) is { } kind
+        return _targets.KindAt(_cursor.ActualWorldPosition, Recipients()) is { } kind
             ? CursorArt.Of(kind)
             : CursorKind.Arrow;
     }
@@ -671,7 +849,7 @@ public partial class CommandSystem : GameSystem
 
         if (_bandStart.DistanceTo(point) < BandThreshold)
         {
-            var one = ActorAt(point);
+            var one = _targets.ActorAt(point);
 
             // Повтор по той же цели означает «и всех таких же». Прямое указание игрока,
             // поэтому ни родство, ни преобладание здесь не применяются
@@ -687,7 +865,7 @@ public partial class CommandSystem : GameSystem
         var caught = new List<IOrderable>();
 
         foreach (var actor in GM.Index.All<IOrderable>())
-            if (Commandable(actor) && band.HasPoint(actor.GlobalPosition))
+            if (CursorTargets.Commandable(actor) && band.HasPoint(actor.GlobalPosition))
                 caught.Add(actor);
 
         // Два разных правила на два разных случая. Если игрок уже что-то держит, рамка
@@ -739,34 +917,12 @@ public partial class CommandSystem : GameSystem
 
         foreach (var actor in GM.Index.All<IOrderable>())
         {
-            if (!Commandable(actor) || !match(actor) || !view.HasPoint(actor.GlobalPosition))
+            if (!CursorTargets.Commandable(actor) || !match(actor) || !view.HasPoint(actor.GlobalPosition))
                 continue;
 
             if (!_selected.Contains(actor))
                 _selected.Add(actor);
         }
-    }
-
-    /// <summary>
-    /// Выделяем своё с непустым видимым набором приказов: принятые плюс мягкие
-    /// (умеет, но в определении не разрешено). Мягкие нужны, чтобы сущность с забытым
-    /// <c>[orders]</c> оставалась доступной для проверки в панели. Юнит, ещё выезжающий
-    /// из корпуса завода, некликабелен.
-    /// </summary>
-    private static bool Commandable(IOrderable actor) =>
-        actor.Faction == Faction.Player
-        && (actor.AllowedOrders.Any || actor.SoftOrders.Any)
-        && !Targeting.Leaving(actor);
-
-    private IOrderable ActorAt(Vector2 point) =>
-        GM.Index.All<IOrderable>()
-            .Where(actor => Commandable(actor) && Hit(actor, point))
-            .Nearest(point, actor => actor.GlobalPosition);
-
-    private static bool Hit(IOrderable actor, Vector2 point)
-    {
-        float reach = ((actor as IDamageable)?.HitRadius ?? Const.Unit * 0.5f) + PickSlack;
-        return actor.GlobalPosition.DistanceTo(point) <= reach;
     }
 
     // ── приказы ────────────────────────────────────────────────────────────────
@@ -816,7 +972,7 @@ public partial class CommandSystem : GameSystem
             return;
 
         // Цель разбираем один раз на всех: она общая, а вид приказа у каждого свой
-        var (victim, site, damaged, leader) = ResolveTargets(point, recipients);
+        var (victim, site, damaged, leader) = _targets.Resolve(point, recipients);
 
         var attack = new Assignment(recipients, queue);
         var build = new Assignment(recipients, queue);
@@ -826,15 +982,15 @@ public partial class CommandSystem : GameSystem
 
         foreach (var actor in recipients)
         {
-            if (victim != null && Other(victim, actor)
+            if (victim != null && CursorTargets.Other(victim, actor)
                                && attack.Give(actor, () => Order.Attack(victim)))
                 continue;
 
-            if (site != null && Other(site, actor)
+            if (site != null && CursorTargets.Other(site, actor)
                              && build.Give(actor, () => Order.Work(OrderKind.Build, site)))
                 continue;
 
-            if (damaged != null && Other(damaged, actor)
+            if (damaged != null && CursorTargets.Other(damaged, actor)
                                && repair.Give(actor, () => Order.Repair(damaged)))
                 continue;
 
@@ -867,47 +1023,277 @@ public partial class CommandSystem : GameSystem
 
         if (kind == OrderKind.Move)
         {
-            Deal(assignment, recipients, null, () => Order.MoveTo(point));
+            assignment.Deal(recipients, null, () => Order.MoveTo(point));
             return;
         }
 
         if (kind == OrderKind.Attack)
         {
-            var victim = EnemyAt(point);
+            var victim = _targets.EnemyAt(point);
 
             if (victim != null)
-                Deal(assignment, recipients, victim, () => Order.Attack(victim));
+                assignment.Deal(recipients, victim, () => Order.Attack(victim));
             else
-                Deal(assignment, recipients, null, () => Order.AttackMove(point));
+                assignment.Deal(recipients, null, () => Order.AttackMove(point));
+
+            return;
+        }
+
+        // Помощь строительству по точке: план или каркас под указателем. Без цели приказ
+        // не выдаётся — строить на пустом месте нечего, а вид постройки задаётся панелью
+        if (kind == OrderKind.Build)
+        {
+            if (_targets.SiteAt(point) is { } site)
+                assignment.Deal(recipients, site, () => Order.Work(OrderKind.Build, site));
 
             return;
         }
 
         if (kind == OrderKind.Repair)
         {
-            var damaged = Repairable(GM.Obstacles.At(point) as Node2D) ?? DamagedUnitAt(point);
+            var damaged = _targets.DamagedAt(point);
 
             if (damaged != null)
-                Deal(assignment, recipients, damaged, () => Order.Repair(damaged));
+                assignment.Deal(recipients, damaged, () => Order.Repair(damaged));
 
             return;
         }
 
-        if (kind == OrderKind.Follow && Leader(point, recipients) is { } leader)
-            Deal(assignment, recipients, leader, () => Order.Follow(leader));
+        if (kind == OrderKind.Follow && _targets.Leader(point, recipients) is { } leader)
+            assignment.Deal(recipients, leader, () => Order.Follow(leader));
+    }
+
+    // ── приказы по области и по линии ──────────────────────────────────────────
+
+    /// <summary>
+    /// Приказ по точке, каким его отдаёт нынешний жест. Путей два, и различает их
+    /// происхождение вида: заданный клавишей идёт мимо разбора цели, выведенный из контекста
+    /// разбирается заново по точке отпускания. Разбирать заново нужно потому, что между
+    /// нажатием и отпусканием указатель успевает сойти с цели, а игрок судит по тому,
+    /// где отпустил.
+    /// </summary>
+    private void IssuePoint(Vector2 point)
+    {
+        if (_gesture.Forced)
+            IssueForced(_gesture.Kind, point, _gesture.Queue);
+        else
+            IssueResolved(point, _gesture.Queue);
     }
 
     /// <summary>
-    /// Раздать один и тот же приказ всем получателям, пропустив того, кто сам оказался
-    /// целью. Вид приказа здесь уже выбран, поэтому перебора видов нет: не принявший
-    /// его получатель просто остаётся без приказа.
+    /// Жест растягивания закончен: короткий означает приказ по точке, длинный — по области.
     /// </summary>
-    private static void Deal(Assignment assignment, List<IOrderable> recipients,
-        object target, System.Func<Order> compose)
+    private void FinishSweep(Vector2 point)
     {
-        foreach (var actor in recipients)
-            if (target == null || Other(target, actor))
-                assignment.Give(actor, compose);
+        if (!_gesture.Stretched(point))
+        {
+            IssuePoint(point);
+            return;
+        }
+
+        float radius = _gesture.RadiusTo(point);
+
+        if (_gesture.Kind == OrderKind.Attack)
+            IssueAttackArea(_gesture.Anchor, radius, _gesture.Queue);
+        else
+            IssueBuildArea(_gesture.Anchor, radius, _gesture.Queue);
+    }
+
+    /// <summary>
+    /// Атака по области. Круг не разворачивается в набор целей и остаётся приказом:
+    /// что стоит внутри в момент исполнения, то исполнитель и бьёт, — а стоять там может
+    /// уже не то, что стояло в момент указания.
+    ///
+    /// Приказ раздаётся общей веткой, как и всякий другой: область одна на весь отряд,
+    /// и делить её на личные приказы нечем.
+    /// </summary>
+    private void IssueAttackArea(Vector2 center, float radius, bool queue)
+    {
+        var recipients = Recipients();
+
+        if (recipients.Count == 0)
+            return;
+
+        var assignment = new Assignment(recipients, queue);
+        assignment.Deal(recipients, null, () => Order.Area(center, radius));
+    }
+
+    /// <summary>
+    /// Помощь строительству по области. В отличие от атаки, ОБЛАСТЬ РАЗВОРАЧИВАЕТСЯ СРАЗУ:
+    /// то, что строится, пересчитывается в момент указания и превращается в цепочку приказов
+    /// стройки. Разница с атакой не произвольна — стройка кончается сама, и приказ на неё
+    /// снимается по готовности места работы, тогда как область атаки живёт, пока в ней есть
+    /// кого бить. Держать вместо цепочки живой круг означало бы, что исполнителям придётся
+    /// каждый кадр перебирать все планы карты, а очередь не показывала бы игроку, что именно
+    /// будет достроено.
+    ///
+    /// Порядок — от центра области наружу: игрок целится в то, что ему важнее, серединой
+    /// жеста, а не его краем.
+    /// </summary>
+    private void IssueBuildArea(Vector2 center, float radius, bool queue)
+    {
+        var recipients = Recipients();
+
+        if (recipients.Count == 0 || !recipients.Exists(actor => actor.Orders.Allows(OrderKind.Build)))
+            return;
+
+        var sites = _targets.SitesWithin(center, radius);
+
+        if (sites.Count == 0)
+            return;
+
+        // Раздача на всю область одна: указанное одним жестом — это одна задача из многих
+        // шагов, и ветка приказов у неё одна, как и у партии построек
+        var assignment = new Assignment(recipients, queue);
+
+        foreach (var site in sites)
+        {
+            assignment.Continue();
+
+            foreach (var actor in recipients)
+                assignment.Give(actor, () => Order.Work(OrderKind.Build, site));
+        }
+    }
+
+    /// <summary>
+    /// Записать положение указателя в линию и повести за ним одиночного исполнителя.
+    ///
+    /// ДО ПОРОГА ПРИКАЗА НЕ ВОЗНИКАЕТ. Пока линия коротка, жест неотличим от щелчка, а щелчок
+    /// правой кнопкой обязан остаться обычным приказом по точке: выдай приказ сразу — и всякий
+    /// щелчок при одном выделенном юните оборачивался бы свободным движением, то есть ходом
+    /// сквозь застройку без поиска пути.
+    ///
+    /// ПРИКАЗ ВЫДАЁТСЯ ЗАНОВО, ЕСЛИ ОН УЖЕ ИСПОЛНЕН. Игрок ведёт указатель медленнее, чем
+    /// едет юнит, поэтому тот успевает дойти до заданной точки, и приказ снимается с очереди
+    /// сам. Правка точки у снятого приказа не значила бы ничего, и юнит замер бы посреди
+    /// жеста, хотя линия продолжает вестись.
+    /// </summary>
+    private void TrackDrawing()
+    {
+        var visual = _cursor.VisualWorldPosition;
+        _gesture.Track(visual);
+
+        if (!_gesture.Stretched(visual))
+            return;
+
+        if (!_gesture.Led)
+        {
+            LeadDrawing(visual);
+            return;
+        }
+
+        if (_gesture.Drawn == null || _gesture.Actor == null)
+            return;
+
+        _gesture.Drawn.Pos = visual;
+
+        if (Queued(_gesture.Actor, _gesture.Drawn))
+            return;
+
+        // Дописыванием, а не заменой: у исполнителя мог остаться хвост очереди, набранный
+        // тем же жестом под Shift, и сносить его здесь не за что
+        _gesture.Drawn = GiveOne(_gesture.Actor, Order.Drawn(visual), queue: true)
+                         ?? _gesture.Drawn;
+    }
+
+    /// <summary>
+    /// Назначить исполнителя, которого линия ведёт прямо по ходу жеста. Так бывает только
+    /// у единственного получателя: строй из одного не строится, и линия для него означает
+    /// не место в строю, а непрерывно уточняемую точку назначения. Всем прочим составом
+    /// места достаются по отпусканию — до тех пор линия только рисуется.
+    /// </summary>
+    private void LeadDrawing(Vector2 point)
+    {
+        _gesture.Led = true;
+
+        var movers = Movers();
+
+        if (movers.Count != 1)
+            return;
+
+        _gesture.Actor = movers[0];
+        _gesture.Drawn = GiveOne(_gesture.Actor, Order.Drawn(point), _gesture.Queue);
+    }
+
+    /// <summary>Стоит ли приказ у исполнителя в очереди — под указателем или впереди него.</summary>
+    private static bool Queued(IOrderable actor, Order order)
+    {
+        foreach (var item in actor.Orders.Remaining)
+            if (ReferenceEquals(item, order))
+                return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Рисование закончено: исполнители распределяются по линии равными отрезками.
+    ///
+    /// БЛИЖНИЙ К НАЧАЛУ ЛИНИИ ЗАНИМАЕТ ПЕРВОЕ МЕСТО. Пересечения путей этим не исключаются —
+    /// игрок вправе нарисовать петлю, и тогда они неизбежны, — но отряд, идущий вдоль прямой,
+    /// не разворачивается задом наперёд только потому, что порядок выделения оказался иным.
+    ///
+    /// Короткий жест означает обычный приказ по точке: игрок щёлкнул, а не рисовал.
+    /// </summary>
+    private void FinishDrawing(Vector2 point)
+    {
+        _gesture.Track(point);
+
+        // Одиночного вели весь жест — остаётся закрепить за ним последнюю точку
+        if (_gesture.Drawn != null)
+        {
+            _gesture.Drawn.Pos = point;
+            return;
+        }
+
+        if (!_gesture.Stretched(point))
+        {
+            IssuePoint(point);
+            return;
+        }
+
+        var movers = Movers();
+
+        if (movers.Count == 0)
+            return;
+
+        var start = _gesture.Path[0];
+
+        movers.Sort((a, b) => a.GlobalPosition.DistanceSquaredTo(start)
+            .CompareTo(b.GlobalPosition.DistanceSquaredTo(start)));
+
+        var spots = _gesture.Spread(movers.Count);
+
+        for (int i = 0; i < movers.Count; i++)
+            GiveOne(movers[i], Order.Drawn(spots[i]), _gesture.Queue);
+    }
+
+    /// <summary>Выделенные, принимающие движение: только им есть что делать с линией.</summary>
+    private List<IOrderable> Movers()
+    {
+        var movers = new List<IOrderable>();
+
+        foreach (var actor in Recipients())
+            if (actor.Orders.Allows(OrderKind.Move))
+                movers.Add(actor);
+
+        return movers;
+    }
+
+    /// <summary>
+    /// Личный приказ одному исполнителю.
+    ///
+    /// ОБЩЕЙ ВЕТКИ ЗДЕСЬ БЫТЬ НЕ МОЖЕТ, и в этом всё отличие рисования от щелчка. Приказ,
+    /// розданный одним объектом, ведёт весь отряд в одну точку — на то он и общий, — а
+    /// рисование ставит каждого на своё место. Поэтому раздача идёт по одному, и состав
+    /// получателей у неё из одного участника: пристёгиваться такой приказ должен к своей
+    /// очереди, а не к чужой.
+    /// </summary>
+    private Order GiveOne(IOrderable actor, Order order, bool queue)
+    {
+        var single = new List<IOrderable> { actor };
+        var assignment = new Assignment(single, queue);
+
+        return assignment.Give(actor, () => order) ? order : null;
     }
 
     /// <summary>
@@ -928,247 +1314,6 @@ public partial class CommandSystem : GameSystem
         foreach (var actor in recipients)
             demolish.Give(actor, Order.Delete);
     }
-
-    /// <summary>
-    /// Раздача одного вида приказа: заводит общую очередь на первом получателе и подписывает
-    /// на неё остальных.
-    ///
-    /// ЧТО ДЕЛАЕТ ДОПИСЫВАНИЕ ПО SHIFT. Получатели заняты разным: у одного своя очередь,
-    /// у второго своя, третий свободен. Приказ заводится ОДИН и в одной ветке, а хвосты
-    /// разных очередей к ней пристёгиваются: каждый доделывает своё и переходит в общую.
-    /// Так одно намерение хранится один раз, сколько бы очередей в него ни сошлось, —
-    /// а значит и вставка в него потом будет одна (см. <see cref="BuildPlan"/>).
-    ///
-    /// Приказ создаётся отложенно: видов разбирается четыре, а находит получателя не всякий,
-    /// и заводить ветку под несостоявшийся вид незачем.
-    /// </summary>
-    private sealed class Assignment
-    {
-        private readonly List<IOrderable> _recipients;
-        private readonly bool _queue;
-
-        /// <summary>Хвосты, уже приведённые в общую ветку. Пристёгивать второй раз нечего.</summary>
-        private readonly HashSet<OrderList> _linked = new();
-
-        private OrderList _branch;
-        private Order _order;
-
-        public Assignment(List<IOrderable> recipients, bool queue)
-        {
-            _recipients = recipients;
-            _queue = queue;
-        }
-
-        public bool Give(IOrderable actor, System.Func<Order> compose)
-        {
-            _order ??= compose();
-
-            if (!actor.Orders.Allows(_order.Kind))
-                return false;
-
-            bool taken = _queue ? Enqueue(actor) : Adopt(actor);
-
-            if (taken && actor is Unit unit)
-                unit.SetAnchor(_order.Point);
-
-            return taken;
-        }
-
-        /// <summary>
-        /// Приказ вместо прежних: получатель подписывается на общую ветку, бросая свою.
-        /// Ветка заводится на первом получателе и достаётся всем остальным той же самой.
-        /// </summary>
-        private bool Adopt(IOrderable actor)
-        {
-            actor.Orders.Adopt(Branch());
-            return true;
-        }
-
-        /// <summary>
-        /// Приказ в дополнение к прежним: хвост очереди получателя ПРИСТЁГИВАЕТСЯ к общей
-        /// ветке. Получатель доделывает своё и переходит в неё, а само намерение хранится
-        /// один раз — сколько бы разных очередей ни сошлось в эту ветку.
-        ///
-        /// Свободному пристёгивать нечего, и он подписывается на ветку напрямую.
-        ///
-        /// Если конец цепочки общий с теми, кого игрок не выделял, получатель сперва
-        /// забирает свой остаток себе (<see cref="OrderQueue.Fork"/>): приказ, отданный
-        /// части отряда, делает из неё другой отряд, и навязывать его остальным нельзя.
-        /// </summary>
-        private bool Enqueue(IOrderable actor)
-        {
-            if (actor.Orders.List == null)
-                return Adopt(actor);
-
-            if (!Within(actor.Orders.List.Tail))
-                actor.Orders.Fork();
-
-            var tail = actor.Orders.List.Tail;
-
-            // Хвост уже ведёт в эту ветку — второй раз его пристёгивать нечем и незачем
-            if (tail == Branch() || !_linked.Add(tail))
-                return true;
-
-            tail.LinkNext(Branch());
-            return true;
-        }
-
-        /// <summary>
-        /// Следующий приказ той же раздачи. Ложится в ту же ветку, что и предыдущий:
-        /// партия планов, размеченная одним протаскиванием, — это одна задача из многих
-        /// шагов, а не сотня отдельных веток, сцепленных в цепочку.
-        /// </summary>
-        public void Continue() => _order = null;
-
-        /// <summary>Общая ветка раздачи. Приказ ложится в неё при первом же получателе.</summary>
-        private OrderList Branch()
-        {
-            _branch ??= OrderList.Open();
-
-            if (_branch.IndexOf(_order) < 0)
-                _branch.Add(_order);
-
-            return _branch;
-        }
-
-        /// <summary>Все ли, кто способен дойти до ветки, — из числа получателей приказа.</summary>
-        private bool Within(OrderList list) => list.Within(_recipients);
-    }
-
-    /// <summary>
-    /// Всё, что лежит в точке и может стать целью приказа. Разбор один на два потребителя:
-    /// выдачу приказа и курсор, который показывает, что произойдёт по нажатию. Разойтись
-    /// им нельзя — курсор, обещающий не то, что случится, хуже отсутствия курсора.
-    /// </summary>
-    private (Node2D Victim, IWorkSite Site, Node2D Damaged, Node2D Leader) ResolveTargets(
-        Vector2 point, List<IOrderable> recipients)
-    {
-        var occupant = GM.Obstacles.At(point) as Node;
-
-        return (
-            EnemyAt(point),
-            occupant is Blueprint { NeedsWork: true } frame ? frame : PlanAt(point),
-            Repairable(occupant as Node2D) ?? DamagedUnitAt(point),
-            Leader(point, recipients));
-    }
-
-    /// <summary>
-    /// Какой приказ уйдёт по нажатию в этой точке, если вид его не задан игроком.
-    ///
-    /// ПОРЯДОК ТОТ ЖЕ, ЧТО У ВЫДАЧИ, и повторён он здесь не по недосмотру: выдача
-    /// перебирает получателей, у каждого спрашивая набор, а курсору нужен один ответ
-    /// на весь отряд. Общим у них остаётся разбор цели (<see cref="ResolveTargets"/>),
-    /// то есть та часть, расхождение в которой было бы враньём; выбор же вида различается
-    /// ровно тем, что здесь довольно одного согласного получателя.
-    /// </summary>
-    private OrderKind? ResolvedKind(Vector2 point)
-    {
-        var recipients = Recipients();
-
-        if (recipients.Count == 0)
-            return null;
-
-        var (victim, site, damaged, leader) = ResolveTargets(point, recipients);
-
-        if (victim != null && AnyTakes(recipients, OrderKind.Attack, victim))
-            return OrderKind.Attack;
-
-        if (site != null && AnyTakes(recipients, OrderKind.Build, site))
-            return OrderKind.Build;
-
-        if (damaged != null && AnyTakes(recipients, OrderKind.Repair, damaged))
-            return OrderKind.Repair;
-
-        if (leader != null && AnyTakes(recipients, OrderKind.Follow, leader))
-            return OrderKind.Follow;
-
-        return AnyTakes(recipients, OrderKind.Move, null) ? OrderKind.Move : null;
-    }
-
-    /// <summary>Возьмётся ли за такой приказ хоть кто-то из получателей.</summary>
-    private static bool AnyTakes(List<IOrderable> recipients, OrderKind kind, object target)
-    {
-        foreach (var actor in recipients)
-            if (actor.Orders.Allows(kind) && (target == null || Other(target, actor)))
-                return true;
-
-        return false;
-    }
-
-    /// <summary>
-    /// Годится ли цель этому получателю: она не он сам.
-    ///
-    /// Одна проверка на все виды приказов, хотя сейчас сработать она может не у каждого:
-    /// врагом получатель не бывает никогда, а вот местом работы и повреждённой целью бывает —
-    /// каркас выделяется и принимает приказы наравне с постройкой, а подбитый ремонтник
-    /// стоит в том же отряде, которому игрок отдаёт приказ. Проверка стоит у всех потому,
-    /// что правило одно, а не три, и держать его в стольких местах, сколько видов приказов,
-    /// значило бы забыть о нём при появлении следующего.
-    /// </summary>
-    private static bool Other(object target, IOrderable actor) => !ReferenceEquals(target, actor);
-
-    /// <summary>
-    /// За кем идти: своя сущность под курсором, не входящая в само выделение.
-    ///
-    /// ВЫДЕЛЕННЫЙ ВЕДУЩИМ НЕ БЫВАЕТ. Щелчок по своему же отряду — обычное указание идти
-    /// туда, где он стоит, и превращать его в сопровождение нельзя: отряд принялся бы ходить
-    /// сам за собой, а половина его при этом получила бы приказ, которого игрок не отдавал.
-    /// Поэтому проверка стоит здесь, у разбора цели, а не у раздачи: приказ сопровождения
-    /// либо есть у всех получателей, либо его нет вовсе.
-    /// </summary>
-    private Node2D Leader(Vector2 point, List<IOrderable> recipients) =>
-        ActorAt(point) is { } found && !recipients.Contains(found) ? found as Node2D : null;
-
-    /// <summary>
-    /// План под курсором. Спрашивается отдельно от карты препятствий, потому что план
-    /// в ней не значится: место он держит только для правила постановки.
-    /// </summary>
-    private BuildPlan PlanAt(Vector2 point)
-    {
-        foreach (var plan in GM.Index.All<BuildPlan>())
-            if (plan.NeedsWork && plan.Footprint.HasPoint(point))
-                return plan;
-
-        return null;
-    }
-
-    // ПОДХОД ОТДЕЛЬНЫМ ПРИКАЗОМ БОЛЬШЕ НЕ СТАВИТСЯ.
-    //
-    // Прежде рабочий приказ раздавался цепочкой «дойти, потом работать», и точка подхода
-    // считалась для каждого исполнителя своя. Списку, общему на весь отряд, такой приказ
-    // принадлежать не может: в нём место одно, а точек подхода столько же, сколько юнитов.
-    //
-    // Потери в этом нет. Подход механике никогда и не был нужен — исполнитель доходит
-    // до места работы сам (Unit.RunWork), — а нужен он был игроку, чтобы путь читался
-    // в очереди отдельным шагом. Теперь очередь содержит ровно то, что игрок приказал,
-    // а путь по-прежнему виден: линия приказа тянется от юнита к месту работы.
-
-    /// <summary>
-    /// Враг в указанной точке. Корпус небольшой, поэтому даём припуск —
-    /// попадать точно в кружок мышью неудобно, а промах уводит юнита гулять.
-    /// </summary>
-    private Node2D EnemyAt(Vector2 point) =>
-        GM.Units[Faction.Hostile]
-            .Where(enemy => !Targeting.Leaving(enemy)
-                            && enemy.GlobalPosition.DistanceTo(point)
-                            <= enemy.HitRadius + PickSlack)
-            .Nearest(point, enemy => enemy.GlobalPosition);
-
-    private Node2D DamagedUnitAt(Vector2 point) =>
-        GM.Units[Faction.Player]
-            .Where(unit => !Targeting.Leaving(unit)
-                           && unit.GlobalPosition.DistanceTo(point) <= unit.HitRadius + PickSlack)
-            .Nearest(point, unit => unit.GlobalPosition) is { } found && Repairable(found) != null
-            ? found
-            : null;
-
-    /// <summary>Годится ли под ремонт: своё, повреждённое и с курсом ремонта.</summary>
-    private static Node2D Repairable(Node2D node) =>
-        node is IRepairable { Health: { Ratio: < 0.999f } } repairable
-        && repairable.HealthPerMetal > 0f
-        && node is IDamageable { Faction: Faction.Player }
-            ? node
-            : null;
 
     /// <summary>
     /// Разметить всю размеченную партию планами. Негодные места пропускаются молча: игрок

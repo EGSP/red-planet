@@ -47,7 +47,7 @@ public static class CursorArt
     public static CursorKind Of(OrderKind kind) => kind switch
     {
         OrderKind.Move => CursorKind.Move,
-        OrderKind.Attack or OrderKind.AttackMove => CursorKind.Attack,
+        OrderKind.Attack or OrderKind.AttackMove or OrderKind.AttackArea => CursorKind.Attack,
         OrderKind.Repair => CursorKind.Repair,
         OrderKind.Follow => CursorKind.Assist,
         OrderKind.Build => CursorKind.Build,

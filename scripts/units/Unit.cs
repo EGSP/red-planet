@@ -346,9 +346,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // сопровождения мог смениться, а ведущий — закончить работу
         _assisted = null;
 
-        // Цель, выбранная по дороге, принадлежит одному приказу и одному исполнителю:
-        // сменился приказ — прежняя цель ничего не значит
-        if (order.Kind != OrderKind.AttackMove)
+        // Цель, выбранная по дороге или в круге, принадлежит одному приказу и одному
+        // исполнителю: сменился приказ — прежняя цель ничего не значит
+        if (order.Kind is not (OrderKind.AttackMove or OrderKind.AttackArea))
             _engaged = null;
 
         switch (order.Kind)
@@ -363,6 +363,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
             case OrderKind.AttackMove:
                 RunAttackMove(order, dt);
+                return;
+
+            case OrderKind.AttackArea:
+                RunAttackArea(order);
                 return;
 
             case OrderKind.Repair:
@@ -425,7 +429,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
         {
-            Movement.Seek(order.Pos, reach);
+            Movement.Seek(order.Pos, reach, order.Fluid);
             return;
         }
 
@@ -523,12 +527,80 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        // Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
-        // границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
-        // откуда любое смещение цели или толчок соседа выводили его из радиуса.
-        // Предел обзора режет подход: иначе дальнобойный вставал бы за пределами зрения,
-        // откуда WeaponSystem огонь не откроет. Безоружный подходит на длину инструмента:
-        // приказ хотя бы не зависает
+        Approach(victim, target);
+    }
+
+    /// <summary>
+    /// Атака по области: бить всё, что стоит в круге, а опустевший круг оставлять.
+    ///
+    /// ЦЕЛЬ ИЩЕТСЯ ОТ ЦЕНТРА КРУГА, А НЕ ОТ СЕБЯ. Круг задан игроком и с места не сходит,
+    /// поэтому исполнитель, стоящий далеко, видит его содержимое целиком и идёт к ближайшей
+    /// к центру цели. Отсчёт от себя означал бы, что приказ исчерпан всякий раз, когда до
+    /// круга ещё не дошли.
+    ///
+    /// ПУСТОЙ КРУГ НЕ СНИМАЕТ ПРИКАЗ СРАЗУ: исполнитель обязан дойти до центра области.
+    /// Иначе приказ, отданный по месту, где противника пока не видно, исчезал бы в тот же
+    /// кадр, и отряд оставался бы стоять — а игрок, указывая круг, посылает отряд именно
+    /// туда. Дойдя до центра и никого не найдя, исполнитель приказ оставляет.
+    ///
+    /// ЖДАТЬ ОТСТАВШИХ ЗДЕСЬ НЕ НУЖНО, в отличие от приказа движения. Сбор отряда нужен
+    /// затем, чтобы следующая точка цепочки бралась всеми разом; а круг оставляет каждый
+    /// по своему основанию — один нашёл цель и дерётся, другой дошёл до пустого центра, —
+    /// и общего мига, до которого имело бы смысл ждать, у них нет.
+    ///
+    /// ПОИСК ВЕДЁТСЯ КАЖДЫЙ КАДР, пока цели нет, — в отличие от приказа «идти с боем»,
+    /// где перебор растянут отсчётом переигровки. Отложить поиск здесь нельзя: пока он
+    /// не сделан, неизвестно, идти ли к центру или драться. Дорого это не обходится:
+    /// без цели приказ живёт ровно столько, сколько занимает дорога.
+    /// </summary>
+    private void RunAttackArea(Order order)
+    {
+        Detach();
+
+        // Цель, павшая или вытесненная за границу круга, приказу больше не принадлежит
+        if (_engaged != null
+            && (!Targeting.IsValid(_engaged as GodotObject)
+                || _engaged.GlobalPosition.DistanceTo(order.Pos) > order.Radius))
+            _engaged = null;
+
+        _engaged ??= Targeting.Nearest(order.Pos, Faction.Opposite(), order.Radius);
+
+        if (_engaged != null)
+        {
+            Approach(_engaged as Node2D, _engaged);
+            return;
+        }
+
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        {
+            Movement.Seek(order.Pos, reach);
+            return;
+        }
+
+        Orders.DropCurrent();
+    }
+
+    /// <summary>
+    /// Подход к цели боя. Правило одно на приказ атаки и на атаку по области: расходиться
+    /// в том, где именно юнит останавливается, два способа указать одну и ту же цель
+    /// не должны.
+    ///
+    /// Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
+    /// границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
+    /// откуда любое смещение цели или толчок соседа выводили его из радиуса.
+    /// Предел обзора режет подход: иначе дальнобойный вставал бы за пределами зрения,
+    /// откуда WeaponSystem огонь не откроет. Безоружный подходит на длину инструмента:
+    /// приказ хотя бы не зависает.
+    /// </summary>
+    private void Approach(Node2D victim, IDamageable target)
+    {
+        if (!Alive.Is(victim))
+            return;
+
+        var to = victim.GlobalPosition;
+
         float stop = Weapon != null
             ? Targeting.ApproachDistance(Weapon, GlobalPosition, target,
                 Definition.ApproachHoldFraction, Definition.VisionRadiusPx)

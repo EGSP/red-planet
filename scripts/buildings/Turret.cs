@@ -32,11 +32,41 @@ public partial class Turret : Building, IArmed
     public bool CanFire => true;
 
     /// <summary>
-    /// Приказали цель — бьём её, не приказали — ближайшую в радиусе найдёт система стрельбы.
-    /// Своего кода наведения у турели по-прежнему нет.
+    /// Приказали цель — бьём её, приказали область — ближайшую в ней, не приказали —
+    /// ближайшую в радиусе найдёт система стрельбы. Своего кода наведения у турели
+    /// по-прежнему нет.
     /// </summary>
-    public IDamageable FireTarget =>
-        Orders.Current?.Kind == OrderKind.Attack ? Orders.Current.Entity as IDamageable : null;
+    public IDamageable FireTarget => Orders.Current switch
+    {
+        { Kind: OrderKind.Attack } order => order.Entity as IDamageable,
+        { Kind: OrderKind.AttackArea } order => AreaTarget(order),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Приказ по области у неподвижной постройки означает не подход, а выбор цели: круг
+    /// задаёт, кого башня предпочитает всем прочим. Подходить ей некуда, поэтому весь приказ
+    /// сводится к одному решению — есть ли в круге кого бить.
+    ///
+    /// Пустой круг исчерпывает приказ сразу, тогда как подвижный исполнитель сперва обязан
+    /// дойти до центра области. Различие следует из самой неподвижности: дойти башня
+    /// не может никогда, и требовать от неё прихода значило бы, что приказ висит в очереди
+    /// вечно — он не кончается ни гибелью цели, ни приходом в точку.
+    /// </summary>
+    public override void RunOrder(Order order, double dt)
+    {
+        if (order.Kind != OrderKind.AttackArea)
+        {
+            base.RunOrder(order, dt);
+            return;
+        }
+
+        if (AreaTarget(order) == null)
+            Orders.DropCurrent();
+    }
+
+    private IDamageable AreaTarget(Order order) =>
+        Targeting.Nearest(order.Pos, Faction.Opposite(), order.Radius);
 
     public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
 

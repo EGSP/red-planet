@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 /// <summary>
@@ -54,6 +55,18 @@ public partial class OrderOverlay : Node2D
 
         if (command.State == CommandState.Banding)
             DrawBand(command.Band);
+
+        // Указываемое прямо сейчас: круг области либо линия рисования с местами исполнителей.
+        // Приказ ещё не отдан, поэтому рисуется он не очередью, а этим предпоказом
+        if (command.State == CommandState.Sweeping)
+            DrawArea(command.AreaCenter, command.AreaRadius,
+                command.Aimed ?? OrderKind.Attack, preview: true);
+
+        // Линия показывается только там, где она что-то означает, — то есть при строе.
+        // Единственного исполнителя рисование просто ведёт за указателем, мест вдоль линии
+        // у него не возникает, и след жеста говорил бы ему о несуществующем распределении
+        if (command.State == CommandState.Drawing && command.MoverCount > 1)
+            DrawStroke(command.Path, command.Spots(command.MoverCount));
     }
 
     private void DrawRing(IOrderable actor)
@@ -97,6 +110,11 @@ public partial class OrderOverlay : Node2D
 
             ShapeDraw.Line(this, from, to, line);
             DrawMark(to, order.Kind, new Color(DrawTheme.Hue(kind), alpha + 0.15f));
+
+            // У приказа по области значка мало: важен не центр круга, а сам круг —
+            // именно он говорит, где исполнитель будет искать себе цель
+            if (order.Kind == OrderKind.AttackArea)
+                DrawArea(order.Point, order.Radius, order.Kind, preview: false);
 
             // Номер шага нужен только там, где шагов больше одного
             if (total > 1)
@@ -163,5 +181,55 @@ public partial class OrderOverlay : Node2D
     {
         var local = new Rect2(ToLocal(band.Position), band.Size);
         ShapeDraw.Rect(this, local, DrawTheme.Radius(VizKind.Band));
+    }
+
+    /// <summary>
+    /// Круг области — указываемой или уже стоящей в очереди. Цвет берётся от вида приказа,
+    /// а различаются два случая только насыщенностью: указываемое ярче, потому что игрок
+    /// правит его прямо сейчас.
+    /// </summary>
+    private void DrawArea(Vector2 center, float radius, OrderKind kind, bool preview)
+    {
+        if (radius <= 0f)
+            return;
+
+        var hue = DrawTheme.Hue(Order.Viz(kind));
+        float alpha = preview ? 0.8f : 0.45f;
+
+        ShapeDraw.Circle(this, ToLocal(center), radius,
+            ShapeStyle.Filled(new Color(hue, preview ? 0.1f : 0.05f), new Color(hue, alpha),
+                1.5f, WidthMode.Screen), 48);
+    }
+
+    /// <summary>
+    /// Линия рисования и места, которые займут исполнители. Места показываются по ходу
+    /// жеста, а не после него: игрок ведёт указателем и должен видеть будущий строй,
+    /// пока ещё может его поправить.
+    /// </summary>
+    private void DrawStroke(IReadOnlyList<Vector2> path, IReadOnlyList<Vector2> spots)
+    {
+        if (path == null || path.Count == 0)
+            return;
+
+        var hue = DrawTheme.Hue(VizKind.OrderMove);
+
+        if (path.Count >= 2)
+        {
+            var points = new Vector2[path.Count];
+
+            for (int i = 0; i < path.Count; i++)
+                points[i] = ToLocal(path[i]);
+
+            ShapeDraw.Polyline(this, points,
+                ShapeStyle.Outline(new Color(hue, 0.75f), 2f, WidthMode.Screen));
+        }
+
+        if (spots == null)
+            return;
+
+        foreach (var spot in spots)
+            ShapeDraw.Circle(this, ToLocal(spot), 4f,
+                ShapeStyle.Filled(new Color(hue, 0.3f), new Color(hue, 0.9f), 2f,
+                    WidthMode.Screen), 12);
     }
 }

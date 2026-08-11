@@ -10,6 +10,13 @@ public enum OrderKind
     Repair,
     Follow,
     Delete,
+
+    /// <summary>
+    /// Атака по области: цели у приказа нет, есть круг. Стоит в конце перечисления, потому
+    /// что номер вида служит битом в <see cref="OrderSet"/>, а вставка в середину сдвинула бы
+    /// биты всех последующих.
+    /// </summary>
+    AttackArea,
 }
 
 /// <summary>
@@ -66,6 +73,19 @@ public sealed class Order
     public Node2D Entity;
 
     /// <summary>
+    /// Радиус области. Осмыслен только у <see cref="OrderKind.AttackArea"/>: там он задаёт
+    /// круг, внутри которого исполнитель бьёт всё, что найдёт.
+    /// </summary>
+    public float Radius;
+
+    /// <summary>
+    /// Идти свободно, без поиска пути — см. <see cref="Movement.Fluid"/>. Ставится приказу
+    /// движения, выданному рисованием: линия задаёт форму строя, и вести отряд по проходам
+    /// растра значило бы эту форму разрушить.
+    /// </summary>
+    public bool Fluid;
+
+    /// <summary>
     /// Приказ выдан не игроком, а системой распределения задач. Такой приказ не уводит
     /// исполнителя дальше его радиуса внимания: самостоятельно выбранная цель не повод
     /// бросать участок, тогда как прямое указание игрока — повод.
@@ -79,6 +99,25 @@ public sealed class Order
     private readonly HashSet<int> _arrived = new();
 
     public static Order MoveTo(Vector2 pos) => new() { Kind = OrderKind.Move, Pos = pos };
+
+    /// <summary>
+    /// Движение, выданное рисованием: та же точка назначения, но добираются до неё свободно.
+    /// Отдельного вида приказа под это не заведено — приказ остаётся движением, различается
+    /// лишь способ добраться.
+    /// </summary>
+    public static Order Drawn(Vector2 pos) =>
+        new() { Kind = OrderKind.Move, Pos = pos, Fluid = true };
+
+    /// <summary>
+    /// Атака по области. Цель выбирается в момент исполнения и внутри круга: приказ живёт,
+    /// пока в нём есть кого бить, и исчерпывается, как только круг опустел.
+    /// </summary>
+    public static Order Area(Vector2 center, float radius) => new()
+    {
+        Kind = OrderKind.AttackArea,
+        Pos = center,
+        Radius = radius,
+    };
 
     public static Order Work(OrderKind kind, IWorkSite target) => new()
     {
@@ -248,8 +287,11 @@ public sealed class Order
         {
             // Идти с боем кончается приходом в точку, как и обычное движение: цели
             // по дороге приказу не принадлежат, и гибель любой из них его не исчерпывает
+            // Атака по области кончается не гибелью цели, а опустевшим кругом, и решает это
+            // сам исполнитель: цели приказу не принадлежат, а круг стоит на месте
             case OrderKind.Move:
             case OrderKind.AttackMove:
+            case OrderKind.AttackArea:
             case OrderKind.Delete:
                 return true;
 
@@ -271,6 +313,18 @@ public sealed class Order
                && Target.NeedsWork;
     }
 
+    /// <summary>
+    /// Каким разрешением проверяется вид приказа.
+    ///
+    /// ОБЛАСТЬ — ФОРМА ПРИКАЗА, А НЕ ОТДЕЛЬНОЕ ПРАВО. Атака по области доступна ровно тому,
+    /// кому доступна атака: она отличается лишь способом указания цели, а не тем, что юнит
+    /// умеет. Заводить под неё запись в секции <c>[orders]</c> означало бы, что каждое
+    /// определение придётся править ради права, которое и так следует из наличия ствола, —
+    /// а забытая строка тихо отняла бы у юнита половину управления.
+    /// </summary>
+    public static OrderKind Permission(OrderKind kind) =>
+        kind == OrderKind.AttackArea ? OrderKind.Attack : kind;
+
     /// <summary>Название для интерфейса.</summary>
     public static string Name(OrderKind kind) => kind switch
     {
@@ -278,6 +332,7 @@ public sealed class Order
         OrderKind.Build => "строить",
         OrderKind.Attack => "атаковать",
         OrderKind.AttackMove => "идти с боем",
+        OrderKind.AttackArea => "атаковать область",
         OrderKind.Repair => "чинить",
         OrderKind.Follow => "следовать",
         OrderKind.Delete => "снос",
@@ -291,7 +346,7 @@ public sealed class Order
         OrderKind.Build => VizKind.OrderBuild,
         OrderKind.Attack => VizKind.OrderAttack,
         // Тем же цветом, что и атака: смысл у них один, различается только цель
-        OrderKind.AttackMove => VizKind.OrderAttack,
+        OrderKind.AttackMove or OrderKind.AttackArea => VizKind.OrderAttack,
         OrderKind.Repair => VizKind.OrderRepair,
         OrderKind.Follow => VizKind.OrderFollow,
         OrderKind.Delete => VizKind.OrderDelete,
