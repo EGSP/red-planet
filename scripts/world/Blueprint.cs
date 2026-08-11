@@ -40,7 +40,20 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
     public OrderQueue Orders { get; }
 
-    public Blueprint() => Orders = new OrderQueue(this);
+    /// <summary>
+    /// Слои отрисовки: спрайт под шейдером строительства и пометки поверх него. Создаются
+    /// до того, как известен справочник, — содержимое они читают при отрисовке.
+    /// См. <see cref="BlueprintLayer"/>.
+    /// </summary>
+    private readonly BlueprintLayer _hull;
+    private readonly BlueprintLayer _marks;
+
+    public Blueprint()
+    {
+        Orders = new OrderQueue(this);
+        _hull = BlueprintLayer.Attach(this, BlueprintLayer.Slot.Hull);
+        _marks = BlueprintLayer.Attach(this, BlueprintLayer.Slot.Marks);
+    }
 
     /// <summary>Угол, под которым каркас поставили. Достроенная сущность его наследует.</summary>
     public float BodyFacing { get; private set; }
@@ -119,7 +132,15 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
     public override void _Ready() => Health ??= new Health(100f * Const.BlueprintHealthFactor);
 
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        QueueRedraw();
+
+        // Готовность и признак работы меняются непрерывно, поэтому слои согласуются каждый
+        // кадр: там же сглаживается активность и подставляются параметры шейдера
+        _hull.Sync(delta);
+        _marks.Sync(delta);
+    }
 
     // ── приказы ────────────────────────────────────────────────────────────────
 
@@ -352,6 +373,11 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         QueueFree();
     }
 
+    /// <summary>
+    /// Общая часть: круги инструментов, площадка и процедурная заливка у тех определений,
+    /// где спрайта нет. Спрайт и пометки рисуют слои <see cref="BlueprintLayer"/>: спрайту
+    /// нужно вещество с шейдером строительства, а пометки обязаны идти после него.
+    /// </summary>
     public override void _Draw()
     {
         if (Definition == null)
@@ -371,14 +397,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         // Площадка принадлежит каркасу так же, как готовой постройке: исчезает вместе с ним
         BuildingSkirt.Draw(this, rect);
 
-        if (!string.IsNullOrEmpty(Definition.Sprite))
-        {
-            // Непрозрачность растёт с прогрессом: каркас читается как тот же спрайт,
-            // что и готовая постройка, а не как цветной прямоугольник
-            SpriteArt.DrawHull(this, Definition, rect,
-                new Color(1f, 1f, 1f, 0.2f + 0.65f * Ratio), BodyFacing);
-        }
-        else
+        if (string.IsNullOrEmpty(Definition.Sprite))
         {
             ShapeDraw.Rect(this, rect, ShapeStyle.Solid(new Color(Definition.Color, 0.15f)));
 
@@ -388,21 +407,36 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
                 ShapeStyle.Solid(new Color(Definition.Color, 0.55f)));
         }
 
-        ShapeDraw.Rect(this, rect,
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+    }
+
+    /// <summary>
+    /// Пометки поверх каркаса: контур занимаемого места, подписи и полоса прочности.
+    /// Рисуются слоем <see cref="BlueprintLayer.Slot.Marks"/>, который идёт после спрайта,
+    /// поэтому контур не закрывается корпусом при <c>sprite_scale</c> больше единицы.
+    ///
+    /// Слой уже повёрнут на угол корпуса, поэтому контур идёт по занятому месту, а подписи
+    /// поворот снимают: читаются они с экрана, а не с корпуса.
+    /// </summary>
+    public void DrawMarks(CanvasItem canvas, Rect2 rect, Vector2 size)
+    {
+        ShapeDraw.Rect(canvas, rect,
             ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.7f), 2f, WidthMode.Screen));
 
-        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+        // Базис слоя повёрнут на угол корпуса, и обратный поворот возвращает подписи к осям
+        // экрана: читаются они с экрана, а не с корпуса
+        canvas.DrawSetTransform(Vector2.Zero, -BodyFacing, Vector2.One);
 
         var font = ThemeDB.FallbackFont;
         string label = $"{Definition.DisplayName} {Mathf.FloorToInt(Ratio * 100f)}%";
-        DrawString(font, new Vector2(rect.Position.X, rect.Position.Y - 6f), label,
+        canvas.DrawString(font, new Vector2(rect.Position.X, rect.Position.Y - 6f), label,
             HorizontalAlignment.Left, -1, 13, Colors.White);
 
         if (WorkerCount > 0)
-            DrawString(font, new Vector2(rect.Position.X, rect.End.Y + 16f),
+            canvas.DrawString(font, new Vector2(rect.Position.X, rect.End.Y + 16f),
                 $"строителей: {WorkerCount} ({TotalPower:0.#}/с)",
                 HorizontalAlignment.Left, -1, 11, new Color(0.8f, 0.9f, 1f));
 
-        HealthBar.Draw(this, Health, size.X * 0.9f, rect.Position.Y - 20f);
+        HealthBar.Draw(canvas, Health, size.X * 0.9f, rect.Position.Y - 20f);
     }
 }

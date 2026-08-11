@@ -29,8 +29,11 @@ using Godot;
 /// дочерний узел рисуется после родителя целиком, а контактная тень обязана лечь между
 /// площадкой и корпусом, то есть в середину его отрисовки; отрицательный ZIndex же выводит
 /// узел из порядка WorldLayer и прячет под саму местность. Поэтому гладкость достигается
-/// разрешением: слой запекается в <see cref="Upscale"/> раз подробнее спрайта, и ступень
-/// ближайшего соседа приходится на долю пикселя корпуса.
+/// разрешением: слой запекается подробнее спрайта в <see cref="SpriteOcclusionSettings.Upscale"/>
+/// раз, и ступень ближайшего соседа приходится на долю пикселя корпуса.
+///
+/// НАСТРОЙКИ ЛЕЖАТ В РЕСУРСЕ <see cref="SpriteOcclusionSettings"/>, а не в постоянных этого
+/// класса: цвет и плотность затенения есть предмет правки на глаз, а не устройство приёма.
 /// </summary>
 public static class SpriteOcclusion
 {
@@ -46,58 +49,18 @@ public static class SpriteOcclusion
         public bool IsEmpty => Texture == null;
     }
 
-    /// <summary>
-    /// Во сколько раз изображение слоя подробнее исходного спрайта. Учитывается при
-    /// отрисовке: масштаб корпуса делится на эту величину, иначе слой вышел бы вчетверо
-    /// крупнее корпуса.
-    /// </summary>
-    private const int Upscale = 4;
-
-    /// <summary>Радиус размытия контактной тени, доля меньшей стороны спрайта.</summary>
-    private const float ContactBlurFraction = 0.08f;
-
-    /// <summary>Отход тени от корпуса, доля меньшей стороны спрайта.</summary>
-    private const float ContactOffsetFraction = 0.07f;
-
-    /// <summary>
-    /// Направление отхода тени. Свет считается падающим сверху и слева, поэтому тень уходит
-    /// вниз и вправо; ось Y в координатах канвы направлена вниз.
-    /// </summary>
-    private static readonly Vector2 ContactDirection = new Vector2(0.5f, 0.85f).Normalized();
-
-    /// <summary>Непрозрачность тени вплотную к корпусу.</summary>
-    private const float ContactOpacity = 0.8f;
-
-    /// <summary>Ширина каймы затемнения, доля меньшей стороны спрайта.</summary>
-    private const float RimBlurFraction = 0.06f;
-
-    /// <summary>Непрозрачность затемнения на самом краю силуэта.</summary>
-    private const float RimOpacity = 0.55f;
-
-    /// <summary>
-    /// Цвет затенения. Не чистый чёрный: на охристом грунте чёрная тень выглядит провалом,
-    /// а слегка холодный тёмный тон читается как затенённая поверхность.
-    /// </summary>
-    private static readonly Color ShadeColor = new(0.05f, 0.04f, 0.07f);
-
     private static readonly Dictionary<string, Layer> ContactCache = new();
     private static readonly Dictionary<string, Layer> RimCache = new();
 
+    /// <summary>Настройки подсистемы: цвет, доли размытия, плотности, подробность.</summary>
+    private static SpriteOcclusionSettings Config => GraphicsSettings.Shading;
+
     /// <summary>
-    /// Общие переключатели слоёв для отладочной панели. Действуют поверх величин
-    /// справочника: снятый признак гасит слой у всех построек сразу, не трогая содержимое
-    /// определений.
+    /// Слепок настроек, при которых пёкся кэш. Правка полей в отладочной панели или
+    /// в инспекторе обязана менять картинку, а изображения считаются один раз, поэтому
+    /// расхождение слепка чистит кэш и заставляет пересчитать слои.
     /// </summary>
-    public static bool ContactEnabled { get; private set; } = true;
-
-    /// <inheritdoc cref="ContactEnabled"/>
-    public static bool RimEnabled { get; private set; } = true;
-
-    /// <summary>Включить или выключить контактную тень у всех построек.</summary>
-    public static void SetContactEnabled(bool on) => ContactEnabled = on;
-
-    /// <summary>Включить или выключить затемнение по кайме у всех построек.</summary>
-    public static void SetRimEnabled(bool on) => RimEnabled = on;
+    private static (Color, int, float, float, float, float, float)? _bakedWith;
 
     /// <summary>
     /// Нарисовать контактную тень. Вызывается после площадки и до корпуса, в том же базисе,
@@ -107,7 +70,7 @@ public static class SpriteOcclusion
     public static void DrawContact(CanvasItem canvas, UnitDefinition def, Rect2 bounds,
         float baseRadians)
     {
-        if (ContactEnabled)
+        if (Config.ContactEnabled)
             Draw(canvas, def, bounds, baseRadians, Contact(def?.Sprite),
                 def?.AmbientOcclusionOuter ?? 0f);
     }
@@ -116,7 +79,7 @@ public static class SpriteOcclusion
     public static void DrawRim(CanvasItem canvas, UnitDefinition def, Rect2 bounds,
         float baseRadians)
     {
-        if (RimEnabled)
+        if (Config.RimEnabled)
             Draw(canvas, def, bounds, baseRadians, Rim(def?.Sprite),
                 def?.AmbientOcclusionInner ?? 0f);
     }
@@ -141,7 +104,7 @@ public static class SpriteOcclusion
         var shift = layer.Offset.Rotated(-baseRadians) * factor;
 
         var modulate = new Color(1f, 1f, 1f, Mathf.Clamp(strength, 0f, 1f));
-        SpriteArt.DrawScaled(canvas, layer.Texture, factor / Upscale,
+        SpriteArt.DrawScaled(canvas, layer.Texture, factor / Mathf.Max(Config.Upscale, 1),
             bounds.GetCenter() + shift, modulate, def.SpriteRotationDegrees, baseRadians);
     }
 
@@ -153,6 +116,8 @@ public static class SpriteOcclusion
     {
         if (string.IsNullOrEmpty(path))
             return default;
+
+        Revalidate();
 
         if (ContactCache.TryGetValue(path, out var cached))
             return cached;
@@ -171,12 +136,31 @@ public static class SpriteOcclusion
         if (string.IsNullOrEmpty(path))
             return default;
 
+        Revalidate();
+
         if (RimCache.TryGetValue(path, out var cached))
             return cached;
 
         var layer = BakeRim(LoadAlpha(path, out int width, out int height), width, height);
         RimCache[path] = layer;
         return layer;
+    }
+
+    /// <summary>
+    /// Сверить настройки со слепком, при котором пёкся кэш, и очистить его при расхождении.
+    /// Пересчёт стоит нескольких миллисекунд на вид постройки и происходит только в ответ
+    /// на правку, поэтому в обычном кадре проверка сводится к сравнению кортежа.
+    /// </summary>
+    private static void Revalidate()
+    {
+        var key = Config.BakeKey;
+
+        if (_bakedWith is { } previous && previous.Equals(key))
+            return;
+
+        ContactCache.Clear();
+        RimCache.Clear();
+        _bakedWith = key;
     }
 
     /// <summary>
@@ -223,7 +207,7 @@ public static class SpriteOcclusion
             return default;
 
         int side = Mathf.Min(width, height);
-        int blur = Mathf.Max(2, Mathf.RoundToInt(side * ContactBlurFraction));
+        int blur = Mathf.Max(2, Mathf.RoundToInt(side * Config.ContactBlur));
 
         // Два прохода размытия расширяют пятно вдвое против радиуса, и запас поля обязан
         // вместить это расширение: иначе тень упрётся в край изображения и оборвётся
@@ -244,10 +228,11 @@ public static class SpriteOcclusion
         Blur(field, paddedWidth, paddedHeight, blur);
 
         for (int i = 0; i < field.Length; i++)
-            field[i] = Mathf.Min(field[i] * ContactOpacity, 1f);
+            field[i] = Mathf.Min(field[i] * Config.ContactOpacity, 1f);
 
+        var direction = Vector2.Right.Rotated(Mathf.DegToRad(Config.ContactAngleDegrees));
         return new Layer(Compose(field, paddedWidth, paddedHeight),
-            ContactDirection * side * ContactOffsetFraction);
+            direction * side * Config.ContactOffset);
     }
 
     private static Layer BakeRim(float[] alpha, int width, int height)
@@ -256,7 +241,7 @@ public static class SpriteOcclusion
             return default;
 
         int side = Mathf.Min(width, height);
-        int blur = Mathf.Max(2, Mathf.RoundToInt(side * RimBlurFraction));
+        int blur = Mathf.Max(2, Mathf.RoundToInt(side * Config.RimBlur));
 
         var opened = (float[])alpha.Clone();
         Blur(opened, width, height, blur);
@@ -268,7 +253,7 @@ public static class SpriteOcclusion
         // множитель удвоен — так RimOpacity задаёт непрозрачность именно у края
         var field = new float[alpha.Length];
         for (int i = 0; i < field.Length; i++)
-            field[i] = Mathf.Clamp(alpha[i] * (1f - opened[i]) * 2f * RimOpacity, 0f, 1f);
+            field[i] = Mathf.Clamp(alpha[i] * (1f - opened[i]) * 2f * Config.RimOpacity, 0f, 1f);
 
         return new Layer(Compose(field, width, height), Vector2.Zero);
     }
@@ -285,7 +270,7 @@ public static class SpriteOcclusion
     private static Texture2D Compose(float[] field, int width, int height)
     {
         var image = Image.CreateEmpty(width, height, false, Image.Format.Rgba8);
-        var color = ShadeColor;
+        var color = Config.Shade;
 
         for (int y = 0; y < height; y++)
         {
@@ -296,8 +281,10 @@ public static class SpriteOcclusion
             }
         }
 
-        if (Upscale > 1)
-            image.Resize(width * Upscale, height * Upscale, Image.Interpolation.Bilinear);
+        int upscale = Mathf.Clamp(Config.Upscale, 1, 8);
+
+        if (upscale > 1)
+            image.Resize(width * upscale, height * upscale, Image.Interpolation.Bilinear);
 
         return ImageTexture.CreateFromImage(image);
     }

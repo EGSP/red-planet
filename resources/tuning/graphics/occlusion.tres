@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="SpriteOcclusionSettings" format=3 uid="uid://2kafaguoabxl"]
+
+[ext_resource type="Script" uid="uid://7fsj28q127ss" path="res://scripts/draw/SpriteOcclusionSettings.cs" id="1_occlusion"]
+
+[resource]
+script = ExtResource("1_occlusion")
+RimBlur = 0.045

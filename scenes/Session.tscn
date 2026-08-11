@@ -53,6 +53,7 @@
 [ext_resource type="Script" uid="uid://ce4dufgxum148" path="res://scripts/world/ShadowRenderer.cs" id="46_shadow"]
 [ext_resource type="Script" uid="uid://b8bkh2kwhs8h" path="res://scripts/ui/EventBar.cs" id="48_eventbar"]
 [ext_resource type="Resource" uid="uid://lo25rs6paxsf" path="res://resources/tuning/orders.tres" id="49_ordersettings"]
+[ext_resource type="Resource" uid="uid://dut65crdd0675" path="res://resources/tuning/graphics/graphics.tres" id="50_graphicssettings"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
@@ -64,6 +65,7 @@ StartingMetal = 250.0
 script = ExtResource("2_manager")
 WorldTuning = ExtResource("40_worldsettings")
 NavTuning = ExtResource("43_navsettings")
+GraphicsTuning = ExtResource("50_graphicssettings")
 
 [node name="CursorSystem" type="Node" parent="Systems" unique_id=926610412]
 script = ExtResource("5_cursor")
