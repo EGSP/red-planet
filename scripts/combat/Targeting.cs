@@ -57,17 +57,21 @@ public static class Targeting
     /// ни при каких числах справочника. Запас берётся как доля дальности, но не меньше
     /// <see cref="ApproachMargin"/>.
     ///
+    /// <paramref name="maxRange"/> ограничивает рабочую дальность сверху: обзор меньше
+    /// ствола не должен оставлять юнита стоять за пределами видимости, откуда огонь
+    /// всё равно запрещён.
+    ///
     /// Зачем запас вообще нужен: цель движется, юнита толкают соседи, а выталкивание
     /// из построек сдвигает его на радиус корпуса. Остановка ровно на границе означала бы,
     /// что огонь прекращается от любого из этих смещений.
     /// </summary>
     public static float ApproachDistance(WeaponDefinition weapon, Vector2 from,
-        IDamageable target, float approachHoldFraction)
+        IDamageable target, float approachHoldFraction, float maxRange = float.MaxValue)
     {
         if (weapon == null)
             return 0f;
 
-        float reach = weapon.RangePx;
+        float reach = Mathf.Min(weapon.RangePx, maxRange);
         float slack = Mathf.Max(
             reach * (1f - Mathf.Clamp(approachHoldFraction, 0f, 1f)), ApproachMargin);
 

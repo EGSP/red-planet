@@ -54,15 +54,37 @@ public partial class WeaponSystem : GameSystem
         }
     }
 
-    /// <summary>Своя цель в приоритете: враг бьёт того, к кому шёл, а не первого встречного.</summary>
+    /// <summary>
+    /// Своя цель в приоритете: враг бьёт того, к кому шёл, а не первого встречного.
+    /// Автовыбор и ответный огонь не выходят за обзор носителя: ствол длиннее зрения
+    /// не даёт права стрелять в то, чего носитель не видит.
+    /// </summary>
     private IDamageable AcquireTarget(IArmed armed, WeaponDefinition weapon)
     {
+        float sight = SightRange(armed);
+
         var own = armed.FireTarget;
         if (own != null && Targeting.IsValid(own as GodotObject))
-            return own;
+        {
+            if (armed.GlobalPosition.DistanceTo(own.GlobalPosition) > sight)
+                return null;
 
-        return Targeting.Nearest(armed.GlobalPosition, armed.Faction.Opposite(), weapon.RangePx);
+            return own;
+        }
+
+        float reach = Mathf.Min(weapon.RangePx, sight);
+        if (reach <= 0f)
+            return null;
+
+        return Targeting.Nearest(armed.GlobalPosition, armed.Faction.Opposite(), reach);
     }
+
+    /// <summary>
+    /// Предел, дальше которого ствол сам цель не ищет. Нет обзора — нет автоогня;
+    /// нет признака зрения — предел не режет дальность (на случай носителя без IVision).
+    /// </summary>
+    private static float SightRange(IArmed armed) =>
+        armed is IVision vision ? vision.VisionRadius : float.MaxValue;
 
     private void Fire(IArmed armed, WeaponDefinition weapon, Vector2 from, Vector2 to)
     {

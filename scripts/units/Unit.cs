@@ -511,10 +511,12 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
         // границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
         // откуда любое смещение цели или толчок соседа выводили его из радиуса.
-        // Безоружный подходит на длину инструмента: приказ хотя бы не зависает
+        // Предел обзора режет подход: иначе дальнобойный вставал бы за пределами зрения,
+        // откуда WeaponSystem огонь не откроет. Безоружный подходит на длину инструмента:
+        // приказ хотя бы не зависает
         float stop = Weapon != null
             ? Targeting.ApproachDistance(Weapon, GlobalPosition, target,
-                Definition.ApproachHoldFraction)
+                Definition.ApproachHoldFraction, Definition.VisionRadiusPx)
             : Reach.StopDistance(GlobalPosition, victim, Definition.WorkRangePx);
 
         if (GlobalPosition.DistanceTo(to) > stop)
@@ -618,7 +620,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Detach();
 
         float stop = Targeting.ApproachDistance(Weapon, GlobalPosition, victim as IDamageable,
-            Definition.ApproachHoldFraction);
+            Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
 
         if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
             Movement.Seek(victim.GlobalPosition, stop);
