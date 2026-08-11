@@ -8,3 +8,6 @@
 # Артефакты сборки .NET (PapaTextureTool и прочие)
 **/bin/
 **/obj/
+
+# Срезы EventPipe / dotnet-trace (панель отладки → prf)
+/artifacts/traces/

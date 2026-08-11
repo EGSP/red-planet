@@ -18,8 +18,8 @@ using Godot;
 /// <c>vis</c>, <c>gfx</c>, <c>giz</c>, <c>wav</c>, <c>dia</c>), чтобы растущие блоки
 /// не сдвигали чужие секции.
 ///
-/// Панель показывается по F3 и на симуляцию не влияет: она читает состояние и правит
-/// только <see cref="DebugFlags"/>.
+/// Панель показывается по F3 и на симуляцию не влияет: она читает состояние, правит
+/// <see cref="DebugFlags"/> и управляет записью срезов <see cref="DotnetTraceCapture"/>.
 /// </summary>
 public partial class DebugPanel : CanvasLayer
 {
@@ -51,6 +51,9 @@ public partial class DebugPanel : CanvasLayer
     private Label _waves;
     private Label _fog;
     private RichTextLabel _profile;
+    private Label _traceStatus;
+    private Button _traceStart;
+    private Button _traceStop;
 
     /// <summary>
     /// Поколение замеров, по которому уже собран текст. Сравнение с текущим избавляет
@@ -62,6 +65,12 @@ public partial class DebugPanel : CanvasLayer
     {
         Build();
         _frame.Visible = false;
+    }
+
+    public override void _ExitTree()
+    {
+        DotnetTraceCapture.StopIfRecording();
+        base._ExitTree();
     }
 
     /// <summary>
@@ -513,6 +522,83 @@ public partial class DebugPanel : CanvasLayer
             $"красным от {Percent(StepProfiler.AlarmRatio)}. У систем быстрее " +
             $"{StepProfiler.NoiseFloorMs:0.00} мс раскраска не ведётся: там относительный " +
             "разброс говорит только о погрешности измерения.");
+
+        Section(box, "Срезы EventPipe",
+            "Sampling стеков CLR текущего процесса. После остановки рядом с .nettrace " +
+            "пишется .speedscope.json — его открывают на speedscope.app. В Speedscope " +
+            "нужен именно JSON, не .nettrace. Метки Physics/Process видны после " +
+            "dotnet-trace convert --format Chromium на ui.perfetto.dev. Каталог " +
+            $"{DotnetTraceCapture.RelativeDir}/; имя: ключ сессии и время с выдачи ключа. " +
+            "Нужен tool: dotnet tool install -g dotnet-trace.");
+
+        _traceStatus = Readout(box,
+            "Ключ сессии, время с её начала, идёт ли запись и имя последнего файла.");
+
+        var row = new HBoxContainer();
+        box.AddChild(row);
+
+        _traceStart = new Button
+        {
+            Text = "начать срез",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        _traceStart.AddThemeFontSizeOverride("font_size", 11);
+        _traceStart.Pressed += OnTraceStart;
+        Explain(_traceStart,
+            "Подключить EventPipe к этому процессу и писать sampling в новый файл.");
+        row.AddChild(_traceStart);
+
+        _traceStop = new Button
+        {
+            Text = "остановить",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        _traceStop.AddThemeFontSizeOverride("font_size", 11);
+        _traceStop.Pressed += OnTraceStop;
+        Explain(_traceStop,
+            "Завершить текущую запись и сбросить файл на диск. Без активной записи " +
+            "кнопка не действует.");
+        row.AddChild(_traceStop);
+
+        RefreshTrace();
+    }
+
+    private void OnTraceStart()
+    {
+        if (!DotnetTraceCapture.TryStart(out string error) && error != null)
+            GD.PushWarning($"[DebugPanel] срез: {error}");
+
+        RefreshTrace();
+    }
+
+    private void OnTraceStop()
+    {
+        if (!DotnetTraceCapture.RequestStop(out string error) && error != null)
+            GD.PushWarning($"[DebugPanel] срез: {error}");
+
+        RefreshTrace();
+    }
+
+    private void RefreshTrace()
+    {
+        if (_traceStatus == null)
+            return;
+
+        var elapsed = DotnetTraceCapture.Elapsed;
+        string time = DotnetTraceCapture.FormatElapsed(elapsed);
+        bool busy = DotnetTraceCapture.Busy;
+        bool recording = DotnetTraceCapture.Recording;
+
+        _traceStatus.Text =
+            $"сессия {DotnetTraceCapture.Key}\n" +
+            $"время {time}\n" +
+            $"{DotnetTraceCapture.Status}";
+
+        if (_traceStart != null)
+            _traceStart.Disabled = busy;
+
+        if (_traceStop != null)
+            _traceStop.Disabled = !recording;
     }
 
     /// <summary>Порог превышения как проценты — так он и назван в подсказке.</summary>
@@ -973,6 +1059,7 @@ public partial class DebugPanel : CanvasLayer
         _fog.Text = Vision(gm.System<VisionSystem>());
 
         RefreshProfile(gm);
+        RefreshTrace();
 
         var pathfinding = gm.System<PathfindingSystem>();
         var movement = gm.System<MovementSystem>();

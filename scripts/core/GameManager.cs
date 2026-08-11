@@ -185,18 +185,38 @@ public partial class GameManager : Node
 
     public override void _PhysicsProcess(double dt)
     {
-        Scheduler.RunCycle(UpdateCycle.PhysicsProcess, dt);
+        FrameTraceMarks.BeginPhysics();
 
-        // Состав мира и транзиентные документы меняются только здесь, после физических
-        // систем: рождённое за шаг входит в разрезы разом, погибшее разом выметается.
-        // Графический цикл к симуляции не относится и частоту этого шага не повышает
-        Index.Sweep();
+        try
+        {
+            Scheduler.RunCycle(UpdateCycle.PhysicsProcess, dt);
 
-        Events.ClearTransient();
+            // Состав мира и транзиентные документы меняются только здесь, после физических
+            // систем: рождённое за шаг входит в разрезы разом, погибшее разом выметается.
+            // Графический цикл к симуляции не относится и частоту этого шага не повышает
+            Index.Sweep();
+
+            Events.ClearTransient();
+        }
+        finally
+        {
+            FrameTraceMarks.EndPhysics();
+        }
     }
 
-    public override void _Process(double dt) =>
-        Scheduler.RunCycle(UpdateCycle.Process, dt);
+    public override void _Process(double dt)
+    {
+        FrameTraceMarks.BeginProcess();
+
+        try
+        {
+            Scheduler.RunCycle(UpdateCycle.Process, dt);
+        }
+        finally
+        {
+            FrameTraceMarks.EndProcess();
+        }
+    }
 
     /// <summary>Ярлык к самой ходовой проекции — общему хранилищу базы.</summary>
     public StockpileProjection Stockpile => Projections.Get<StockpileProjection>();
