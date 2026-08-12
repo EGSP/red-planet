@@ -97,6 +97,16 @@ public static class DotnetTraceCapture
         }
     }
 
+    /// <summary>Путь активного .nettrace, из которого выводится имя соседнего снимка игры.</summary>
+    public static string CurrentPath
+    {
+        get
+        {
+            lock (Gate)
+                return _currentPath ?? "";
+        }
+    }
+
     /// <summary>Время с момента выдачи ключа сессии.</summary>
     public static TimeSpan Elapsed =>
         TimeSpan.FromSeconds((Stopwatch.GetTimestamp() - StartedTicks) * 1.0 / Stopwatch.Frequency);

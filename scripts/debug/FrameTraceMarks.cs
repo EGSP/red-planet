@@ -20,6 +20,7 @@ public sealed class FrameTraceMarks : EventSource
     {
         public const EventTask Physics = (EventTask)1;
         public const EventTask Process = (EventTask)2;
+        public const EventTask Snapshot = (EventTask)3;
     }
 
     [Event(1, Level = EventLevel.Informational, Task = Tasks.Physics, Opcode = EventOpcode.Start)]
@@ -33,6 +34,12 @@ public sealed class FrameTraceMarks : EventSource
 
     [Event(4, Level = EventLevel.Informational, Task = Tasks.Process, Opcode = EventOpcode.Stop)]
     public void ProcessStop(long frame) => WriteEvent(4, frame);
+
+    [Event(5, Level = EventLevel.Informational, Task = Tasks.Snapshot, Opcode = EventOpcode.Start)]
+    public void SnapshotStart(long frame) => WriteEvent(5, frame);
+
+    [Event(6, Level = EventLevel.Informational, Task = Tasks.Snapshot, Opcode = EventOpcode.Stop)]
+    public void SnapshotStop(long frame) => WriteEvent(6, frame);
 
     /// <summary>Начало физического прогона систем и уборки индекса.</summary>
     public static void BeginPhysics()
@@ -68,5 +75,23 @@ public sealed class FrameTraceMarks : EventSource
             return;
 
         Log.ProcessStop((long)Engine.GetProcessFrames());
+    }
+
+    /// <summary>Начало сбора игрового снимка вне отрезка графического кадра.</summary>
+    public static void BeginSnapshot()
+    {
+        if (!Log.IsEnabled())
+            return;
+
+        Log.SnapshotStart((long)Engine.GetProcessFrames());
+    }
+
+    /// <summary>Конец сбора игрового снимка.</summary>
+    public static void EndSnapshot()
+    {
+        if (!Log.IsEnabled())
+            return;
+
+        Log.SnapshotStop((long)Engine.GetProcessFrames());
     }
 }

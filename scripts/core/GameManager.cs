@@ -237,6 +237,11 @@ public partial class GameManager : Node
         {
             FrameTraceMarks.EndProcess();
         }
+
+        // Снимок идёт после графических систем: состав мира уже согласован физическим
+        // кадром, а VisionSystem успела обновить видимость. Сам сбор отмечается отдельным
+        // отрезком EventPipe и потому не входит в метку Process.
+        PerformanceCapture.Tick(this);
     }
 
     /// <summary>Ярлык к самой ходовой проекции — общему хранилищу базы.</summary>

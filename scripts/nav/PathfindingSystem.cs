@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using Godot;
 
 /// <summary>
@@ -178,6 +179,19 @@ public partial class PathfindingSystem : GameSystem
         // ради записей, живущих секундами, незачем
         if (_now - _sweptAt >= 1.0)
             Sweep();
+    }
+
+    public override void CaptureSnapshot(JsonObject data)
+    {
+        data["requests"] = Requests;
+        data["hits"] = Hits;
+        data["hit_ratio"] = Requests > 0 ? Hits / (double)Requests : 0.0;
+        data["pending"] = Pending;
+        data["cached"] = Cached;
+        data["last_expanded"] = LastExpanded;
+        data["worst_expanded"] = WorstExpanded;
+        data["max_searches_per_frame"] = MaxSearchesPerFrame;
+        data["max_nodes_per_search"] = MaxNodesPerSearch;
     }
 
     /// <summary>

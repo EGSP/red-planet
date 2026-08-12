@@ -19,7 +19,7 @@ using Godot;
 /// не сдвигали чужие секции.
 ///
 /// Панель показывается по F3 и на симуляцию не влияет: она читает состояние, правит
-/// <see cref="DebugFlags"/> и управляет записью срезов <see cref="DotnetTraceCapture"/>.
+/// <see cref="DebugFlags"/> и управляет записью срезов <see cref="PerformanceCapture"/>.
 /// Показ и клавиша достались ей от <see cref="ToolPanel"/>: панель песочницы занимает то же
 /// место экрана, и открытой из них бывает не более одной.
 /// </summary>
@@ -55,6 +55,7 @@ public partial class DebugPanel : ToolPanel
     private Label _traceStatus;
     private Button _traceStart;
     private Button _traceStop;
+    private OptionButton _traceInterval;
 
     /// <summary>
     /// Поколение замеров, по которому уже собран текст. Сравнение с текущим избавляет
@@ -66,7 +67,7 @@ public partial class DebugPanel : ToolPanel
 
     public override void _ExitTree()
     {
-        DotnetTraceCapture.StopIfRecording();
+        PerformanceCapture.StopIfRecording();
         base._ExitTree();
     }
 
@@ -640,16 +641,30 @@ public partial class DebugPanel : ToolPanel
             $"{StepProfiler.NoiseFloorMs:0.00} мс раскраска не ведётся: там относительный " +
             "разброс говорит только о погрешности измерения.");
 
-        Section(box, "Срезы EventPipe",
+        Section(box, "Срез производительности",
             "Sampling стеков CLR текущего процесса. После остановки рядом с .nettrace " +
             "пишется .speedscope.json — его открывают на speedscope.app. В Speedscope " +
             "нужен именно JSON, не .nettrace. Метки Physics/Process видны после " +
-            "dotnet-trace convert --format Chromium на ui.perfetto.dev. Каталог " +
-            $"{DotnetTraceCapture.RelativeDir}/; имя: ключ сессии и время с выдачи ключа. " +
-            "Нужен tool: dotnet tool install -g dotnet-trace.");
+            "dotnet-trace convert --format Chromium на ui.perfetto.dev. В соседний " +
+            ".game.jsonl с выбранным интервалом записываются число сущностей и показатели " +
+            "систем. Оба файла создаются только после нажатия кнопки. Каталог " +
+            $"{DotnetTraceCapture.RelativeDir}/; нужен tool: dotnet tool install -g dotnet-trace.");
 
         _traceStatus = Readout(box,
-            "Ключ сессии, время с её начала, идёт ли запись и имя последнего файла.");
+            "Ключ сессии, время, состояние обоих каналов и стоимость последнего игрового снимка.");
+
+        _traceInterval = new OptionButton
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        _traceInterval.AddItem("игровой снимок каждые 0,25 с");
+        _traceInterval.AddItem("игровой снимок каждые 0,5 с");
+        _traceInterval.AddItem("игровой снимок каждую 1 с");
+        _traceInterval.Select(0);
+        _traceInterval.ItemSelected += OnTraceIntervalSelected;
+        Explain(_traceInterval,
+            "Интервал записи состояния мира и систем. Во время записи изменить его нельзя.");
+        box.AddChild(_traceInterval);
 
         var row = new HBoxContainer();
         box.AddChild(row);
@@ -682,7 +697,7 @@ public partial class DebugPanel : ToolPanel
 
     private void OnTraceStart()
     {
-        if (!DotnetTraceCapture.TryStart(out string error) && error != null)
+        if (!PerformanceCapture.TryStart(out string error) && error != null)
             GD.PushWarning($"[DebugPanel] срез: {error}");
 
         RefreshTrace();
@@ -690,10 +705,20 @@ public partial class DebugPanel : ToolPanel
 
     private void OnTraceStop()
     {
-        if (!DotnetTraceCapture.RequestStop(out string error) && error != null)
+        if (!PerformanceCapture.RequestStop(out string error) && error != null)
             GD.PushWarning($"[DebugPanel] срез: {error}");
 
         RefreshTrace();
+    }
+
+    private static void OnTraceIntervalSelected(long index)
+    {
+        PerformanceCapture.IntervalSeconds = index switch
+        {
+            1 => 0.5,
+            2 => 1.0,
+            _ => 0.25,
+        };
     }
 
     private void RefreshTrace()
@@ -701,21 +726,26 @@ public partial class DebugPanel : ToolPanel
         if (_traceStatus == null)
             return;
 
-        var elapsed = DotnetTraceCapture.Elapsed;
-        string time = DotnetTraceCapture.FormatElapsed(elapsed);
-        bool busy = DotnetTraceCapture.Busy;
-        bool recording = DotnetTraceCapture.Recording;
+        var elapsed = PerformanceCapture.Elapsed;
+        string time = PerformanceCapture.FormatElapsed(elapsed);
+        bool busy = PerformanceCapture.Busy;
+        bool recording = PerformanceCapture.Recording;
 
         _traceStatus.Text =
-            $"сессия {DotnetTraceCapture.Key}\n" +
+            $"сессия {PerformanceCapture.Key}\n" +
             $"время {time}\n" +
-            $"{DotnetTraceCapture.Status}";
+            $"{PerformanceCapture.Status}\n" +
+            $"игровых снимков {PerformanceCapture.Samples}, пропущено " +
+            $"{PerformanceCapture.Dropped}, последний {PerformanceCapture.LastCaptureMs:0.00} мс";
 
         if (_traceStart != null)
             _traceStart.Disabled = busy;
 
         if (_traceStop != null)
             _traceStop.Disabled = !recording;
+
+        if (_traceInterval != null)
+            _traceInterval.Disabled = busy;
     }
 
     /// <summary>Порог превышения как проценты — так он и назван в подсказке.</summary>
