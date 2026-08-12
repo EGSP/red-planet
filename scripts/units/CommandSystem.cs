@@ -1511,8 +1511,13 @@ public partial class CommandSystem : GameSystem
 
     /// <summary>
     /// Расстановка песочницей: та же размеченная партия, но каждое годное место немедленно
-    /// занимает готовая сущность. Ни стоимости, ни стройки, ни приказа здесь нет — панель
-    /// песочницы служит проверке вида и раскладки, а не игре.
+    /// занимает готовая сущность. Ни стоимости, ни стройки, ни приказа игрока здесь нет —
+    /// панель песочницы служит проверке вида и раскладки, а не игре.
+    ///
+    /// СОЮЗНОМУ ЮНИТУ ЯКОРЬ СТАВИТСЯ СРАЗУ. Без него <see cref="PlayerAiSystem"/> счёл бы
+    /// его свободным и назначил бы сопровождение коммандера. То же делает завод без точки
+    /// сбора (см. <c>Plant.CopyRally</c>): место появления и есть пост. Противнику якорь
+    /// не нужен: <see cref="EnemyAiSystem"/> выдаёт атаку как обычно, без предела дальности.
     ///
     /// СТОРОНА ЗАДАЁТСЯ ТОЛЬКО ПОДВИЖНОЙ СУЩНОСТИ. Постройка в этой игре принадлежит игроку
     /// всегда (см. <c>Building.Faction</c>), поэтому выбор стороны на неё не действует,
@@ -1530,9 +1535,16 @@ public partial class CommandSystem : GameSystem
                 continue;
 
             if (def.IsStructure)
+            {
                 GM.Spawn.SpawnBuilding(def, spot.Center, spot.Facing);
+            }
             else
-                GM.Spawn.SpawnUnit(def, spot.Center, faction);
+            {
+                var unit = GM.Spawn.SpawnUnit(def, spot.Center, faction);
+
+                if (faction == Faction.Player)
+                    unit.SetAnchor(spot.Center);
+            }
 
             _placed = true;
         }
