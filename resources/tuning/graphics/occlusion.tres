@@ -4,4 +4,7 @@
 
 [resource]
 script = ExtResource("1_occlusion")
+ContactOpacity = 0.6
+ContactOffset = 0.0
+RimOpacity = 0.2
 RimBlur = 0.045

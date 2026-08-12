@@ -20,8 +20,10 @@ using Godot;
 ///
 /// Панель показывается по F3 и на симуляцию не влияет: она читает состояние, правит
 /// <see cref="DebugFlags"/> и управляет записью срезов <see cref="DotnetTraceCapture"/>.
+/// Показ и клавиша достались ей от <see cref="ToolPanel"/>: панель песочницы занимает то же
+/// место экрана, и открытой из них бывает не более одной.
 /// </summary>
-public partial class DebugPanel : CanvasLayer
+public partial class DebugPanel : ToolPanel
 {
     private static readonly Color Heading = new(0.65f, 0.8f, 1f);
     private static readonly Color Numbers = new(0.8f, 0.85f, 0.9f);
@@ -43,7 +45,6 @@ public partial class DebugPanel : CanvasLayer
 
     private const string AlarmInk = "#ff5a4a";
 
-    private Control _frame;
     private Control[] _pages;
     private Label _combat;
     private Label _navigation;
@@ -61,11 +62,7 @@ public partial class DebugPanel : CanvasLayer
     /// </summary>
     private int _profileShown = -1;
 
-    public override void _Ready()
-    {
-        Build();
-        _frame.Visible = false;
-    }
+    protected override string ToggleAction => InputActions.DebugToggle;
 
     public override void _ExitTree()
     {
@@ -73,22 +70,9 @@ public partial class DebugPanel : CanvasLayer
         base._ExitTree();
     }
 
-    /// <summary>
-    /// F3 ловим до систем: панель обязана открываться и на паузе, когда ветка систем
-    /// обработку не получает вовсе.
-    /// </summary>
-    public override void _UnhandledKeyInput(InputEvent @event)
-    {
-        if (!@event.IsActionPressed(InputActions.DebugToggle))
-            return;
-
-        _frame.Visible = !_frame.Visible;
-        GetViewport().SetInputAsHandled();
-    }
-
     public override void _Process(double delta)
     {
-        if (!_frame.Visible)
+        if (!Shown)
             return;
 
         Refresh();
@@ -96,20 +80,14 @@ public partial class DebugPanel : CanvasLayer
 
     // ── разметка ──────────────────────────────────────────────────────────────────
 
-    private void Build()
+    protected override void Build(Control frame)
     {
-        // Выше паузы и экрана исхода: отладка читается поверх любого другого интерфейса
-        Layer = 30;
-
-        _frame = new UiFrame();
-        AddChild(_frame);
-
         var row = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Begin,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        _frame.AddChild(row);
+        frame.AddChild(row);
         row.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 
         // Прижимаем к верху: нижний левый угол занят панелью выделения, и накрывать её
@@ -631,7 +609,8 @@ public partial class DebugPanel : CanvasLayer
                    "В режиме приказа: ПКМ — цель, ЛКМ или Escape — отмена\n" +
                    "Пусто: A боевые на экране, F строители на экране\n" +
                    "Камера: край экрана, СКМ — перетаскивание, колесо — зум\n" +
-                   "C — очереди всех своих, F3 — эта панель",
+                   "C — очереди всех своих\n" +
+                   "F3 — эта панель, F2 — песочница",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         hints.AddThemeFontSizeOverride("font_size", 11);

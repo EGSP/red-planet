@@ -19,8 +19,26 @@ public static class BuildingSkirt
     private const string TexturePath =
         "res://assets/sprites/terrain/common/metal_decal_06_diffuse.png";
 
-    /// <summary>Насколько площадка выступает за корпус, пикселей.</summary>
-    private const float MarginPx = Const.Unit * 0.3f;
+    /// <summary>
+    /// Наименьший выступ площадки за корпус, пикселей. Действует у мелких построек,
+    /// где доля от размера дала бы полоску в несколько пикселей.
+    /// </summary>
+    private const float MinMarginPx = Const.Unit * 0.3f;
+
+    /// <summary>
+    /// Выступ как доля меньшей стороны корпуса.
+    ///
+    /// ПОЧЕМУ ДОЛЯ, А НЕ ПОСТОЯННАЯ ВЕЛИЧИНА. Спрайт корпуса задан долей габарита
+    /// (<see cref="UnitDefinition.SpriteScale"/>) и потому растёт вместе с постройкой,
+    /// а постоянный выступ — нет. У постройки 2×2 запаса хватало, у 5×5 корпус вылезал
+    /// за площадку, и выглядело это так, будто площадка не дотянулась до края. Доля
+    /// выбрана больше обычного превышения спрайта над габаритом, поэтому корпус остаётся
+    /// внутри площадки при любом размере постройки.
+    ///
+    /// Величина совпадает с прежней постоянной ровно на размере 2×2 — том, на котором
+    /// подбирался вид площадки, — поэтому у существующих построек ничего не изменилось.
+    /// </summary>
+    private const float MarginFraction = 0.15f;
 
     /// <summary>Непрозрачность: площадка есть подложка, а не самостоятельная деталь.</summary>
     private const float Opacity = 0.7f;
@@ -46,7 +64,10 @@ public static class BuildingSkirt
                 return;
         }
 
-        canvas.DrawTextureRect(_texture, body.Grow(MarginPx), false,
+        float margin = Mathf.Max(MinMarginPx,
+            Mathf.Min(body.Size.X, body.Size.Y) * MarginFraction);
+
+        canvas.DrawTextureRect(_texture, body.Grow(margin), false,
             new Color(1f, 1f, 1f, Opacity));
     }
 }

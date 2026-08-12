@@ -125,6 +125,13 @@ public static class InputActions
     public const string ViewOrdersAll = "view_orders_all";
     public const string GameCancel = "game_cancel";
     public const string DebugToggle = "debug_panel";
+
+    /// <summary>
+    /// Панель песочницы: мгновенная расстановка любого вида из справочника. Открывается
+    /// вместо панели отладки — обе занимают одно место экрана (см. <see cref="ToolPanel"/>).
+    /// </summary>
+    public const string SandboxToggle = "sandbox_panel";
+
     public const string DebugRestart = "debug_restart";
 
     /// <summary>
@@ -152,7 +159,7 @@ public static class InputActions
 
     private static InputAction[] Build()
     {
-        var list = new InputAction[16 + GroupKeys.Length];
+        var list = new InputAction[17 + GroupKeys.Length];
         int i = 0;
 
         list[i++] = new(UnitAttack, InputSection.Units, "Атаковать", Key.A,
@@ -184,6 +191,7 @@ public static class InputActions
 
         list[i++] = new(ViewOrdersAll, InputSection.View, "Очереди всех своих", Key.C);
         list[i++] = new(GameCancel, InputSection.Game, "Отмена, меню паузы", Key.Escape);
+        list[i++] = new(SandboxToggle, InputSection.Debug, "Панель песочницы", Key.F2);
         list[i++] = new(DebugToggle, InputSection.Debug, "Панель отладки", Key.F3);
         list[i] = new(DebugRestart, InputSection.Debug, "Пересобрать сессию", Key.F5);
 

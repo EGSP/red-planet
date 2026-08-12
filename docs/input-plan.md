@@ -173,6 +173,7 @@
 | `select_group_1`…`select_group_0` | 1…9, 0 | выделение | `CommandSystem`, `ControlGroups` |
 | `view_orders_all` | C | отображение | `CommandSystem` |
 | `game_cancel` | Escape | игра | `PauseMenu` |
+| `sandbox_panel` | F2 | отладка | `SandboxPanel` |
 | `debug_panel` | F3 | отладка | `DebugPanel` |
 | `debug_restart` | F5 | отладка | `Root` |
 

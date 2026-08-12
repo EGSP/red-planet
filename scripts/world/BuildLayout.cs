@@ -50,8 +50,14 @@ public static class BuildLayout
     /// если оно входит в раскладку: игрок выбрал его, остальные к нему пристроены.
     /// У квадрата с чётным числом рядов точка нажатия между рядами и в план не попадает.
     /// </summary>
+    /// <param name="forced">
+    /// Раскладка, назначенная извне вместо той, что записана в справочнике. Нужна песочнице:
+    /// подвижная сущность собственной раскладки не имеет вовсе — строем её расставляет
+    /// не игрок, а завод, — и без назначения извне протаскивание давало бы одного юнита.
+    /// Обычная постройка сюда ничего не передаёт: раскладка есть свойство вида.
+    /// </param>
     public static void Compute(GameManager gm, UnitDefinition def, Vector2 anchor, Vector2 cursor,
-        bool alt, List<BuildSpot> into)
+        bool alt, List<BuildSpot> into, BuildPattern? forced = null)
     {
         into.Clear();
 
@@ -75,7 +81,7 @@ public static class BuildLayout
             ? anchor
             : Placement.Snap(gm, def, anchor, facing);
 
-        var pattern = Pattern(def, alt);
+        var pattern = PatternOf(def, alt, forced);
         var taken = new List<Obb>();
 
         if (pattern == BuildPattern.MetalArea)
@@ -113,12 +119,18 @@ public static class BuildLayout
         }
     }
 
-    /// <summary>Какая раскладка сейчас действует: обычная или та, что под Alt.</summary>
-    public static BuildPattern PatternOf(UnitDefinition def, bool alt) =>
-        alt && def.PatternAlt != BuildPattern.None ? def.PatternAlt : def.Pattern;
+    /// <summary>
+    /// Какая раскладка сейчас действует: назначенная извне, обычная или та, что под Alt.
+    /// Назначенная извне перекрывает обе записанные в справочнике — см. параметр
+    /// <c>forced</c> у <see cref="Compute"/>.
+    /// </summary>
+    public static BuildPattern PatternOf(UnitDefinition def, bool alt, BuildPattern? forced = null)
+    {
+        if (forced is { } pattern)
+            return pattern;
 
-    /// <summary>Какая раскладка сейчас действует: обычная или та, что под Alt.</summary>
-    private static BuildPattern Pattern(UnitDefinition def, bool alt) => PatternOf(def, alt);
+        return alt && def.PatternAlt != BuildPattern.None ? def.PatternAlt : def.Pattern;
+    }
 
     /// <summary>
     /// Угол постройки. Строение разворачивается поперёк протаскивания, а не вдоль: ряд

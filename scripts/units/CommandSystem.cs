@@ -153,6 +153,17 @@ public partial class CommandSystem : GameSystem
     /// <summary>Что выбрано в строительной панели. Держится до отмены выбора.</summary>
     public UnitDefinition Pending { get; private set; }
 
+    /// <summary>
+    /// Сторона, за которую расставляет песочница, либо null у обычной постройки.
+    ///
+    /// ПОЧЕМУ ПРИЗНАК ЖИВЁТ ЗДЕСЬ. Песочница отличается от постройки только тем, что
+    /// происходит по отпусканию кнопки: вместо плана в мир сразу входит готовая сущность,
+    /// и получатель приказа ей не нужен. Всё остальное — призрак, раскладка, поворот,
+    /// серия под Shift, отмена — совпадает дословно, и заводить ради песочницы второй разбор
+    /// нажатий значило бы держать две реализации одного жеста, которые разойдутся.
+    /// </summary>
+    private Faction? _sandbox;
+
     /// <summary>Поставлен ли хоть один каркас с нынешнего выбора.</summary>
     private bool _placed;
 
@@ -224,14 +235,39 @@ public partial class CommandSystem : GameSystem
     /// безусловно: щелчок по панели до систем не доходит, и жест мышью в мире к этому мигу
     /// не начат.
     /// </summary>
-    public void BeginBuild(UnitDefinition def)
+    public void BeginBuild(UnitDefinition def) => Begin(def, null);
+
+    /// <summary>
+    /// Выбор вида в панели песочницы: тот же режим постановки, но по отпусканию кнопки
+    /// вместо плана в мир входит готовая сущность указанной стороны.
+    /// </summary>
+    public void BeginSandbox(UnitDefinition def, Faction faction) => Begin(def, faction);
+
+    private void Begin(UnitDefinition def, Faction? sandbox)
     {
         Pending = def;
+        _sandbox = sandbox;
         _placed = false;
         State = CommandState.Placing;
         EnsureNodes();
         _ghost.Definition = def;
         _ghost.Visible = true;
+    }
+
+    /// <summary>
+    /// Снять выбор песочницы, если он есть. Зовёт панель песочницы при закрытии: выбор,
+    /// переживший панель, ставил бы юнитов по щелчку без всякого объяснения на экране.
+    /// Обычный выбор постройки не трогается — его сделала строительная панель.
+    /// </summary>
+    public void CancelSandbox()
+    {
+        if (_sandbox == null)
+            return;
+
+        CancelBuild();
+
+        if (State is CommandState.Placing or CommandState.Laying)
+            State = CommandState.Idle;
     }
 
     /// <summary>
@@ -242,6 +278,7 @@ public partial class CommandSystem : GameSystem
     private void CancelBuild()
     {
         Pending = null;
+        _sandbox = null;
         _placed = false;
         _plan.Clear();
 
@@ -362,7 +399,7 @@ public partial class CommandSystem : GameSystem
         var anchor = State == CommandState.Laying ? _buildAnchor : visual;
         bool alt = Input.IsKeyPressed(Key.Alt);
 
-        BuildLayout.Compute(GM, Pending, anchor, visual, alt, _plan);
+        BuildLayout.Compute(GM, Pending, anchor, visual, alt, _plan, SandboxPattern(alt));
         UpdateStretchGhost(anchor, visual, alt);
 
         _ghost.QueueRedraw();
@@ -404,7 +441,7 @@ public partial class CommandSystem : GameSystem
     {
         _ghost.StretchRadius = 0f;
 
-        if (BuildLayout.PatternOf(Pending, alt) != BuildPattern.MetalArea)
+        if (BuildLayout.PatternOf(Pending, alt, SandboxPattern(alt)) != BuildPattern.MetalArea)
             return;
 
         float radius = anchor.DistanceTo(cursor);
@@ -1380,6 +1417,12 @@ public partial class CommandSystem : GameSystem
         if (def == null || BlueprintScene == null)
             return;
 
+        if (_sandbox is { } faction)
+        {
+            SpawnBatch(def, faction, point);
+            return;
+        }
+
         // Разметка без получателя не состоится. Строить пойдут выделенные — как и с любым
         // другим приказом, — а план, которого никто не принял, исполнять некому: подвижный
         // строитель стройку сам не берёт, и такой план остался бы в мире навсегда, занимая
@@ -1407,6 +1450,57 @@ public partial class CommandSystem : GameSystem
 
             foreach (var actor in Recipients())
                 assignment.Give(actor, () => Order.Work(OrderKind.Build, plan));
+
+            _placed = true;
+        }
+    }
+
+    /// <summary>
+    /// Раскладка, назначенная песочницей вместо записанной в справочнике, либо null.
+    ///
+    /// Назначается только там, где своей раскладки нет вовсе, — то есть подвижным сущностям:
+    /// строем их расставляет завод, а не игрок, и в справочнике раскладке взяться неоткуда.
+    /// Постройка же свою раскладку имеет, и подменять её значило бы, что песочница
+    /// показывает не то поведение, которое будет в игре.
+    ///
+    /// Квадрат под обычным протаскиванием и цепочка под Alt: отряд чаще нужен кучей,
+    /// а ряд — реже, поэтому под пальцем стоит первое.
+    /// </summary>
+    private BuildPattern? SandboxPattern(bool alt)
+    {
+        if (_sandbox == null || Pending == null)
+            return null;
+
+        if (Pending.Pattern != BuildPattern.None || Pending.PatternAlt != BuildPattern.None)
+            return null;
+
+        return alt ? BuildPattern.Line : BuildPattern.Square;
+    }
+
+    /// <summary>
+    /// Расстановка песочницей: та же размеченная партия, но каждое годное место немедленно
+    /// занимает готовая сущность. Ни стоимости, ни стройки, ни приказа здесь нет — панель
+    /// песочницы служит проверке вида и раскладки, а не игре.
+    ///
+    /// СТОРОНА ЗАДАЁТСЯ ТОЛЬКО ПОДВИЖНОЙ СУЩНОСТИ. Постройка в этой игре принадлежит игроку
+    /// всегда (см. <c>Building.Faction</c>), поэтому выбор стороны на неё не действует,
+    /// и молчаливо ставить вражеский завод, который окажется своим, панель не позволяет —
+    /// постройки собраны в союзном разделе.
+    /// </summary>
+    private void SpawnBatch(UnitDefinition def, Faction faction, Vector2 point)
+    {
+        bool alt = Input.IsKeyPressed(Key.Alt);
+        BuildLayout.Compute(GM, def, _buildAnchor, point, alt, _plan, SandboxPattern(alt));
+
+        foreach (var spot in _plan)
+        {
+            if (!spot.Valid)
+                continue;
+
+            if (def.IsStructure)
+                GM.Spawn.SpawnBuilding(def, spot.Center, spot.Facing);
+            else
+                GM.Spawn.SpawnUnit(def, spot.Center, faction);
 
             _placed = true;
         }
