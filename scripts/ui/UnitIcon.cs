@@ -53,9 +53,10 @@ public partial class UnitIcon : Control
         if (extent <= 0f)
             return;
 
-        float radius = _definition.RadiusPx * (half * Fill / extent);
+        float presentationScale = half * Fill / extent;
+        float radius = _definition.RadiusPx * presentationScale;
 
         UnitSilhouette.Draw(this, _definition, radius, toolLocal: 0f,
-            origin: Size * 0.5f, angle: Mathf.Pi);
+            origin: Size * 0.5f, angle: Mathf.Pi, presentationScale: presentationScale);
     }
 }

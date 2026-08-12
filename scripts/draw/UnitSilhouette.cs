@@ -25,7 +25,8 @@ public static class UnitSilhouette
     /// координат, а нос повёрнут влево.
     /// </summary>
     public static void Draw(CanvasItem canvas, UnitDefinition def, float radius,
-        float toolLocal = 0f, Vector2 origin = default, float angle = 0f)
+        float toolLocal = 0f, Vector2 origin = default, float angle = 0f,
+        float presentationScale = 1f)
     {
         if (def == null)
             return;
@@ -35,9 +36,14 @@ public static class UnitSilhouette
         if (placed)
             canvas.DrawSetTransform(origin, angle, Vector2.One);
 
-        DrawHull(canvas, def, radius, origin, angle);
-        DrawMoveMark(canvas, def, radius);
-        DrawToolMark(canvas, def, radius, origin, angle, toolLocal);
+        DrawHull(canvas, def, radius, origin, angle, presentationScale);
+
+        // У спрайтового корпуса направление уже задано изображением; процедурный указатель
+        // поверх него дублировал нос и закрывал пиксельный рисунок.
+        if (string.IsNullOrEmpty(def.Sprite))
+            DrawMoveMark(canvas, def, radius);
+
+        DrawToolMark(canvas, def, radius, origin, angle, toolLocal, presentationScale);
 
         if (placed)
             canvas.DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
@@ -53,10 +59,15 @@ public static class UnitSilhouette
         if (def == null || radius <= 0f)
             return 0f;
 
-        float rings = string.IsNullOrEmpty(def.Sprite)
-            ? 1f + 0.12f * Mathf.Max(def.ArmorRings, 0)
-            : 1f;
-        float body = Mathf.Max(HullReach(def), 1f) * radius * rings;
+        float body;
+
+        if (!string.IsNullOrEmpty(def.Sprite))
+            body = SpriteArt.NativeExtent(def.Sprite);
+        else
+        {
+            float rings = 1f + 0.12f * Mathf.Max(def.ArmorRings, 0);
+            body = Mathf.Max(HullReach(def), 1f) * radius * rings;
+        }
 
         // Надстройка тира учитывается только у процедурного силуэта: спрайт уже содержит
         // весь рисунок корпуса, и плечи поверх него не рисуются
@@ -69,11 +80,6 @@ public static class UnitSilhouette
     /// <summary>Наибольшее удаление точки корпуса от центра в долях радиуса.</summary>
     private static float HullReach(UnitDefinition def)
     {
-        // Спрайт вписывается в квадрат со стороной 2·radius, поэтому край на расстоянии
-        // радиуса от центра; процедурные надстройки к нему не добавляются
-        if (!string.IsNullOrEmpty(def.Sprite))
-            return Mathf.Max(def.SpriteScale, 0.01f);
-
         if (HullGeometry.Composite(def.Hull))
             return Reach(HullGeometry.Parts(def.Hull, 1f));
 
@@ -107,6 +113,10 @@ public static class UnitSilhouette
         if (!hasWeapon && !hasArm)
             return 0f;
 
+        var tool = hasWeapon ? (ToolDefinition)def.Weapon : def.BuildTool;
+        if (!string.IsNullOrEmpty(tool?.Sprite))
+            return SpriteArt.NativeExtent(tool.Sprite);
+
         if (!hasWeapon)
             return radius * 1.15f;
 
@@ -123,12 +133,12 @@ public static class UnitSilhouette
     /// отрисовки базис восстанавливается, иначе метка курса рисовалась бы не там.
     /// </summary>
     private static void DrawHull(CanvasItem canvas, UnitDefinition def, float radius,
-        Vector2 origin, float angle)
+        Vector2 origin, float angle, float presentationScale)
     {
         if (!string.IsNullOrEmpty(def.Sprite))
         {
-            SpriteArt.DrawHull(canvas, def, new Rect2(-radius, -radius, radius * 2f, radius * 2f),
-                baseRadians: angle, baseOrigin: origin);
+            SpriteArt.DrawNative(canvas, def.Sprite, Vector2.Zero, def.SpriteRotationDegrees,
+                angle, origin, presentationScale);
             return;
         }
 
@@ -286,13 +296,22 @@ public static class UnitSilhouette
     /// с углом инструмента вручную и возвращать по окончании.
     /// </summary>
     private static void DrawToolMark(CanvasItem canvas, UnitDefinition def, float radius,
-        Vector2 origin, float angle, float toolLocal)
+        Vector2 origin, float angle, float toolLocal, float presentationScale)
     {
         bool hasWeapon = def.Weapon != null;
         bool hasArm = def.BuildTool != null;
 
         if (!hasWeapon && !hasArm)
             return;
+
+        var tool = hasWeapon ? (ToolDefinition)def.Weapon : def.BuildTool;
+        if (!string.IsNullOrEmpty(tool.Sprite))
+        {
+            SpriteArt.DrawNative(canvas, tool.Sprite, Vector2.Zero, tool.SpriteRotationDegrees,
+                angle + toolLocal, origin, presentationScale);
+            canvas.DrawSetTransform(origin, angle, Vector2.One);
+            return;
+        }
 
         canvas.DrawSetTransform(origin, angle + toolLocal, Vector2.One);
 

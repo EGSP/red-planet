@@ -5,9 +5,11 @@ using Godot;
 /// шейдер <c>construction.gdshader</c>, а <see cref="Blueprint"/> подставляет ему долю
 /// готовности и признак того, работает ли кто-нибудь над каркасом.
 ///
-/// ЧТО ИЗОБРАЖАЕТСЯ. Спрайт разделён по высоте уровнем готовности: ниже уровня корпус
-/// показан как есть, выше — сеткой одного цвета, а по самому уровню идёт светлая полоса
-/// фронта. Приём взят из Planetary Annihilation, где шейдер <c>prelight_pa_unit_fab</c>
+/// ЧТО ИЗОБРАЖАЕТСЯ. Спрайт разделён по высоте уровнем готовности: ниже уровня видна
+/// полупрозрачная проекция корпуса, выше — сетка одного цвета, а по самому уровню идёт
+/// светлая полоса фронта. Линии сетки проходят через обе части, поэтому конструкция
+/// сохраняет общий эффект до завершения. Приём взят из Planetary Annihilation, где шейдер
+/// <c>prelight_pa_unit_fab</c>
 /// строит модель снизу вверх по <c>build_fraction</c>, отсекая всё выше уровня и подсвечивая
 /// границу отдельным цветом.
 ///
@@ -39,8 +41,8 @@ public partial class ConstructionSettings : Resource
     /// </summary>
     [Export] public Color Edge = new(0.75f, 0.95f, 1f, 0.9f);
 
-    /// <summary>Непрозрачность уже готовой части. Единица показывает корпус как есть.</summary>
-    [Export(PropertyHint.Range, "0,1,0.01")] public float BuiltOpacity = 0.95f;
+    /// <summary>Непрозрачность уже проявленной части конструкции.</summary>
+    [Export(PropertyHint.Range, "0,1,0.01")] public float BuiltOpacity = 0.72f;
 
     [ExportGroup("Фронт")]
 
@@ -52,7 +54,7 @@ public partial class ConstructionSettings : Resource
     /// <summary>Число полос сетки по высоте спрайта.</summary>
     [Export(PropertyHint.Range, "0,64,1")] public float ScanCount = 18f;
 
-    /// <summary>Насколько глубоко полосы сетки гасят цвет недостроенной части.</summary>
+    /// <summary>Сила линий сетки на недостроенной и уже проявленной частях.</summary>
     [Export(PropertyHint.Range, "0,1,0.01")] public float ScanStrength = 0.45f;
 
     /// <summary>Скорость бега полос. Действует только при активной работе.</summary>

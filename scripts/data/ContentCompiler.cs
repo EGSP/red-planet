@@ -242,14 +242,17 @@ public static class ContentCompiler
         string name = document.String("name");
         var kind = document.Enum("kind", ToolKind.Work);
         float range = document.Float("range", 3f);
-
         bool aimWhileMoving = document.Bool("aim_while_moving", true);
+        string sprite = document.String("sprite");
+        float spriteRotation = document.Float("sprite_rotation");
 
         if (kind == ToolKind.Weapon)
             return new WeaponDefinition
             {
                 Id = id,
                 DisplayName = name,
+                Sprite = sprite,
+                SpriteRotationDegrees = spriteRotation,
                 Range = range,
                 AimWhileMoving = aimWhileMoving,
                 Damage = document.Float("damage", 10f),
@@ -265,6 +268,8 @@ public static class ContentCompiler
         {
             Id = id,
             DisplayName = name,
+            Sprite = sprite,
+            SpriteRotationDegrees = spriteRotation,
             Range = range,
             AimWhileMoving = aimWhileMoving,
             Power = document.Float("power", 1f),

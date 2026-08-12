@@ -14,10 +14,12 @@ tools    = ["vehicle_fabricator_arm"]
 rows = ["#"]
 
 [body]
-max_health  = 150.0
-radius      = 0.36
-hull        = "rect"
-hull_aspect = 1.4
+max_health      = 150.0
+radius          = 0.36
+hull            = "rect"
+hull_aspect     = 1.4
+sprite          = "res://assets/sprites/units/unit_vehicle-fabricator.png"
+sprite_rotation = 90.0
 
 [movement]
 speed      = 2.4

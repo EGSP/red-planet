@@ -16,6 +16,16 @@ public abstract class ToolDefinition
     public string Id = "";
     public string DisplayName = "";
 
+    /// <summary>
+    /// Путь к спрайту инструмента (<c>res://...</c>). Пустая строка оставляет процедурное
+    /// изображение. Спрайт рисуется в исходном размере: один пиксель текстуры соответствует
+    /// одному пикселю мира при масштабе камеры 1:1.
+    /// </summary>
+    public string Sprite = "";
+
+    /// <summary>Поворот спрайта в градусах относительно локальной оси инструмента (+X).</summary>
+    public float SpriteRotationDegrees;
+
     /// <summary>Дальность действия в юнитах мира.</summary>
     public float Range = 3f;
 

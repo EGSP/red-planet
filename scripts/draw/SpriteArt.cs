@@ -22,6 +22,8 @@ using Godot;
 public static class SpriteArt
 {
     private static readonly Dictionary<string, Texture2D> Cache = new();
+    private static readonly Dictionary<string, Texture2D> RawCache = new();
+    private static readonly Dictionary<string, float> NativeExtentCache = new();
 
     /// <summary>
     /// Загрузить текстуру по пути, обрезав прозрачные поля. Повторный вызов с тем же путём
@@ -48,6 +50,33 @@ public static class SpriteArt
         image = TrimUsed(image);
         var texture = ImageTexture.CreateFromImage(image);
         Cache[path] = texture;
+        return texture;
+    }
+
+    /// <summary>
+    /// Загрузить текстуру без обрезки прозрачных полей. Исходная канва сохраняет общий
+    /// центр слоёв корпуса и инструмента, поэтому их взаимное положение не меняется.
+    /// </summary>
+    public static Texture2D LoadRaw(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return null;
+
+        if (RawCache.TryGetValue(path, out var cached))
+            return cached;
+
+        var image = new Image();
+        var error = image.Load(path);
+
+        if (error != Error.Ok)
+        {
+            GD.PushWarning($"[SpriteArt] нет картинки: {path} ({error})");
+            RawCache[path] = null;
+            return null;
+        }
+
+        var texture = ImageTexture.CreateFromImage(image);
+        RawCache[path] = texture;
         return texture;
     }
 
@@ -129,6 +158,66 @@ public static class SpriteArt
 
         DrawScaled(canvas, texture, factor, bounds.GetCenter(), modulate, rotationDegrees,
             baseRadians, baseOrigin);
+    }
+
+    /// <summary>
+    /// Нарисовать спрайт в исходном размере вокруг заданной точки. Один пиксель текстуры
+    /// соответствует одному пикселю канвы; <paramref name="presentationScale"/> применяется
+    /// только потребителем, который обязан вписать изображение в интерфейсную область.
+    /// </summary>
+    public static void DrawNative(CanvasItem canvas, string path, Vector2 center,
+        float rotationDegrees = 0f, float baseRadians = 0f, Vector2 baseOrigin = default,
+        float presentationScale = 1f, Color? modulate = null)
+    {
+        if (canvas == null || string.IsNullOrEmpty(path))
+            return;
+
+        if (canvas.TextureFilter != CanvasItem.TextureFilterEnum.Nearest)
+            canvas.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+
+        canvas.DrawSetTransform(baseOrigin, baseRadians, Vector2.One);
+        DrawScaled(canvas, LoadRaw(path), Mathf.Max(presentationScale, 0.01f), center,
+            modulate, rotationDegrees, baseRadians, baseOrigin);
+    }
+
+    /// <summary>
+    /// Наибольшее удаление угла непрозрачной области от её центра. Значение нужно
+    /// интерфейсным иконкам для отдельного уменьшения спрайта до размера ячейки.
+    /// </summary>
+    public static float NativeExtent(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return 0f;
+
+        if (NativeExtentCache.TryGetValue(path, out float cached))
+            return cached;
+
+        var image = new Image();
+        if (image.Load(path) != Error.Ok)
+        {
+            NativeExtentCache[path] = 0f;
+            return 0f;
+        }
+
+        if (image.IsCompressed())
+            image.Decompress();
+
+        var used = image.GetUsedRect();
+        if (used.Size.X <= 0 || used.Size.Y <= 0)
+        {
+            NativeExtentCache[path] = 0f;
+            return 0f;
+        }
+
+        var center = new Vector2(image.GetWidth(), image.GetHeight()) * 0.5f;
+        var start = new Vector2(used.Position.X, used.Position.Y);
+        var end = new Vector2(used.End.X, used.End.Y);
+        float extent = Mathf.Max(
+            Mathf.Max((start - center).Length(), (new Vector2(end.X, start.Y) - center).Length()),
+            Mathf.Max((new Vector2(start.X, end.Y) - center).Length(), (end - center).Length()));
+
+        NativeExtentCache[path] = extent;
+        return extent;
     }
 
     /// <summary>

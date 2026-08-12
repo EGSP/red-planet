@@ -10,15 +10,18 @@ buildbar = "vehicle_factory_buildbar"
 tags     = ["structure", "t1"]
 
 [footprint]
-rows           = ["##", "##"]
+rows           = ["####", "####", "####", "####"]
 pattern        = "line"
 pattern_alt    = "square"
 pattern_step   = "margin"
 facing_degrees = -90.0
 
 [body]
-max_health   = 6000.0
-vision_range = 8.0
+max_health      = 6000.0
+vision_range    = 8.0
+sprite          = "res://assets/sprites/buildings/tank_factory.png"
+sprite_scale    = 1.0
+sprite_rotation = 90.0
 
 [plant]
 factory_cooldown    = 1.5

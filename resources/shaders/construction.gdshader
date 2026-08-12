@@ -30,8 +30,8 @@ uniform vec4 wire_color : source_color = vec4(0.35, 0.75, 1.0, 0.3);
 // Цвет полосы фронта; альфа задаёт, насколько полоса перекрывает то, что под ней
 uniform vec4 edge_color : source_color = vec4(0.75, 0.95, 1.0, 0.9);
 
-// Непрозрачность готовой части
-uniform float built_opacity : hint_range(0.0, 1.0) = 0.95;
+// Непрозрачность готовой части: она остаётся проекцией до завершения строительства
+uniform float built_opacity : hint_range(0.0, 1.0) = 0.72;
 
 // Ширина полосы фронта, доля высоты спрайта
 uniform float edge_width : hint_range(0.0, 0.3) = 0.05;
@@ -72,12 +72,20 @@ void fragment()
     // Близость к уровню: единица на самой границе, ноль на расстоянии полуширины
     float edge = clamp(1.0 - abs(UV.y - level) / max(half_edge, 0.001), 0.0, 1.0);
 
-    // Полосы сетки бегут только при работе: без множителя активности стоячая картина
+    // Полосы проходят через всю конструкцию, включая уже проявленную часть. Движение
+    // остаётся признаком работы, а при остановке сохраняется неподвижный рисунок.
     float scan = sin(UV.y * scan_count * 6.2831853 - TIME * scan_speed * activity) * 0.5 + 0.5;
+    float scan_line = smoothstep(0.58, 0.92, scan);
     vec3 wire = wire_color.rgb * (1.0 - scan_strength + scan_strength * scan);
 
-    vec3 rgb = mix(wire, src.rgb, built);
-    float alpha = mix(wire_color.a, built_opacity, built);
+    // Проявленная часть остаётся полупрозрачной голограммой: исходный цвет слегка
+    // смещается к цвету каркаса, а линии выделяются цветом фронта.
+    vec3 built_color = mix(src.rgb, wire_color.rgb, 0.18);
+    built_color = mix(built_color, edge_color.rgb, scan_line * scan_strength * 0.55);
+    float built_alpha = built_opacity * mix(0.82, 1.0, scan_line);
+
+    vec3 rgb = mix(wire, built_color, built);
+    float alpha = mix(wire_color.a, built_alpha, built);
 
     float edge_mix = edge * edge_color.a;
     rgb = mix(rgb, edge_color.rgb, edge_mix);
