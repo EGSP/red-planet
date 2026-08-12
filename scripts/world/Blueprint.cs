@@ -319,8 +319,8 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     }
 
     /// <summary>
-    /// Передать достроенной сущности всё, что было назначено каркасу: ветку приказов
-    /// и набранную очередь производства.
+    /// Передать достроенной сущности всё, что было назначено каркасу: ветку приказов,
+    /// набранную очередь производства и место в выделении с боевыми группами.
     ///
     /// ВЕТКА ПЕРЕДАЁТСЯ ТА ЖЕ САМАЯ, А НЕ КОПИЯ. Приказ, отданный отряду вместе с каркасом,
     /// один на всех получателей (см. <see cref="Order"/>), и достроенная постройка обязана
@@ -330,6 +330,9 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     ///
     /// Отбирать приказы по допустимости не нужно: набор каркаса и есть набор достроенной
     /// сущности, за вычетом сноса, который до этого мига уже был бы исполнен.
+    ///
+    /// Выделение и группы переезжают через <see cref="CommandSystem.Succeed"/>: иначе
+    /// панель завода гасла бы в миг готовности, хотя очередь у преемника уже та же.
     /// </summary>
     private void Bequeath(IOrderable heir)
     {
@@ -337,21 +340,25 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         if (Orders.List is { } branch)
             heir.Orders.Adopt(branch);
 
-        if (heir is not IProducer producer || !producer.CanProduce)
-            return;
+        if (heir is IProducer producer && producer.CanProduce)
+        {
+            producer.Infinite = Infinite;
 
-        producer.Infinite = Infinite;
+            foreach (string unitId in _production)
+                producer.Enqueue(unitId);
 
-        foreach (string unitId in _production)
-            producer.Enqueue(unitId);
+            // Срочные заказы переезжают срочными: иначе они растворились бы в основной
+            // очереди и в режиме повтора пошли бы по кругу вопреки замыслу игрока
+            foreach (string unitId in _rush)
+                producer.Enqueue(unitId, rush: true);
 
-        // Срочные заказы переезжают срочными: иначе они растворились бы в основной
-        // очереди и в режиме повтора пошли бы по кругу вопреки замыслу игрока
-        foreach (string unitId in _rush)
-            producer.Enqueue(unitId, rush: true);
+            _production.Clear();
+            _rush.Clear();
+        }
 
-        _production.Clear();
-        _rush.Clear();
+        // Выделение и боевые группы переезжают вместе с приказами и заказами: иначе
+        // панель завода гасла бы в миг готовности, хотя очередь у преемника уже та же
+        GameManager.I?.Command?.Succeed(this, heir);
     }
 
     /// <summary>Каркас разбит: вывести из игры. Место и EntityStore освобождает Spawner.</summary>

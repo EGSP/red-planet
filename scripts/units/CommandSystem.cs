@@ -353,6 +353,38 @@ public partial class CommandSystem : GameSystem
         Groups.Current = -1;
     }
 
+    /// <summary>
+    /// Заменить исполнителя преемником в выделении и боевых группах.
+    ///
+    /// Каркас достраивается в готовую сущность: ветка приказов и очередь производства
+    /// уже переехали через <see cref="Blueprint.Bequeath"/>, а выделение и группы обязаны
+    /// переехать вместе с ними. Иначе строительная панель завода гаснет в миг готовности,
+    /// хотя состав заказов у преемника тот же.
+    ///
+    /// Если преемник уже выделен (или уже состоит в том же слоте группы), каркас просто
+    /// снимается — дублировать одного исполнителя нельзя.
+    /// </summary>
+    public void Succeed(IOrderable from, IOrderable to)
+    {
+        if (from == null || to == null || ReferenceEquals(from, to))
+            return;
+
+        for (int i = 0; i < _selected.Count; i++)
+        {
+            if (!ReferenceEquals(_selected[i], from))
+                continue;
+
+            if (_selected.Contains(to))
+                _selected.RemoveAt(i);
+            else
+                _selected[i] = to;
+
+            break;
+        }
+
+        Groups.Succeed(from, to);
+    }
+
     public override void Step(double dt)
     {
         if (GM.Playground == null || _cursor == null)

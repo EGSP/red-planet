@@ -67,4 +67,34 @@ public sealed class ControlGroups
         foreach (var group in _slots)
             group.RemoveAll(actor => !Alive.Is(actor as Node));
     }
+
+    /// <summary>
+    /// Заменить члена преемником во всех слотах. Каркас достраивается в готовую сущность,
+    /// и группа обязана удержать преемника на месте ушедшего каркаса: иначе слот терял бы
+    /// завод в миг готовности, хотя очередь производства уже переехала.
+    ///
+    /// Если преемник уже состоит в том же слоте, каркас просто снимается — дублировать
+    /// одного исполнителя в группе нельзя.
+    /// </summary>
+    public void Succeed(IOrderable from, IOrderable to)
+    {
+        if (from == null || to == null || ReferenceEquals(from, to))
+            return;
+
+        foreach (var group in _slots)
+        {
+            for (int i = 0; i < group.Count; i++)
+            {
+                if (!ReferenceEquals(group[i], from))
+                    continue;
+
+                if (group.Contains(to))
+                    group.RemoveAt(i);
+                else
+                    group[i] = to;
+
+                break;
+            }
+        }
+    }
 }
