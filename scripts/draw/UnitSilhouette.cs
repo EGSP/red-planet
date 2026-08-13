@@ -62,7 +62,7 @@ public static class UnitSilhouette
         float body;
 
         if (!string.IsNullOrEmpty(def.Sprite))
-            body = SpriteArt.NativeExtent(def.Sprite);
+            body = SpriteArt.NativeExtent(def.Sprite) * Mathf.Max(def.SpriteScale, 0.01f);
         else
         {
             float rings = 1f + 0.12f * Mathf.Max(def.ArmorRings, 0);
@@ -138,7 +138,7 @@ public static class UnitSilhouette
         if (!string.IsNullOrEmpty(def.Sprite))
         {
             SpriteArt.DrawNative(canvas, def.Sprite, Vector2.Zero, def.SpriteRotationDegrees,
-                angle, origin, presentationScale);
+                angle, origin, presentationScale * Mathf.Max(def.SpriteScale, 0.01f));
             return;
         }
 
