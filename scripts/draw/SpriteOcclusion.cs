@@ -68,24 +68,24 @@ public static class SpriteOcclusion
     /// вызывающим через DrawSetTransform.
     /// </summary>
     public static void DrawContact(CanvasItem canvas, UnitDefinition def, Rect2 bounds,
-        float baseRadians)
+        float baseRadians, Vector2 baseOrigin = default)
     {
         if (Config.ContactEnabled)
-            Draw(canvas, def, bounds, baseRadians, Contact(def?.Sprite),
+            Draw(canvas, def, bounds, baseRadians, baseOrigin, Contact(def?.Sprite),
                 def?.AmbientOcclusionOuter ?? 0f);
     }
 
     /// <summary>Нарисовать затемнение по кайме. Вызывается сразу после корпуса.</summary>
     public static void DrawRim(CanvasItem canvas, UnitDefinition def, Rect2 bounds,
-        float baseRadians)
+        float baseRadians, Vector2 baseOrigin = default)
     {
         if (Config.RimEnabled)
-            Draw(canvas, def, bounds, baseRadians, Rim(def?.Sprite),
+            Draw(canvas, def, bounds, baseRadians, baseOrigin, Rim(def?.Sprite),
                 def?.AmbientOcclusionInner ?? 0f);
     }
 
     private static void Draw(CanvasItem canvas, UnitDefinition def, Rect2 bounds,
-        float baseRadians, Layer layer, float strength)
+        float baseRadians, Vector2 baseOrigin, Layer layer, float strength)
     {
         if (def == null || layer.IsEmpty || strength <= 0f)
             return;
@@ -105,7 +105,8 @@ public static class SpriteOcclusion
 
         var modulate = new Color(1f, 1f, 1f, Mathf.Clamp(strength, 0f, 1f));
         SpriteArt.DrawScaled(canvas, layer.Texture, factor / Mathf.Max(Config.Upscale, 1),
-            bounds.GetCenter() + shift, modulate, def.SpriteRotationDegrees, baseRadians);
+            bounds.GetCenter() + shift, modulate, def.SpriteRotationDegrees, baseRadians,
+            baseOrigin);
     }
 
     /// <summary>
@@ -173,12 +174,9 @@ public static class SpriteOcclusion
         width = 0;
         height = 0;
 
-        var image = new Image();
-        if (image.Load(path) != Error.Ok)
-        {
-            GD.PushWarning($"[SpriteOcclusion] нет картинки: {path}");
+        var image = SpriteArt.LoadImportedImage(path);
+        if (image == null)
             return null;
-        }
 
         image = SpriteArt.TrimUsed(image);
 

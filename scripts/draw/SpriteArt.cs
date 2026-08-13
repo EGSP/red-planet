@@ -9,9 +9,9 @@ using Godot;
 /// полями и на карте выглядел бы мельче, чем задумано. Тот же приём уже применён к курсорам
 /// в <see cref="CursorSystem"/>.
 ///
-/// ПОЧЕМУ ФАЙЛ ЧИТАЕТСЯ НАПРЯМУЮ, А НЕ ЧЕРЕЗ ИМПОРТ. Импорт с <c>fix_alpha_border</c>
-/// смягчает край альфы ещё до отрисовки. Для пиксельного корпуса нужна исходная сетка
-/// пикселей файла.
+/// ИЗОБРАЖЕНИЕ БЕРЁТСЯ ИЗ ИМПОРТИРОВАННОЙ Texture2D. Прямой Image.Load для res://
+/// работает только в редакторе и не включает исходный PNG в экспорт. GetImage сохраняет
+/// возможность анализировать альфу, но источником остаётся импортированный ресурс Godot.
 ///
 /// ПОЧЕМУ ФИЛЬТР НЕ ВОССТАНАВЛИВАЕТСЯ ПОСЛЕ ОТРИСОВКИ. У <see cref="CanvasItem"/> фильтр
 /// текстур — свойство узла на все его команды кадра, а не параметр одной. Выставить
@@ -37,12 +37,9 @@ public static class SpriteArt
         if (Cache.TryGetValue(path, out var cached))
             return cached;
 
-        var image = new Image();
-        var error = image.Load(path);
-
-        if (error != Error.Ok)
+        var image = LoadImportedImage(path);
+        if (image == null)
         {
-            GD.PushWarning($"[SpriteArt] нет картинки: {path} ({error})");
             Cache[path] = null;
             return null;
         }
@@ -65,19 +62,42 @@ public static class SpriteArt
         if (RawCache.TryGetValue(path, out var cached))
             return cached;
 
-        var image = new Image();
-        var error = image.Load(path);
-
-        if (error != Error.Ok)
+        var texture = ResourceLoader.Load<Texture2D>(path);
+        if (texture == null)
         {
-            GD.PushWarning($"[SpriteArt] нет картинки: {path} ({error})");
+            GD.PushWarning($"[SpriteArt] ресурс текстуры не загружен: {path}");
             RawCache[path] = null;
             return null;
         }
 
-        var texture = ImageTexture.CreateFromImage(image);
         RawCache[path] = texture;
         return texture;
+    }
+
+    /// <summary>
+    /// Получить доступное процессору изображение из импортированной текстуры. Этот путь
+    /// пригоден для экспорта, в отличие от Image.Load по адресу res://.
+    /// </summary>
+    public static Image LoadImportedImage(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return null;
+
+        var texture = ResourceLoader.Load<Texture2D>(path);
+        var image = texture?.GetImage();
+        if (image == null || image.IsEmpty())
+        {
+            GD.PushWarning($"[SpriteArt] ресурс текстуры не загружен: {path}");
+            return null;
+        }
+
+        if (image.IsCompressed() && image.Decompress() != Error.Ok)
+        {
+            GD.PushWarning($"[SpriteArt] текстура не распакована для анализа: {path}");
+            return null;
+        }
+
+        return image;
     }
 
     /// <summary>
@@ -192,15 +212,12 @@ public static class SpriteArt
         if (NativeExtentCache.TryGetValue(path, out float cached))
             return cached;
 
-        var image = new Image();
-        if (image.Load(path) != Error.Ok)
+        var image = LoadImportedImage(path);
+        if (image == null)
         {
             NativeExtentCache[path] = 0f;
             return 0f;
         }
-
-        if (image.IsCompressed())
-            image.Decompress();
 
         var used = image.GetUsedRect();
         if (used.Size.X <= 0 || used.Size.Y <= 0)

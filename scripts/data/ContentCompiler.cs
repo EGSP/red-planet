@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using Tomlyn;
 using Tomlyn.Model;
 
 /// <summary>Вид инструмента. Определяет, какие ключи у него читаются.</summary>
@@ -56,7 +57,25 @@ public static class ContentCompiler
         int errors = 0;
 
         errors += LoadTags(catalog.Tags);
-        errors += LoadDefinitions(catalog);
+        errors += LoadDefinitions(catalog, overrides: null);
+        errors += LoadBuildbars(catalog);
+        errors += LoadWaves(catalog);
+        errors += Link(catalog);
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Собрать содержимое, подставив тексты определений и vars поверх файлов на диске.
+    /// Нужен редактору: черновики вкладок участвуют в сборке до записи на диск.
+    /// </summary>
+    public static int CompileWithOverrides(
+        Catalog catalog, IReadOnlyDictionary<string, string> textOverrides)
+    {
+        int errors = 0;
+
+        errors += LoadTags(catalog.Tags);
+        errors += LoadDefinitions(catalog, textOverrides);
         errors += LoadBuildbars(catalog);
         errors += LoadWaves(catalog);
         errors += Link(catalog);
@@ -88,7 +107,8 @@ public static class ContentCompiler
     /// Один мешок на tools + units + buildings: наследование идёт между соседними
     /// файлами в подпапке юнита, а после Resolve файлы делятся по ключу kind.
     /// </summary>
-    private static int LoadDefinitions(Catalog catalog)
+    private static int LoadDefinitions(
+        Catalog catalog, IReadOnlyDictionary<string, string> overrides)
     {
         var raw = new Dictionary<string, TomlTable>();
         var definitionPaths = new List<string>();
@@ -99,7 +119,7 @@ public static class ContentCompiler
             if (!TomlResolver.IsVars(path))
                 continue;
 
-            var table = TomlDocument.LoadTable(path);
+            var table = LoadTable(path, overrides);
 
             if (table == null)
             {
@@ -113,7 +133,7 @@ public static class ContentCompiler
         foreach (string root in DefinitionRoots)
         foreach (string path in Files(root))
         {
-            var table = TomlDocument.LoadTable(path);
+            var table = LoadTable(path, overrides);
 
             if (table == null)
             {
@@ -1031,6 +1051,25 @@ public static class ContentCompiler
     }
 
     // ── Общее ─────────────────────────────────────────────────────────────────────
+
+    private static TomlTable LoadTable(
+        string path, IReadOnlyDictionary<string, string> overrides)
+    {
+        if (overrides != null && overrides.TryGetValue(path, out string text))
+        {
+            var syntax = Tomlyn.Toml.Parse(text, path);
+            if (syntax.HasErrors)
+            {
+                foreach (var error in syntax.Diagnostics)
+                    GD.PushError($"[Контент] {error}");
+                return null;
+            }
+
+            return syntax.ToModel();
+        }
+
+        return TomlDocument.LoadTable(path);
+    }
 
     /// <summary>
     /// Пути ко всем .toml каталога, включая вложенные. Соседние .md в выборку не попадают.

@@ -324,7 +324,9 @@ public static class UnitSilhouette
         {
             float barrel = radius * 1.2f;
             if (hasWeapon)
-                barrel = radius + Mathf.Clamp(def.Weapon.RangePx * 0.12f, radius * 0.4f,
+                barrel = radius + Mathf.Clamp(
+                    def.Weapon.RangePx * 0.12f * presentationScale,
+                    radius * 0.4f,
                     radius * 2.2f);
 
             ShapeDraw.Line(canvas, Vector2.Zero, new Vector2(barrel, 0f),
