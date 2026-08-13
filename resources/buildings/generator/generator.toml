@@ -13,7 +13,9 @@ pattern_alt  = "square"
 pattern_step = "narrow"
 
 [body]
-max_health = 1000.0
+max_health   = 1000.0
+sprite       = "res://assets/sprites/buildings/generator.png"
+sprite_scale = 1.3
 
 [production]
 energy = 600.0

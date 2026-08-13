@@ -16,6 +16,7 @@ max_health      = 50.0
 radius          = 0.32
 sprite          = "res://assets/sprites/units/unit_bot-fabricator.png"
 sprite_rotation = 90.0
+sprite_scale     = 2.0
 
 [movement]
 speed      = 4.0
