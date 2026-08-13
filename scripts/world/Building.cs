@@ -223,12 +223,9 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
                 ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f), 3f, WidthMode.Screen));
         }
 
-        // Подпись и полоса прочности читаются с экрана, а не с корпуса, поэтому поворот
-        // на них не распространяется
+        // Полоса прочности читается с экрана, а не с корпуса, поэтому поворот
+        // на неё не распространяется
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
-
-        DrawString(ThemeDB.FallbackFont, new Vector2(rect.Position.X + 4f, rect.Position.Y + 16f),
-            Definition.DisplayName, HorizontalAlignment.Left, -1, 12, Colors.Black);
 
         HealthBar.Draw(this, Health, size.X * 0.9f, rect.Position.Y - 8f);
     }
