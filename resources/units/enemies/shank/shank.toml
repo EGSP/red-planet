@@ -17,4 +17,4 @@ turn_speed = 90.0
 brake      = 7.0
 
 [terror]
-army_power = 2.0
+army_power = 4

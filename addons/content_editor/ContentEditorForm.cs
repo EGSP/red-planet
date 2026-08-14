@@ -22,8 +22,10 @@ using Godot;
 public partial class ContentEditorForm : ScrollContainer
 {
     private ContentEditorStore _store;
+    private LineEdit _fieldFilter;
     private VBoxContainer _root;
     private bool _rebuildGuard;
+    private string _fieldFilterText = "";
     private readonly HashSet<string> _expandedSections = new()
     {
         "",
@@ -33,6 +35,19 @@ public partial class ContentEditorForm : ScrollContainer
 
     public event Action<string> VarsPanelRequested;
     public event Action GraphPanelRequested;
+    public event Action FieldFilterChanged;
+
+    /// <summary>Текст фильтра полей. Не сбрасывается при смене сущности и Refresh.</summary>
+    public string FieldFilter
+    {
+        get => _fieldFilterText;
+        set
+        {
+            _fieldFilterText = value ?? "";
+            if (IsInstanceValid(_fieldFilter) && _fieldFilter.Text != _fieldFilterText)
+                _fieldFilter.Text = _fieldFilterText;
+        }
+    }
 
     public void Bind(ContentEditorStore store)
     {
@@ -52,18 +67,12 @@ public partial class ContentEditorForm : ScrollContainer
         var session = _store?.ActiveSession;
         if (session == null)
         {
-            _root.AddChild(new Label { Text = "Откройте сущность из каталога" });
+            _root.AddChild(new Label { Text = "Open an entity from the catalog" });
             return;
         }
 
-        var title = new Label
-        {
-            Text = $"{session.FileName}  ({session.DisplayName})",
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-        };
-        title.AddThemeFontSizeOverride("font_size", 16);
-        _root.AddChild(title);
-
+        // Имя сущности несёт заголовок панели, внутри которой стоит форма; повторять
+        // его строкой формы значит занимать место одним и тем же.
         var path = new Label
         {
             Text = session.Path,
@@ -73,25 +82,31 @@ public partial class ContentEditorForm : ScrollContainer
         _root.AddChild(path);
 
         var contextActions = new HBoxContainer();
-        var showToggle = new CheckBox
+        // У волны нет силуэта, и на измерительном поле она не появляется, поэтому
+        // переключатель показа для неё бессмыслен.
+        if (session.Kind != ContentEntityKind.Wave)
         {
-            Text = "Показывать на поле",
-            ButtonPressed = session.ShowOnField,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        showToggle.Toggled += on =>
-        {
-            session.ShowOnField = on;
-            _store.NotifyChanged();
-        };
-        contextActions.AddChild(showToggle);
+            var showToggle = new CheckBox
+            {
+                Text = "Show on field",
+                ButtonPressed = session.ShowOnField,
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            };
+            showToggle.Toggled += on =>
+            {
+                session.ShowOnField = on;
+                _store.NotifyChanged();
+            };
+            contextActions.AddChild(showToggle);
+        }
 
         if (session.Kind is ContentEntityKind.Unit or ContentEntityKind.Building)
         {
             var graph = new Button
             {
-                Text = "Связи",
-                TooltipText = "Показать наследование, файлы переменных и инструменты",
+                Text = "Relations",
+                TooltipText = "Show inheritance, vars files and tools",
+                Icon = ContentEditorTheme.IconAny("GraphEdit", "Groups", "Node"),
             };
             graph.Pressed += () => GraphPanelRequested?.Invoke();
             contextActions.AddChild(graph);
@@ -107,19 +122,24 @@ public partial class ContentEditorForm : ScrollContainer
         var visibleFields = fields
             .Where(field => field.Key is not ("id" or "kind"))
             .Where(field => unit == null || field.VisibleForUnit == null || field.VisibleForUnit(unit))
+            .Where(MatchesFieldFilter)
             .GroupBy(field => field.RootOnly ? "" : field.Section ?? "");
 
         foreach (var section in visibleFields)
         {
             string sectionKey = section.Key;
             bool expanded = _expandedSections.Contains(sectionKey);
+            Texture2D arrow = expanded
+                ? ContentEditorTheme.Icon("GuiTreeArrowDown")
+                : ContentEditorTheme.Icon("GuiTreeArrowRight");
             var heading = new Button
             {
-                Text = $"{(expanded ? "▼" : "▶")}  " +
-                       (string.IsNullOrEmpty(sectionKey) ? "Основные" : SectionTitle(sectionKey)),
+                Text = (arrow == null ? $"{(expanded ? "▼" : "▶")}  " : "")
+                       + (string.IsNullOrEmpty(sectionKey) ? "General" : SectionTitle(sectionKey)),
+                Icon = arrow,
                 Flat = true,
                 Alignment = HorizontalAlignment.Left,
-                TooltipText = expanded ? "Свернуть раздел" : "Развернуть раздел",
+                TooltipText = expanded ? "Collapse section" : "Expand section",
             };
             heading.AddThemeColorOverride("font_color", new Color(0.72f, 0.84f, 1f));
             heading.Pressed += () =>
@@ -149,10 +169,16 @@ public partial class ContentEditorForm : ScrollContainer
         if (unit?.ToolIds == null || unit.ToolIds.Length == 0)
             return;
 
-        _root.AddChild(new Label { Text = "Связанные инструменты" });
+        _root.AddChild(new Label { Text = "Linked tools" });
         foreach (string toolId in unit.ToolIds)
         {
-            var button = new Button { Text = $"Открыть {toolId}" };
+            var button = new Button
+            {
+                Text = $"Open {toolId}",
+                Icon = ContentEditorTheme.IconAny("ExternalLink", "Forward"),
+                Alignment = HorizontalAlignment.Left,
+                TooltipText = $"Open the tool {toolId} in its own tab",
+            };
             string id = toolId;
             button.Pressed += () => _store.Open(id);
             _root.AddChild(button);
@@ -186,11 +212,14 @@ public partial class ContentEditorForm : ScrollContainer
         // половину узкой формы и не добавляла действия.
         if (local)
         {
+            Texture2D resetIcon = ContentEditorTheme.IconAny("Reload", "Undo");
             var reset = new Button
             {
-                Text = "↶",
+                Text = resetIcon == null ? "↶" : "",
+                Icon = resetIcon,
                 Flat = true,
-                TooltipText = "Удалить локальное значение и вернуть наследование",
+                CustomMinimumSize = new Vector2(24, 24),
+                TooltipText = "Remove the local value and restore inheritance",
             };
             reset.Pressed += () =>
             {
@@ -202,26 +231,32 @@ public partial class ContentEditorForm : ScrollContainer
             && !string.IsNullOrEmpty(sourceInfo.Path))
         {
             string sourcePath = sourceInfo.Path;
+            Texture2D openIcon = ContentEditorTheme.IconAny("ExternalLink", "ActionCopy", "Forward");
             var openSource = new Button
             {
-                Text = "↗",
+                Text = openIcon == null ? "↗" : "",
+                Icon = openIcon,
                 Flat = true,
                 CustomMinimumSize = new Vector2(24, 24),
-                TooltipText = $"Открыть исходный файл\n{sourcePath}",
+                TooltipText = $"Open source file\n{sourcePath}",
             };
             openSource.Pressed += () => OpenSource(sourcePath);
             sourceAndActions.AddChild(openSource);
         }
 
         object value = _store.EffectiveValue(session, field);
-        Control editor = BuildEditor(session, field, value, editable: true);
+        Control editor = BuildEditor(session, field, value);
+        string tooltip = $"{field.Section ?? "root"}.{field.Key}";
+        if (!string.IsNullOrEmpty(field.Hint))
+            tooltip += "\n" + field.Hint;
+
         var row = new EditorPropertyRow();
         row.Configure(
             field.Label,
-            $"{field.Section ?? "корень"}.{field.Key}",
+            tooltip,
             editor,
             sourceAndActions,
-            EditorBelowTitle(field));
+            EditorFieldEditor.BelowTitle(field));
         return row;
     }
 
@@ -243,173 +278,26 @@ public partial class ContentEditorForm : ScrollContainer
         OS.ShellOpen(ProjectSettings.GlobalizePath(path));
     }
 
-    private static bool EditorBelowTitle(ContentFieldSpec field) =>
-        field.Type is ContentFieldType.StringList or ContentFieldType.Vector2List;
-
-    private Control BuildEditor(
-        OpenEntitySession session, ContentFieldSpec field, object value, bool editable)
-    {
-        switch (field.Type)
+    private Control BuildEditor(OpenEntitySession session, ContentFieldSpec field, object value) =>
+        EditorFieldEditor.Build(field, value, editable: true, committed =>
         {
-            case ContentFieldType.Bool:
-            {
-                var box = new CheckBox
-                {
-                    ButtonPressed = value is true,
-                    Disabled = !editable,
-                    Text = "",
-                };
-                box.Toggled += on => Commit(session, field, on);
-                return box;
-            }
-
-            case ContentFieldType.Enum when field.EnumType != null:
-            {
-                var option = new OptionButton { Disabled = !editable };
-                string current = Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
-                int selected = 0;
-                int i = 0;
-                foreach (string name in Enum.GetNames(field.EnumType))
-                {
-                    option.AddItem(EnumLabel(field.EnumType, name));
-                    option.SetItemMetadata(i, name);
-                    if (string.Equals(name, current, StringComparison.OrdinalIgnoreCase))
-                        selected = i;
-                    i++;
-                }
-
-                option.Selected = selected;
-                option.ItemSelected += index =>
-                {
-                    string name = option.GetItemMetadata((int)index).AsString();
-                    Commit(session, field, name);
-                };
-                return option;
-            }
-
-            case ContentFieldType.Color:
-            {
-                var picker = new ColorPickerButton
-                {
-                    Color = value is Color color ? color : Colors.White,
-                    Disabled = !editable,
-                    CustomMinimumSize = new Vector2(80, 28),
-                };
-                Color pending = picker.Color;
-                picker.ColorChanged += color => pending = color;
-                // Во время перетаскивания маркера ColorChanged приходит каждый пиксель.
-                // Сборка каталога и пересоздание формы выполняются один раз при закрытии.
-                picker.PopupClosed += () => Commit(session, field, pending);
-                return picker;
-            }
-
-            case ContentFieldType.StringList:
-            {
-                var edit = new LineEdit
-                {
-                    Text = value is IEnumerable<string> list
-                        ? string.Join(", ", list)
-                        : "",
-                    Editable = editable,
-                };
-                edit.TextSubmitted += text =>
-                {
-                    var items = text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    Commit(session, field, items.ToList());
-                };
-                edit.FocusExited += () =>
-                {
-                    if (!editable)
-                        return;
-                    var items = edit.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    Commit(session, field, items.ToList());
-                };
-                return edit;
-            }
-
-            case ContentFieldType.Vector2List:
-            {
-                var edit = new LineEdit
-                {
-                    Text = FormatValue(value),
-                    PlaceholderText = "1,0; 0,1; -1,0",
-                    TooltipText = "Пары X,Y разделяются точкой с запятой",
-                    Editable = editable,
-                };
-                edit.TextSubmitted += text => CommitVectors(session, field, text);
-                edit.FocusExited += () =>
-                {
-                    if (editable)
-                        CommitVectors(session, field, edit.Text);
-                };
-                return edit;
-            }
-
-            default:
-            {
-                var edit = new LineEdit
-                {
-                    Text = FormatValue(value),
-                    Editable = editable,
-                };
-                edit.TextSubmitted += text => CommitText(session, field, text);
-                edit.FocusExited += () =>
-                {
-                    if (editable)
-                        CommitText(session, field, edit.Text);
-                };
-                return edit;
-            }
-        }
-    }
-
-    private void CommitText(OpenEntitySession session, ContentFieldSpec field, string text)
-    {
-        object parsed = field.Type switch
-        {
-            ContentFieldType.Float or ContentFieldType.NullableFloat or ContentFieldType.Scale =>
-                float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float f) ? f :
-                float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out f) ? f : null,
-            ContentFieldType.Int =>
-                int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : null,
-            _ => text,
-        };
-
-        if (parsed != null)
-            Commit(session, field, parsed);
-    }
-
-    private void CommitVectors(OpenEntitySession session, ContentFieldSpec field, string text)
-    {
-        var vectors = new List<Vector2>();
-        foreach (string pair in text.Split(
-                     ';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            string[] coordinates = pair.Split(
-                ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (coordinates.Length != 2
-                || !float.TryParse(
-                    coordinates[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
-                || !float.TryParse(
-                    coordinates[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
-            {
+            if (_rebuildGuard)
                 return;
-            }
 
-            vectors.Add(new Vector2(x, y));
-        }
+            _rebuildGuard = true;
+            _store.SetField(session, field, committed, clear: false);
+            _rebuildGuard = false;
+        });
 
-        Commit(session, field, vectors);
-    }
-
-    private void Commit(OpenEntitySession session, ContentFieldSpec field, object value)
+    private bool MatchesFieldFilter(ContentFieldSpec field)
     {
-        if (_rebuildGuard)
-            return;
+        string query = _fieldFilterText.Trim();
+        if (query.Length == 0)
+            return true;
 
-        _rebuildGuard = true;
-        _store.SetField(session, field, value, clear: false);
-        _rebuildGuard = false;
+        return field.Label.Contains(query, StringComparison.OrdinalIgnoreCase)
+               || field.Key.Contains(query, StringComparison.OrdinalIgnoreCase)
+               || (field.Section ?? "").Contains(query, StringComparison.OrdinalIgnoreCase);
     }
 
     private void EnsureRoot()
@@ -417,12 +305,33 @@ public partial class ContentEditorForm : ScrollContainer
         if (_root != null)
             return;
 
+        var outer = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        outer.AddThemeConstantOverride("separation", 6);
+        AddChild(outer);
+
+        _fieldFilter = new LineEdit
+        {
+            PlaceholderText = "Filter fields…",
+            Text = _fieldFilterText,
+            RightIcon = ContentEditorTheme.Icon("Search"),
+        };
+        _fieldFilter.TextChanged += text =>
+        {
+            _fieldFilterText = text ?? "";
+            Refresh();
+            FieldFilterChanged?.Invoke();
+        };
+        outer.AddChild(_fieldFilter);
+
         _root = new VBoxContainer
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
         _root.AddThemeConstantOverride("separation", 6);
-        AddChild(_root);
+        outer.AddChild(_root);
     }
 
     private static void ClearChildren(Node parent)
@@ -436,44 +345,32 @@ public partial class ContentEditorForm : ScrollContainer
         }
     }
 
-    private static string FormatValue(object value) => value switch
-    {
-        null => "",
-        float f => f.ToString("0.###", CultureInfo.InvariantCulture),
-        double d => d.ToString("0.###", CultureInfo.InvariantCulture),
-        Color c => $"{c.R:0.##}, {c.G:0.##}, {c.B:0.##}",
-        IEnumerable<string> list => string.Join(", ", list),
-        IEnumerable<float> floats => string.Join(", ", floats.Select(v => v.ToString("0.###", CultureInfo.InvariantCulture))),
-        Vector2[] vectors => string.Join("; ", vectors.Select(v => $"{v.X:0.##},{v.Y:0.##}")),
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "",
-    };
-
     private static string ProvenanceLabel(FieldSourceInfo source) => source.Provenance switch
     {
-        FieldProvenance.Local => "в текущем файле",
-        FieldProvenance.Base => $"унаследовано · {SourceFileName(source.Path)}",
-        FieldProvenance.Vars => $"из переменных · {SourceFileName(source.Path)}",
-        FieldProvenance.Default => "по умолчанию",
-        _ => "нет",
+        FieldProvenance.Local => "in this file",
+        FieldProvenance.Base => $"inherited · {SourceFileName(source.Path)}",
+        FieldProvenance.Vars => $"from vars · {SourceFileName(source.Path)}",
+        FieldProvenance.Default => "default",
+        _ => "none",
     };
 
     private static string SourceFileName(string path)
     {
         if (string.IsNullOrEmpty(path))
-            return "неизвестный файл";
+            return "unknown file";
         int slash = path.LastIndexOf('/');
         return slash >= 0 ? path[(slash + 1)..] : path;
     }
 
     private static string ProvenanceTooltip(FieldSourceInfo source) => source.Provenance switch
     {
-        FieldProvenance.Local => "Значение записано в текущем файле",
+        FieldProvenance.Local => "Value is written in the current file",
         FieldProvenance.Base =>
-            $"Значение задано в родительском определении\n{source.Path}",
+            $"Value comes from the parent definition\n{source.Path}",
         FieldProvenance.Vars =>
-            $"Значение задано в файле общих переменных\n{source.Path}",
-        FieldProvenance.Default => "Значение задано в коде как умолчание",
-        _ => "Значение отсутствует",
+            $"Value comes from a shared vars file\n{source.Path}",
+        FieldProvenance.Default => "Value is the code default",
+        _ => "Value is missing",
     };
 
     private static Color ProvenanceColor(FieldProvenance provenance) => provenance switch
@@ -484,68 +381,20 @@ public partial class ContentEditorForm : ScrollContainer
         _ => new Color(1f, 1f, 1f, 0.5f),
     };
 
-    private static string EnumLabel(Type type, string name)
-    {
-        if (type == typeof(UnitClass))
-            return name switch
-            {
-                nameof(UnitClass.Bot) => "Бот",
-                nameof(UnitClass.Vehicle) => "Машина",
-                nameof(UnitClass.Commander) => "Коммандер",
-                nameof(UnitClass.Structure) => "Постройка",
-                nameof(UnitClass.Factory) => "Переработчик",
-                nameof(UnitClass.Turret) => "Турель",
-                nameof(UnitClass.Assembler) => "Сборщик",
-                nameof(UnitClass.Enemy) => "Противник",
-                nameof(UnitClass.Plant) => "Завод",
-                _ => name,
-            };
-
-        if (type == typeof(HullShape))
-            return name switch
-            {
-                nameof(HullShape.Circle) => "Круг",
-                nameof(HullShape.Rect) => "Прямоугольник",
-                nameof(HullShape.Hex) => "Шестиугольник",
-                nameof(HullShape.Arrow) => "Стрела",
-                nameof(HullShape.Crescent) => "Подкова",
-                nameof(HullShape.Star) => "Звезда",
-                nameof(HullShape.Fortress) => "Крепость",
-                nameof(HullShape.Sickle) => "Серп",
-                nameof(HullShape.Crown) => "Венец",
-                _ => name,
-            };
-
-        if (type == typeof(HullTrim))
-            return name == nameof(HullTrim.None) ? "Нет" : "Плечи";
-
-        if (type == typeof(BuildPattern))
-            return name switch
-            {
-                nameof(BuildPattern.None) => "Нет",
-                nameof(BuildPattern.Line) => "Линия",
-                nameof(BuildPattern.Square) => "Квадрат",
-                nameof(BuildPattern.Diamond) => "Ромб",
-                nameof(BuildPattern.MetalArea) => "Точки металла",
-                _ => name,
-            };
-
-        return name;
-    }
-
     private static string SectionTitle(string section) => section switch
     {
-        "body" => "Корпус",
-        "movement" => "Движение",
-        "footprint" => "Занимаемые клетки",
-        "assembly" => "Сборка",
-        "conversion" => "Переработка",
-        "production" => "Производство",
-        "storage" => "Хранение",
-        "terror" => "Террор",
-        "battle" => "Бой",
-        "plant" => "Завод",
-        "orders" => "Приказы",
+        "body" => "Body",
+        "movement" => "Movement",
+        "footprint" => "Footprint",
+        "assembly" => "Assembly",
+        "conversion" => "Conversion",
+        "production" => "Production",
+        "storage" => "Storage",
+        "terror" => "Terror",
+        "battle" => "Battle",
+        "plant" => "Plant",
+        "orders" => "Orders",
+        "spawn" => "Spawn shape",
         _ => section,
     };
 }

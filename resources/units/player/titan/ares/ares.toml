@@ -12,7 +12,7 @@ rows = ["##", "##"]
 
 [body]
 max_health   = 50000.0
-radius       = 0.9
+radius = 2.5
 vision_range = 14.0
 hull         = "fortress"
 armor_rings  = 1

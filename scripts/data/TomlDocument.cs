@@ -62,6 +62,23 @@ public sealed class TomlDocument
     }
 
     /// <summary>
+    /// Разобрать текст, а не файл. Нужен редактору: черновик открытой вкладки должен
+    /// участвовать в сборке до записи на диск.
+    /// </summary>
+    public static TomlDocument FromText(string text, string where)
+    {
+        var syntax = Toml.Parse(text ?? "", where);
+
+        if (!syntax.HasErrors)
+            return new TomlDocument(syntax.ToModel(), where);
+
+        foreach (var error in syntax.Diagnostics)
+            GD.PushError($"[Контент] {error}");
+
+        return null;
+    }
+
+    /// <summary>
     /// Обернуть уже материализованную таблицу (после <see cref="TomlResolver"/>).
     /// Сырой разбор файла сюда не входит — только чтение ключей с учётом израсходованных.
     /// </summary>

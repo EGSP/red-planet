@@ -14,9 +14,9 @@ public partial class EditorKeyValueTable : Tree
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
         SizeFlagsVertical = SizeFlags.ExpandFill;
 
-        SetColumnTitle(0, "Секция");
-        SetColumnTitle(1, "Параметр");
-        SetColumnTitle(2, "Значение");
+        SetColumnTitle(0, "Section");
+        SetColumnTitle(1, "Key");
+        SetColumnTitle(2, "Value");
         SetColumnExpand(0, false);
         SetColumnCustomMinimumWidth(0, 130);
         SetColumnExpand(1, false);

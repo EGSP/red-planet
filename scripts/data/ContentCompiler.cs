@@ -59,7 +59,7 @@ public static class ContentCompiler
         errors += LoadTags(catalog.Tags);
         errors += LoadDefinitions(catalog, overrides: null);
         errors += LoadBuildbars(catalog);
-        errors += LoadWaves(catalog);
+        errors += LoadWaves(catalog, overrides: null);
         errors += Link(catalog);
 
         return errors;
@@ -77,7 +77,7 @@ public static class ContentCompiler
         errors += LoadTags(catalog.Tags);
         errors += LoadDefinitions(catalog, textOverrides);
         errors += LoadBuildbars(catalog);
-        errors += LoadWaves(catalog);
+        errors += LoadWaves(catalog, textOverrides);
         errors += Link(catalog);
 
         return errors;
@@ -679,13 +679,18 @@ public static class ContentCompiler
 
     // ── Волны ─────────────────────────────────────────────────────────────────────
 
-    private static int LoadWaves(Catalog catalog)
+    private static int LoadWaves(
+        Catalog catalog, IReadOnlyDictionary<string, string> overrides)
     {
         int errors = 0;
 
         foreach (string path in Files(WavesDir))
         {
-            var document = TomlDocument.Load(path);
+            // Черновик открытой вкладки волны участвует в сборке наравне с файлом:
+            // иначе карта волн и проверка перед записью показывали бы прежние значения.
+            var document = overrides != null && overrides.TryGetValue(path, out string draft)
+                ? TomlDocument.FromText(draft, path)
+                : TomlDocument.Load(path);
 
             if (document == null)
             {

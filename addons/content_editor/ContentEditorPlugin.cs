@@ -87,7 +87,7 @@ public partial class ContentEditorPlugin : EditorPlugin
             _main.CheckExternalChanges();
     }
 
-    public override string _GetPluginName() => "Контент";
+    public override string _GetPluginName() => "Content";
 
     public override Texture2D _GetPluginIcon()
     {
@@ -217,7 +217,7 @@ public partial class ContentEditorPlugin : EditorPlugin
         _floatingWindow = new Window
         {
             Name = FloatingWindowName,
-            Title = "Red Planet — редактор контента",
+            Title = "Red Planet — content editor",
             Exclusive = false,
             Transient = false,
         };
@@ -265,7 +265,7 @@ public partial class ContentEditorPlugin : EditorPlugin
 
         oldWindow.Hide();
         oldWindow.QueueFree();
-        editor.SetMainScreenEditor("Контент");
+        editor.SetMainScreenEditor("Content");
     }
 
     private void EnsureFloatingWindowSubscription()

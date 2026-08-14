@@ -10,6 +10,7 @@ rows = ["######", "######", "######", "######", "######", "######"]
 
 [body]
 sprite_scale = 1.0
+vision_range = 13
 
 [terror]
 expansion_power = 8.0

@@ -40,12 +40,16 @@ public partial class ContentEditorPreview : Control
 
     private PanelContainer _toolbarPanel;
     private HFlowContainer _toolbar;
+    private Button _fitButton;
+    private Button _oneToOneButton;
+    private Button _layoutButton;
 
     public void Bind(ContentEditorStore store)
     {
         _store = store;
         _knownSessionCount = store?.Sessions.Count ?? 0;
         EnsureToolbar();
+        UpdateToolbarState();
         QueueRedraw();
     }
 
@@ -65,6 +69,7 @@ public partial class ContentEditorPreview : Control
             FitAll();
         }
 
+        UpdateToolbarState();
         QueueRedraw();
     }
 
@@ -173,7 +178,8 @@ public partial class ContentEditorPreview : Control
 
         foreach (var session in _store.Sessions)
         {
-            if (!session.ShowOnField)
+            // Волна не имеет силуэта и на поле не показывается, хотя вкладка у неё есть.
+            if (!session.ShowOnField || session.Kind == ContentEntityKind.Wave)
                 continue;
 
             bool active = _store.ActiveSession == session;
@@ -207,15 +213,21 @@ public partial class ContentEditorPreview : Control
         };
         _toolbarPanel.AddChild(_toolbar);
 
-        AddToggle("Сетка", _showGrid, v => _showGrid = v);
-        AddToggle("Размеры", _showSizes, v => _showSizes = v);
-        AddToggle("Клетки", _showFootprint, v => _showFootprint = v);
-        AddToggle("Зазор", _showMargin, v => _showMargin = v);
-        AddToggle("Обзор", _showVision, v => _showVision = v);
-        AddToggle("Атака", _showAttack, v => _showAttack = v);
-        AddToggle("Работа", _showWork, v => _showWork = v);
+        AddToggle("Grid", _showGrid, v => _showGrid = v);
+        AddToggle("Sizes", _showSizes, v => _showSizes = v);
+        AddToggle("Cells", _showFootprint, v => _showFootprint = v);
+        AddToggle("Margin", _showMargin, v => _showMargin = v);
+        AddToggle("Vision", _showVision, v => _showVision = v);
+        AddToggle("Attack", _showAttack, v => _showAttack = v);
+        AddToggle("Work", _showWork, v => _showWork = v);
 
-        var measure = new Button { Text = "Линейка", ToggleMode = true };
+        var measure = new Button
+        {
+            Text = "Ruler",
+            ToggleMode = true,
+            Icon = ContentEditorTheme.IconAny("Ruler", "ToolRuler"),
+            TooltipText = "Measure a distance in cells between two points of the field",
+        };
         measure.Toggled += on =>
         {
             _measureMode = on;
@@ -224,17 +236,71 @@ public partial class ContentEditorPreview : Control
         };
         _toolbar.AddChild(measure);
 
-        var fit = new Button { Text = "Показать всё" };
-        fit.Pressed += FitAll;
-        _toolbar.AddChild(fit);
+        _fitButton = new Button
+        {
+            Text = "Fit all",
+            Icon = ContentEditorTheme.IconAny("Zoom", "ZoomMore"),
+        };
+        _fitButton.Pressed += FitAll;
+        _toolbar.AddChild(_fitButton);
 
-        var one = new Button { Text = "1:1" };
-        one.Pressed += () =>
+        _oneToOneButton = new Button
+        {
+            Text = "1:1",
+            Icon = ContentEditorTheme.IconAny("ZoomReset", "Zoom"),
+            TooltipText = "Set the field scale to one screen pixel per world pixel",
+        };
+        _oneToOneButton.Pressed += () =>
         {
             _zoom = 1f;
             QueueRedraw();
         };
-        _toolbar.AddChild(one);
+        _toolbar.AddChild(_oneToOneButton);
+
+        // «Разложить» переставляет объекты именно этого поля, поэтому кнопка стоит здесь,
+        // а не в верхней полосе, где она читалась как действие над всем проектом.
+        _layoutButton = new Button
+        {
+            Text = "Layout",
+            Icon = ContentEditorTheme.IconAny("GridContainer", "Grid", "HBoxContainer"),
+        };
+        _layoutButton.Pressed += () => _store?.LayoutOpenSessions();
+        _toolbar.AddChild(_layoutButton);
+
+        UpdateToolbarState();
+    }
+
+    /// <summary>
+    /// Действия над содержимым поля выключаются, пока поле пусто: нажатие на них
+    /// в этом состоянии ничего не изменило бы.
+    /// </summary>
+    private void UpdateToolbarState()
+    {
+        if (!IsInstanceValid(_fitButton))
+            return;
+
+        int total = _store?.Sessions.Count ?? 0;
+        bool anyVisible = false;
+        if (_store != null)
+        {
+            foreach (var session in _store.Sessions)
+            {
+                if (session.ShowOnField && session.Kind != ContentEntityKind.Wave)
+                {
+                    anyVisible = true;
+                    break;
+                }
+            }
+        }
+
+        ContentEditorTheme.SetAction(_fitButton, anyVisible,
+            "Fit every shown entity into the field",
+            total == 0
+                ? "No entity is open"
+                : "Every open entity is hidden by “Show on field”");
+        ContentEditorTheme.SetAction(_layoutButton, total > 1,
+            "Arrange the open entities in rows",
+            total == 0 ? "No entity is open" : "Only one entity is open");
     }
 
     private void AddToggle(string text, bool initial, Action<bool> assign)
@@ -423,7 +489,7 @@ public partial class ContentEditorPreview : Control
         DrawLine(pos, pos + new Vector2(0, -6), Colors.White, 2f);
         DrawLine(pos + new Vector2(length, 0), pos + new Vector2(length, -6), Colors.White, 2f);
         DrawString(ThemeDB.FallbackFont, pos + new Vector2(0, -10),
-            "1 клетка", HorizontalAlignment.Left, -1, 12, Colors.White);
+            "1 cell", HorizontalAlignment.Left, -1, 12, Colors.White);
     }
 
     private void DrawMeasure()
@@ -441,7 +507,7 @@ public partial class ContentEditorPreview : Control
         DrawLine(a, b, new Color(1f, 0.6f, 0.2f), 2f);
         float dist = _measureA.Value.DistanceTo(_measureB.Value) / Const.Unit;
         DrawString(ThemeDB.FallbackFont, (a + b) * 0.5f,
-            $"{dist:0.###} кл", HorizontalAlignment.Left, -1, 13, new Color(1f, 0.75f, 0.4f));
+            $"{dist:0.###} cells", HorizontalAlignment.Left, -1, 13, new Color(1f, 0.75f, 0.4f));
     }
 
     private void DrawActiveSizes()
@@ -460,28 +526,28 @@ public partial class ContentEditorPreview : Control
 
             if (def.IsStructure)
             {
-                lines.Add($"footprint {def.Width}×{def.Height} кл");
-                lines.Add($"габарит {def.Width * Const.Unit}×{def.Height * Const.Unit} px");
+                lines.Add($"footprint {def.Width}×{def.Height} cells");
+                lines.Add($"extent {def.Width * Const.Unit}×{def.Height * Const.Unit} px");
             }
             else
             {
-                lines.Add($"радиус {def.Radius:0.###} кл ({def.RadiusPx:0} px)");
-                lines.Add($"диаметр {def.Radius * 2f:0.###} кл");
+                lines.Add($"radius {def.Radius:0.###} cells ({def.RadiusPx:0} px)");
+                lines.Add($"diameter {def.Radius * 2f:0.###} cells");
             }
 
-            lines.Add($"обзор {def.VisionRange:0.###} кл");
+            lines.Add($"vision {def.VisionRange:0.###} cells");
             if (def.Weapon != null)
-                lines.Add($"атака {def.Weapon.Range:0.###} кл");
+                lines.Add($"attack {def.Weapon.Range:0.###} cells");
             if (def.BuildTool != null)
-                lines.Add($"работа {def.BuildTool.Range:0.###} кл");
+                lines.Add($"work {def.BuildTool.Range:0.###} cells");
             if (!string.IsNullOrEmpty(def.Sprite))
-                lines.Add($"спрайт ×{def.SpriteScale:0.##}");
+                lines.Add($"sprite ×{def.SpriteScale:0.##}");
         }
         else
         {
             var tool = _store.PreviewTool(session.Id);
             if (tool != null)
-                lines.Add($"дальность {tool.Range:0.###} кл");
+                lines.Add($"range {tool.Range:0.###} cells");
         }
 
         const float panelWidth = 238f;
@@ -517,7 +583,7 @@ public partial class ContentEditorPreview : Control
 
         foreach (var session in _store.Sessions)
         {
-            if (!session.ShowOnField)
+            if (!session.ShowOnField || session.Kind == ContentEntityKind.Wave)
                 continue;
 
             var def = _store.PreviewUnit(session.Id);
@@ -569,7 +635,7 @@ public partial class ContentEditorPreview : Control
 
         foreach (var session in _store.Sessions)
         {
-            if (!session.ShowOnField)
+            if (!session.ShowOnField || session.Kind == ContentEntityKind.Wave)
                 continue;
 
             float radius = Const.Unit;

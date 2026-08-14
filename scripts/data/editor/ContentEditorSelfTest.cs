@@ -15,6 +15,10 @@ public static class ContentEditorSelfTest
         failed += Check("preserve comment", PreserveComment);
         failed += Check("remove last key drops section", RemoveLastKeyDropsSection);
         failed += Check("snake enum", SnakeEnum);
+        failed += Check("root key stops at table array", RootKeyStopsAtTableArray);
+        failed += Check("set key in table array item", SetKeyInTableArrayItem);
+        failed += Check("add table array item", AddTableArrayItem);
+        failed += Check("remove table array item with comment", RemoveTableArrayItem);
         return failed;
     }
 
@@ -100,6 +104,69 @@ public static class ContentEditorSelfTest
         return !result.Contains("[terror]")
                && !result.Contains("army_power")
                && result.Contains("id = \"x\"");
+    }
+
+    private const string WaveSource = """
+        id   = "swarm"
+        name = "Рой"
+
+        # ядро волны
+        [[unit_list]]
+        mode  = "allow"
+        units = ["shank"]
+
+        [[unit_list]]
+        mode                = "limit"
+        units               = ["maul"]
+        target_budget_share = 0.35
+
+        [spawn]
+        near_arc_degrees = 45.0
+        """;
+
+    /// <summary>
+    /// Корневой ключ не должен попасть внутрь блока [[unit_list]]: до поддержки
+    /// массивов таблиц строки таких блоков считались продолжением корня файла.
+    /// </summary>
+    private static bool RootKeyStopsAtTableArray()
+    {
+        string result = TomlPatchWriter.SetKey(WaveSource, null, "army_power_budget", "20.0");
+        int budget = result.IndexOf("army_power_budget", StringComparison.Ordinal);
+        int firstBlock = result.IndexOf("[[unit_list]]", StringComparison.Ordinal);
+        return budget > 0 && firstBlock > 0 && budget < firstBlock;
+    }
+
+    private static bool SetKeyInTableArrayItem()
+    {
+        if (TomlPatchWriter.ArrayItemCount(WaveSource, "unit_list") != 2)
+            return false;
+
+        string result = TomlPatchWriter.SetArrayItemKey(
+            WaveSource, "unit_list", 1, "target_budget_share", "0.5");
+        return result.Contains("target_budget_share = 0.5")
+               && result.Contains("units = [\"shank\"]")
+               && result.Contains("# ядро волны")
+               && !result.Contains("0.35");
+    }
+
+    private static bool AddTableArrayItem()
+    {
+        string result = TomlPatchWriter.AddArrayItem(
+            WaveSource, "unit_list",
+            new[] { ("mode", "\"deny\""), ("units", "[\"ares\"]") });
+        return TomlPatchWriter.ArrayItemCount(result, "unit_list") == 3
+               && result.Contains("mode = \"deny\"")
+               && result.Contains("[spawn]");
+    }
+
+    private static bool RemoveTableArrayItem()
+    {
+        string result = TomlPatchWriter.RemoveArrayItem(WaveSource, "unit_list", 0);
+        return TomlPatchWriter.ArrayItemCount(result, "unit_list") == 1
+               && !result.Contains("# ядро волны")
+               && !result.Contains("\"shank\"")
+               && result.Contains("\"maul\"")
+               && result.Contains("[spawn]");
     }
 
     private static bool SnakeEnum() =>

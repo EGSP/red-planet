@@ -8,9 +8,10 @@ using Godot;
 /// невозможно показать для новой.
 /// </summary>
 [Tool]
-public partial class EditorContextTabs : VBoxContainer
+public partial class EditorContextTabs : PanelContainer
 {
     private readonly TabBar _tabs;
+    private readonly Label _caption;
     private readonly PanelContainer _frame;
     private readonly Dictionary<string, Control> _pages = new(StringComparer.Ordinal);
     private string _contextId;
@@ -21,6 +22,33 @@ public partial class EditorContextTabs : VBoxContainer
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
         SizeFlagsVertical = SizeFlags.ExpandFill;
 
+        // Собственная рамка отделяет контекстные страницы от измерительного поля над ними:
+        // без неё обе области читались как одна поверхность.
+        AddThemeStyleboxOverride("panel", ContentEditorTheme.PanelStyle());
+
+        var column = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        AddChild(column);
+
+        // Страницы принадлежат одной сущности, и без подписи их содержимое читалось
+        // как относящееся к редактору целиком.
+        var header = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        column.AddChild(header);
+
+        _caption = new Label
+        {
+            Text = "",
+            Modulate = new Color(1f, 1f, 1f, 0.55f),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+            CustomMinimumSize = new Vector2(120, 0),
+        };
+        _caption.AddThemeFontSizeOverride("font_size", 11);
+        header.AddChild(_caption);
+
         _tabs = new TabBar
         {
             TabCloseDisplayPolicy = TabBar.CloseButtonDisplayPolicy.ShowAlways,
@@ -29,14 +57,14 @@ public partial class EditorContextTabs : VBoxContainer
         };
         _tabs.TabChanged += ShowTab;
         _tabs.TabClosePressed += CloseTab;
-        AddChild(_tabs);
+        header.AddChild(_tabs);
 
         _frame = new PanelContainer
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        AddChild(_frame);
+        column.AddChild(_frame);
         Visible = false;
     }
 
@@ -49,6 +77,8 @@ public partial class EditorContextTabs : VBoxContainer
             return;
 
         _contextId = contextId;
+        _caption.Text = string.IsNullOrEmpty(contextId) ? "" : $"context: {contextId}";
+        _caption.TooltipText = _caption.Text;
         if (!preservePages)
             ClearPages();
     }

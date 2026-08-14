@@ -87,6 +87,45 @@ public sealed class ContentGraphData
 }
 
 /// <summary>Одна запись каталога редактора — файл с <c>id</c>, ещё до сборки Catalog.</summary>
+/// <summary>
+/// Строка карты волн, прочитанная снисходительно из черновика. Отличается от
+/// <see cref="WaveDefinition"/> тем, что существует и для волны, не прошедшей проверку:
+/// правка проходит через недопустимые промежуточные состояния, и строка на карте
+/// не должна при этом исчезать.
+/// </summary>
+public sealed class WaveOverview
+{
+    public string Id { get; init; }
+    public string Path { get; init; }
+    public string FileName { get; init; }
+    public string DisplayName { get; init; }
+    public string[] Tags { get; init; } = Array.Empty<string>();
+    public float TerrorMin { get; init; }
+    public float TerrorMax { get; init; }
+    public float Budget { get; init; }
+    public float BudgetPerTerror { get; init; }
+    public float ChillMultiplier { get; init; }
+    public int ListCount { get; init; }
+
+    /// <summary>Прошла ли волна проверку связности и попала ли в собранный каталог.</summary>
+    public bool Compiled { get; init; }
+
+    public bool Fits(float terror) =>
+        (TerrorMin < 0f || terror >= TerrorMin) && (TerrorMax < 0f || terror <= TerrorMax);
+
+    public float BudgetAt(float terror) => Math.Max(Budget + BudgetPerTerror * terror, 0f);
+}
+
+/// <summary>Один блок [[unit_list]] черновика волны.</summary>
+public sealed class WaveUnitListView
+{
+    public int Index { get; init; }
+    public string Mode { get; init; }
+    public string[] UnitIds { get; init; } = Array.Empty<string>();
+    public float Share { get; init; }
+    public bool HasShare { get; init; }
+}
+
 public sealed class ContentEditorEntry
 {
     public string Id;
@@ -125,6 +164,18 @@ public sealed class ContentEditorWorkspace
 {
     public string ActiveId { get; set; }
     public List<ContentEditorSessionSnapshot> Sessions { get; set; } = new();
+    public string FormFieldFilter { get; set; }
+    public string BalanceViewId { get; set; }
+    public string[] BalanceVisibleColumns { get; set; }
+    public string BalanceSortColumnId { get; set; }
+    public bool BalanceSortAsc { get; set; }
+    public List<ContentEditorSavedView> BalanceSavedViews { get; set; } = new();
+}
+
+public sealed class ContentEditorSavedView
+{
+    public string Name { get; set; }
+    public string[] ColumnIds { get; set; }
 }
 
 public sealed class ContentEditorSessionSnapshot
@@ -158,6 +209,7 @@ public sealed class ContentEditorStore
     private readonly Dictionary<string, ulong> _timestamps = new(StringComparer.Ordinal);
     private readonly List<ContentEditorEntry> _entries = new();
     private readonly Dictionary<string, OpenEntitySession> _sessions = new(StringComparer.Ordinal);
+    private readonly List<WaveOverview> _waveOverviews = new();
 
     public Catalog Catalog { get; private set; } = new();
     public IReadOnlyList<ContentEditorEntry> Entries => _entries;
@@ -332,7 +384,7 @@ public sealed class ContentEditorStore
                 _timestamps.Remove(session.Path);
                 if (ActiveSession == session)
                     ActiveSession = _sessions.Values.LastOrDefault();
-                report.Reloaded.Add($"{session.Id} (файл удалён)");
+                report.Reloaded.Add($"{session.Id} (file deleted)");
                 catalogTouched = true;
                 continue;
             }
@@ -511,15 +563,15 @@ public sealed class ContentEditorStore
     public string Apply(OpenEntitySession session)
     {
         if (session == null)
-            return "нет открытой сущности";
+            return "no open entity";
 
         ulong stamp = FileStamp(session.Path);
         if (stamp != 0 && session.LoadedStamp != 0 && stamp != session.LoadedStamp)
-            return "файл изменён извне; перечитайте с диска";
+            return "file changed externally; reload from disk";
 
         var probe = CompileTexts(DraftMap());
         if (probe.Errors > 0)
-            return $"сборка с ошибками: {probe.Errors}";
+            return $"compile failed: {probe.Errors} errors";
 
         string absolute = ProjectSettings.GlobalizePath(session.Path);
         string temp = absolute + ".tmp";
@@ -533,7 +585,7 @@ public sealed class ContentEditorStore
         }
         catch (Exception ex)
         {
-            return $"запись не удалась: {ex.Message}";
+            return $"write failed: {ex.Message}";
         }
 
         _texts[session.Path] = session.DraftText;
@@ -668,7 +720,7 @@ public sealed class ContentEditorStore
                 AddGraphNode(graph, nodeKeys, entry.Path, toolId,
                     tool?.DisplayName ?? entry.DisplayName, kind);
                 AddGraphEdge(graph, edgeKeys, session.Path, entry.Path,
-                    kind == ContentGraphNodeKind.Weapon ? "оружие" : "инструмент");
+                    kind == ContentGraphNodeKind.Weapon ? "weapon" : "tool");
                 AddTomlDependencies(
                     entry.Path, entry.Path, texts, graph, nodeKeys, edgeKeys,
                     new HashSet<string>(StringComparer.Ordinal));
@@ -695,6 +747,9 @@ public sealed class ContentEditorStore
     {
         if (session == null)
             return null;
+
+        if (session.Kind == ContentEntityKind.Wave)
+            return ReadWaveValue(session, field);
 
         if (session.Kind is ContentEntityKind.Weapon or ContentEntityKind.WorkTool)
         {
@@ -743,6 +798,273 @@ public sealed class ContentEditorStore
         Changed?.Invoke();
     }
 
+    // ── Волны ─────────────────────────────────────────────────────────────────────
+    //
+    // Разбор волн здесь снисходителен и не зависит от Catalog: ContentCompiler отбрасывает
+    // волну целиком при любой ошибке проверки, а редактируемый черновик проходит через
+    // недопустимые промежуточные состояния (пустой список видов, доля вне пределов).
+    // Если бы карта волн читала только Catalog, строка исчезала бы посреди правки.
+
+    public IReadOnlyList<WaveOverview> WaveOverviews => _waveOverviews;
+
+    /// <summary>Виды противника, пригодные для списков волны.</summary>
+    public IReadOnlyList<string> EnemyUnitIds() =>
+        Catalog.Units
+            .Where(unit => unit.Class == UnitClass.Enemy && !string.IsNullOrEmpty(unit.Id))
+            .OrderBy(unit => unit.Id, StringComparer.Ordinal)
+            .Select(unit => unit.Id)
+            .ToList();
+
+    public string UnitDisplayName(string id) =>
+        Catalog.Unit(id) is { } unit && !string.IsNullOrEmpty(unit.DisplayName)
+            ? unit.DisplayName
+            : id;
+
+    /// <summary>Блоки [[unit_list]] черновика в порядке файла.</summary>
+    public IReadOnlyList<WaveUnitListView> WaveLists(OpenEntitySession session)
+    {
+        var result = new List<WaveUnitListView>();
+        if (session == null)
+            return result;
+
+        var table = ParseTable(session.DraftText);
+        if (table == null || !table.TryGetValue("unit_list", out object raw))
+            return result;
+
+        int index = 0;
+        foreach (TomlTable item in TableItems(raw))
+        {
+            result.Add(new WaveUnitListView
+            {
+                Index = index++,
+                Mode = item.TryGetValue("mode", out object mode) && mode is string modeName
+                    ? modeName
+                    : "allow",
+                UnitIds = item.TryGetValue("units", out object units) && units is TomlArray array
+                    ? array.OfType<string>().ToArray()
+                    : Array.Empty<string>(),
+                Share = item.TryGetValue("target_budget_share", out object share)
+                    ? Convert.ToSingle(share, CultureInfo.InvariantCulture)
+                    : 0f,
+                HasShare = item.ContainsKey("target_budget_share"),
+            });
+        }
+
+        return result;
+    }
+
+    public object ArrayItemValue(
+        OpenEntitySession session, string array, int index, ContentFieldSpec field)
+    {
+        if (session == null || field == null)
+            return null;
+
+        var table = ParseTable(session.DraftText);
+        if (table == null || !table.TryGetValue(array, out object raw))
+            return null;
+
+        var items = TableItems(raw).ToList();
+        if (index < 0 || index >= items.Count)
+            return null;
+
+        return items[index].TryGetValue(field.Key, out object value) ? ConvertRaw(value) : null;
+    }
+
+    public bool HasArrayItemValue(
+        OpenEntitySession session, string array, int index, ContentFieldSpec field) =>
+        ArrayItemValue(session, array, index, field) != null;
+
+    public void SetArrayItemField(
+        OpenEntitySession session, string array, int index,
+        ContentFieldSpec field, object value, bool clear)
+    {
+        if (session == null || field == null)
+            return;
+
+        string prior = session.DraftText;
+        if (clear)
+        {
+            session.DraftText = TomlPatchWriter.RemoveArrayItemKey(
+                session.DraftText, array, index, field.Key);
+        }
+        else
+        {
+            string encoded = Encode(field, value);
+            if (encoded == null)
+                return;
+
+            session.DraftText = TomlPatchWriter.SetArrayItemKey(
+                session.DraftText, array, index, field.Key, encoded);
+        }
+
+        CommitDraft(session, prior);
+    }
+
+    public void AddArrayItem(
+        OpenEntitySession session, string array, IReadOnlyList<(string Key, string Value)> initial)
+    {
+        if (session == null)
+            return;
+
+        string prior = session.DraftText;
+        session.DraftText = TomlPatchWriter.AddArrayItem(session.DraftText, array, initial);
+        CommitDraft(session, prior);
+    }
+
+    public void RemoveArrayItem(OpenEntitySession session, string array, int index)
+    {
+        if (session == null)
+            return;
+
+        string prior = session.DraftText;
+        session.DraftText = TomlPatchWriter.RemoveArrayItem(session.DraftText, array, index);
+        CommitDraft(session, prior);
+    }
+
+    /// <summary>Общий хвост правки черновика: отметить, пересобрать и оповестить.</summary>
+    private void CommitDraft(OpenEntitySession session, string prior)
+    {
+        if (string.Equals(prior, session.DraftText, StringComparison.Ordinal))
+            return;
+
+        session.MarkDirty();
+        Recompile();
+        Changed?.Invoke();
+    }
+
+    private object ReadWaveValue(OpenEntitySession session, ContentFieldSpec field)
+    {
+        var wave = Catalog.Wave(session.Id);
+        if (wave == null)
+            return RawValue(session.DraftText, field.RootOnly ? null : field.Section, field.Key);
+
+        if (field.RootOnly || string.IsNullOrEmpty(field.Section))
+        {
+            return field.Key switch
+            {
+                "id" => wave.Id,
+                "name" => wave.DisplayName,
+                "tags" => wave.Tags.ToList(),
+                "prefer_next" => wave.PreferNext.ToList(),
+                "terror_range" => new List<float> { wave.TerrorMin, wave.TerrorMax },
+                "army_power_budget" => wave.ArmyPowerBudget,
+                "army_power_per_terror" => wave.ArmyPowerPerTerror,
+                "chill_interval_multiplier" => wave.ChillIntervalMultiplier,
+                "chill_interval_offset" => wave.ChillIntervalOffset,
+                _ => null,
+            };
+        }
+
+        if (field.Section != "spawn")
+            return null;
+
+        var shape = wave.Shape;
+        return field.Key switch
+        {
+            "near_arc_degrees" => shape.NearArcDegrees,
+            "far_arc_degrees" => shape.FarArcDegrees,
+            "wave_start" => shape.WaveStart,
+            "radius_depth_multiplier" => shape.RadiusDepthMultiplier,
+            "spacing_cells" => shape.SpacingCells,
+            "groups" => shape.Groups,
+            "groups_arc_degrees" => shape.GroupsArcDegrees,
+            "group_delay_seconds" => shape.GroupDelaySeconds,
+            _ => null,
+        };
+    }
+
+    private void RebuildWaveOverviews()
+    {
+        _waveOverviews.Clear();
+        var texts = DraftMap();
+
+        foreach (var entry in _entries.Where(candidate => candidate.Kind == ContentEntityKind.Wave))
+        {
+            if (!texts.TryGetValue(entry.Path, out string text))
+                continue;
+
+            var table = ParseTable(text);
+            if (table == null)
+                continue;
+
+            var range = table.TryGetValue("terror_range", out object rangeValue)
+                        && rangeValue is TomlArray rangeArray
+                ? rangeArray.Select(item => Convert.ToSingle(item, CultureInfo.InvariantCulture)).ToArray()
+                : Array.Empty<float>();
+
+            var overview = new WaveOverview
+            {
+                Id = entry.Id,
+                Path = entry.Path,
+                FileName = entry.FileName,
+                DisplayName = entry.DisplayName,
+                Tags = table.TryGetValue("tags", out object tags) && tags is TomlArray tagArray
+                    ? tagArray.OfType<string>().ToArray()
+                    : Array.Empty<string>(),
+                TerrorMin = range.Length > 0 ? range[0] : -1f,
+                TerrorMax = range.Length > 1 ? range[1] : -1f,
+                Budget = Number(table, "army_power_budget", 10f),
+                BudgetPerTerror = Number(table, "army_power_per_terror", 0f),
+                ChillMultiplier = Number(table, "chill_interval_multiplier", 1f),
+                ListCount = table.TryGetValue("unit_list", out object lists)
+                    ? TableItems(lists).Count()
+                    : 0,
+                Compiled = Catalog.Wave(entry.Id) != null,
+            };
+
+            _waveOverviews.Add(overview);
+        }
+    }
+
+    private static float Number(TomlTable table, string key, float fallback) =>
+        table.TryGetValue(key, out object value)
+            ? Convert.ToSingle(value, CultureInfo.InvariantCulture)
+            : fallback;
+
+    /// <summary>Элементы массива таблиц независимо от того, чем их представил разбор.</summary>
+    private static IEnumerable<TomlTable> TableItems(object raw) => raw switch
+    {
+        TomlTableArray array => array,
+        TomlArray array => array.OfType<TomlTable>(),
+        TomlTable single => new[] { single },
+        _ => Array.Empty<TomlTable>(),
+    };
+
+    private static object RawValue(string text, string section, string key)
+    {
+        var table = ParseTable(text);
+        if (table == null)
+            return null;
+
+        if (!string.IsNullOrEmpty(section))
+        {
+            if (!table.TryGetValue(section, out object sectionValue)
+                || sectionValue is not TomlTable sectionTable)
+            {
+                return null;
+            }
+
+            table = sectionTable;
+        }
+
+        return table.TryGetValue(key, out object value) ? ConvertRaw(value) : null;
+    }
+
+    private static object ConvertRaw(object value) => value switch
+    {
+        double number => (float)number,
+        long number => (int)number,
+        TomlArray array when array.All(item => item is string) =>
+            array.OfType<string>().ToList(),
+        TomlArray array => array
+            .Select(item => Convert.ToSingle(item, CultureInfo.InvariantCulture))
+            .ToList(),
+        _ => value,
+    };
+
+    private static bool IsWavePath(string path) =>
+        path != null && path.Contains("/waves/", StringComparison.Ordinal);
+
     private void AutoPlace(OpenEntitySession session)
     {
         // Новая сущность ставится правее всех уже открытых с учётом их габарита.
@@ -782,6 +1104,7 @@ public sealed class ContentEditorStore
 
         ReclassifyEntries();
         ReconcileOpenSessions();
+        RebuildWaveOverviews();
     }
 
     /// <summary>
@@ -792,6 +1115,9 @@ public sealed class ContentEditorStore
     {
         foreach (var entry in _entries)
         {
+            if (entry.Kind == ContentEntityKind.Wave)
+                continue;
+
             if (Catalog.Tool(entry.Id) is WeaponDefinition)
                 entry.Kind = ContentEntityKind.Weapon;
             else if (Catalog.Tool(entry.Id) is WorkToolDefinition)
@@ -849,7 +1175,13 @@ public sealed class ContentEditorStore
         string name = table.TryGetValue("name", out object nameValue) && nameValue is string n ? n : id;
 
         ContentEntityKind kind;
-        if (table.TryGetValue("kind", out object kindValue) && kindValue is string kindName)
+        if (IsWavePath(path))
+        {
+            // Волна опознаётся по расположению файла: ключа kind у неё нет, а класс
+            // сущности к ней неприменим.
+            kind = ContentEntityKind.Wave;
+        }
+        else if (table.TryGetValue("kind", out object kindValue) && kindValue is string kindName)
         {
             kind = kindName == "weapon" ? ContentEntityKind.Weapon : ContentEntityKind.WorkTool;
         }
@@ -1073,7 +1405,7 @@ public sealed class ContentEditorStore
             return;
 
         if (table.TryGetValue("base", out object rootBase))
-            AddBaseDependency(nodeKey, rootBase, "наследует", texts, graph, nodeKeys, edgeKeys, visited);
+            AddBaseDependency(nodeKey, rootBase, "inherits", texts, graph, nodeKeys, edgeKeys, visited);
 
         foreach (var pair in table)
         {
@@ -1081,7 +1413,7 @@ public sealed class ContentEditorStore
                 && section.TryGetValue("base", out object sectionBase))
             {
                 AddBaseDependency(
-                    nodeKey, sectionBase, $"секция [{pair.Key}]", texts,
+                    nodeKey, sectionBase, $"section [{pair.Key}]", texts,
                     graph, nodeKeys, edgeKeys, visited);
             }
         }
@@ -1523,6 +1855,7 @@ public sealed class ContentEditorStore
             "res://resources/tools/",
             "res://resources/units/",
             "res://resources/buildings/",
+            "res://resources/waves/",
         };
 
         foreach (string root in roots)

@@ -22,7 +22,16 @@ public static class TomlPatchWriter
         RegexOptions.Compiled);
 
     private static readonly Regex SectionHeader = new(
-        @"^\s*\[(?<name>[^\]]+)\]\s*(#.*)?$",
+        @"^\s*\[(?<name>[^\[\]]+)\]\s*(#.*)?$",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Заголовок элемента массива таблиц: [[unit_list]]. Отдельное выражение нужно,
+    /// поскольку такой заголовок не является секцией: одноимённых блоков в файле
+    /// несколько, и обращение к ним идёт по номеру.
+    /// </summary>
+    private static readonly Regex ArrayItemHeader = new(
+        @"^\s*\[\[(?<name>[^\[\]]+)\]\]\s*(#.*)?$",
         RegexOptions.Compiled);
 
     /// <summary>Записать или обновить ключ. section = null или пусто — корень файла.</summary>
@@ -138,6 +147,154 @@ public static class TomlPatchWriter
         return JoinLines(lines, EndsWithNewline(source));
     }
 
+    // ── Массивы таблиц ────────────────────────────────────────────────────────────
+    //
+    // Блоки [[name]] правятся по номеру, а не по имени: одноимённых блоков в файле
+    // несколько, и различает их только порядок. Правка ключа внутри блока сохраняет
+    // остальные его строки и комментарии; удаляется блок целиком вместе с пояснением
+    // непосредственно над заголовком, поскольку такое пояснение относится именно к нему.
+
+    /// <summary>Сколько блоков [[name]] в тексте.</summary>
+    public static int ArrayItemCount(string source, string name) =>
+        ArrayItemSpans(SplitLines(source ?? ""), name).Count;
+
+    /// <summary>Записать или обновить ключ внутри блока [[name]] с этим номером.</summary>
+    public static string SetArrayItemKey(
+        string source, string name, int index, string key, string valueToml)
+    {
+        source ??= "";
+        var lines = SplitLines(source);
+        var spans = ArrayItemSpans(lines, name);
+        if (index < 0 || index >= spans.Count)
+            return source;
+
+        (int start, int end) = spans[index];
+        int keyIndex = FindKeyInSpan(lines, start + 1, end, key);
+        if (keyIndex >= 0)
+        {
+            var match = KeyLine.Match(lines[keyIndex]);
+            string indent = match.Success ? match.Groups["indent"].Value : "";
+            string trail = match.Success ? match.Groups["trail"].Value : "";
+            lines[keyIndex] = indent + $"{key} = {valueToml}" + trail;
+            return JoinLines(lines, EndsWithNewline(source));
+        }
+
+        int at = end;
+        while (at > start + 1 && string.IsNullOrWhiteSpace(lines[at - 1]))
+            at--;
+
+        lines.Insert(at, FormatAssignment(key, valueToml));
+        return JoinLines(lines, EndsWithNewline(source));
+    }
+
+    /// <summary>Удалить ключ внутри блока. Сам блок остаётся, даже если стал пустым.</summary>
+    public static string RemoveArrayItemKey(string source, string name, int index, string key)
+    {
+        source ??= "";
+        var lines = SplitLines(source);
+        var spans = ArrayItemSpans(lines, name);
+        if (index < 0 || index >= spans.Count)
+            return source;
+
+        (int start, int end) = spans[index];
+        int keyIndex = FindKeyInSpan(lines, start + 1, end, key);
+        if (keyIndex < 0)
+            return source;
+
+        lines.RemoveAt(keyIndex);
+        return JoinLines(lines, EndsWithNewline(source));
+    }
+
+    /// <summary>Добавить блок [[name]] в конец файла.</summary>
+    public static string AddArrayItem(
+        string source, string name, IReadOnlyList<(string Key, string Value)> entries)
+    {
+        source ??= "";
+        var lines = SplitLines(source);
+
+        if (lines.Count > 0 && !string.IsNullOrWhiteSpace(lines[^1]))
+            lines.Add("");
+
+        lines.Add($"[[{name}]]");
+        foreach (var entry in entries ?? Array.Empty<(string, string)>())
+            lines.Add(FormatAssignment(entry.Key, entry.Value));
+
+        return JoinLines(lines, EndsWithNewline(source));
+    }
+
+    /// <summary>
+    /// Удалить блок с этим номером вместе с комментарием, стоящим непосредственно
+    /// над его заголовком.
+    /// </summary>
+    public static string RemoveArrayItem(string source, string name, int index)
+    {
+        source ??= "";
+        var lines = SplitLines(source);
+        var spans = ArrayItemSpans(lines, name);
+        if (index < 0 || index >= spans.Count)
+            return source;
+
+        (int start, int end) = spans[index];
+
+        // Пояснение над заголовком описывает именно этот блок и без него теряет смысл.
+        int from = start;
+        while (from > 0 && lines[from - 1].TrimStart().StartsWith('#'))
+            from--;
+
+        // Пустая строка перед блоком отделяла его от предыдущего и уходит вместе с ним.
+        if (from > 0 && string.IsNullOrWhiteSpace(lines[from - 1]))
+            from--;
+
+        lines.RemoveRange(from, end - from);
+        while (from < lines.Count && string.IsNullOrWhiteSpace(lines[from])
+               && (from == 0 || string.IsNullOrWhiteSpace(lines[from - 1])))
+        {
+            lines.RemoveAt(from);
+        }
+
+        return JoinLines(lines, EndsWithNewline(source));
+    }
+
+    /// <summary>Границы блоков [[name]]: заголовок и строка за последней строкой блока.</summary>
+    private static List<(int Start, int End)> ArrayItemSpans(List<string> lines, string name)
+    {
+        var spans = new List<(int, int)>();
+        int open = -1;
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var header = ArrayItemHeader.Match(lines[i]);
+            bool ownHeader = header.Success
+                             && string.Equals(header.Groups["name"].Value.Trim(), name, StringComparison.Ordinal);
+
+            if (open >= 0 && (header.Success || SectionHeader.IsMatch(lines[i])))
+            {
+                spans.Add((open, i));
+                open = -1;
+            }
+
+            if (ownHeader)
+                open = i;
+        }
+
+        if (open >= 0)
+            spans.Add((open, lines.Count));
+
+        return spans;
+    }
+
+    private static int FindKeyInSpan(List<string> lines, int from, int to, string key)
+    {
+        for (int i = from; i < to && i < lines.Count; i++)
+        {
+            var match = KeyLine.Match(lines[i]);
+            if (match.Success && string.Equals(match.Groups["key"].Value, key, StringComparison.Ordinal))
+                return i;
+        }
+
+        return -1;
+    }
+
     public static string FormatBool(bool value) => value ? "true" : "false";
 
     public static string FormatFloat(float value) =>
@@ -224,6 +381,19 @@ public static class TomlPatchWriter
 
         for (int i = 0; i < lines.Count; i++)
         {
+            // Элемент массива таблиц завершает и корень, и любую секцию: его ключи
+            // принадлежат только ему.
+            if (ArrayItemHeader.IsMatch(lines[i]))
+            {
+                if (inTarget)
+                {
+                    sectionEnd = i;
+                    break;
+                }
+
+                continue;
+            }
+
             var header = SectionHeader.Match(lines[i]);
             if (header.Success)
             {
@@ -281,7 +451,7 @@ public static class TomlPatchWriter
 
         for (int i = 0; i < lines.Count; i++)
         {
-            if (SectionHeader.IsMatch(lines[i]))
+            if (SectionHeader.IsMatch(lines[i]) || ArrayItemHeader.IsMatch(lines[i]))
                 return lastRootKey >= 0 ? lastRootKey + 1 : i;
 
             if (KeyLine.IsMatch(lines[i]))
