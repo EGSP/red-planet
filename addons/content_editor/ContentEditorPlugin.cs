@@ -1,32 +1,34 @@
 using Godot;
 
 /// <summary>
-/// Плагин вкладки главного экрана «Контент».
+/// C#-мост вкладки «Контент». Сам EditorPlugin живёт в plugin.gd: узел на C# нельзя
+/// оставлять корнем плагина, иначе выгрузка сборки застаёт его в дереве редактора.
 ///
 /// ПОЧЕМУ MAIN SCREEN, А НЕ DOCK. Редактору нужны каталог, поле сравнения и форма
 /// одновременно; узкая боковая панель для этого тесна. Вкладка рядом с 2D/3D/Script
 /// даёт полную ширину и не перекрывает инспектор сцены.
 ///
 /// ЖИЗНЕННЫЙ ЦИКЛ. Control создаётся в _EnterTree и остаётся потомком главного экрана
-/// до выгрузки плагина. Видимость переключает Godot через _MakeVisible. Первая загрузка
-/// каталога откладывается до первого показа: нет смысла читать все .toml, пока вкладку
-/// не открыли.
+/// до выгрузки моста. Видимость переключает GDScript-плагин через MakeVisible.
+/// Первая загрузка каталога откладывается до первого показа.
 ///
-/// ВЫГРУЗКА СБОРКИ. Узлы типов из игровой DLL нельзя оставлять в дереве редактора:
-/// горячая перезагрузка C# выгружает AssemblyLoadContext, пока эти узлы ещё живут,
-/// и редактор падает с 0xC0000005. _ExitTree освобождает дерево безусловно, находя
-/// узлы по имени, а не только по managed-полю. Остаточный узел после перезагрузки
-/// не переиспользуется: его освобождают и строят заново. Открытые вкладки и черновики
-/// возвращает снимок .godot/content_editor_workspace.cfg, а не то же нативное дерево.
+/// ВЫГРУЗКА СБОРКИ. native-узлы игровых типов снимаются в трёх местах: Teardown моста,
+/// выход GDScript-плагина и AssemblyLoadContext.Unloading — последнее срабатывает
+/// даже когда Godot не вызывает C# _ExitTree. Остаточный узел не переиспользуется.
+/// Вкладки возвращает снимок .godot/content_editor_workspace.cfg.
 ///
 /// ВНЕШНИЕ ПРАВКИ. Подписка на EditorFileSystem.FilesystemChanged ловит сохранение файла
 /// внутри Godot. Возврат фокуса окна и повторный показ вкладки ловят правку во внешнем
 /// редакторе (Cursor и т.п.), которую FilesystemChanged может не прислать сразу.
 /// </summary>
 [Tool]
-public partial class ContentEditorPlugin : EditorPlugin
+public partial class ContentEditorPlugin : Node
 {
+    public const string BridgeNodeName = "RedPlanetContentEditorBridge";
+
     private const string FloatingWindowName = "RedPlanetContentEditorWindow";
+
+    private static ContentEditorPlugin _instance;
 
     private ContentEditorMain _main;
     private Window _floatingWindow;
@@ -37,42 +39,61 @@ public partial class ContentEditorPlugin : EditorPlugin
 
     public override void _EnterTree()
     {
+        _instance = this;
+        Name = BridgeNodeName;
+        AssemblyUnloadCleanup.BeforeUnload -= ReleaseForAssemblyUnload;
+        AssemblyUnloadCleanup.BeforeUnload += ReleaseForAssemblyUnload;
         _active = true;
+        CallDeferred(nameof(EnsureMainDeferred));
+    }
+
+    /// <summary>
+    /// Создать скрытый главный экран после входа моста в дерево. Синхронный EnsureMain
+    /// из _EnterTree оболочки останавливал загрузку редактора; отложенный вызов
+    /// приходится на кадр, когда EditorInterface уже доступен.
+    /// </summary>
+    private void EnsureMainDeferred()
+    {
+        if (!_active || !IsInsideTree())
+            return;
+
         EnsureMain();
-        EnsureFileSystemSubscription();
     }
 
     public override void _ExitTree()
     {
-        _active = false;
-        RemoveFileSystemSubscription();
-
-        if (IsInstanceValid(_main))
-        {
-            _main.FloatingModeToggleRequested -= ToggleFloatingMode;
-            _main.Shutdown();
-        }
-
-        RemoveFloatingWindowSubscription();
-
-        var editor = EditorInterface.Singleton;
-        var screen = editor?.GetEditorMainScreen();
-        var baseControl = editor?.GetBaseControl();
-
-        // Окно держит главный экран как потомка; его освобождают первым.
-        // Поиск по имени покрывает случай, когда managed-поле уже обнулено.
-        FreeNamedChild(baseControl, FloatingWindowName);
-        FreeNamedChild(screen, ContentEditorMain.EditorNodeName);
-        FreeNode(_main);
-        FreeNode(_floatingWindow);
-
-        _main = null;
-        _floatingWindow = null;
+        AssemblyUnloadCleanup.BeforeUnload -= ReleaseForAssemblyUnload;
+        Teardown();
+        if (_instance == this)
+            _instance = null;
     }
 
-    public override bool _HasMainScreen() => true;
+    /// <summary>
+    /// Снять C#-узлы редактора контента, пока управляемый код ещё исполняется.
+    /// Вызывается из AssemblyLoadContext.Unloading до фактической выгрузки ALC.
+    /// </summary>
+    public static void ReleaseForAssemblyUnload()
+    {
+        if (!Engine.IsEditorHint())
+            return;
 
-    public override void _MakeVisible(bool visible)
+        ContentEditorPlugin instance = _instance;
+        _instance = null;
+
+        if (instance != null && IsInstanceValid(instance))
+        {
+            AssemblyUnloadCleanup.BeforeUnload -= ReleaseForAssemblyUnload;
+            instance.Teardown();
+            FreeNode(instance);
+            return;
+        }
+
+        var editor = EditorInterface.Singleton;
+        FreeNamedChild(editor?.GetBaseControl(), FloatingWindowName);
+        FreeNamedChild(editor?.GetEditorMainScreen(), ContentEditorMain.EditorNodeName);
+    }
+
+    public void MakeVisible(bool visible)
     {
         if (!_active || !EnsureMain())
             return;
@@ -95,15 +116,40 @@ public partial class ContentEditorPlugin : EditorPlugin
             _main.CheckExternalChanges();
     }
 
-    public override string _GetPluginName() => "Content";
-
-    public override Texture2D _GetPluginIcon()
+    public Texture2D GetPluginIcon()
     {
         var editor = EditorInterface.Singleton;
         var baseControl = editor?.GetBaseControl();
         return IsInstanceValid(baseControl)
             ? baseControl.GetThemeIcon("ResourcePreloader", "EditorIcons")
             : null;
+    }
+
+    private void Teardown()
+    {
+        _active = false;
+        RemoveFileSystemSubscription();
+
+        if (IsInstanceValid(_main))
+        {
+            _main.FloatingModeToggleRequested -= ToggleFloatingMode;
+            _main.Shutdown();
+        }
+
+        RemoveFloatingWindowSubscription();
+
+        var editor = EditorInterface.Singleton;
+        var screen = editor?.GetEditorMainScreen();
+        var baseControl = editor?.GetBaseControl();
+
+        // Окно держит главный экран как потомка; его освобождают первым.
+        FreeNamedChild(baseControl, FloatingWindowName);
+        FreeNamedChild(screen, ContentEditorMain.EditorNodeName);
+        FreeNode(_main);
+        FreeNode(_floatingWindow);
+
+        _main = null;
+        _floatingWindow = null;
     }
 
     private void OnFilesystemChanged()

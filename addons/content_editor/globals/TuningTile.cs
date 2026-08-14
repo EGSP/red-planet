@@ -61,6 +61,9 @@ public partial class TuningTile : EditorPanel
     /// <summary>Ключ ресурса: им плитка опознаётся в снимке рабочего места.</summary>
     public string Id => _draft.Spec.Id;
 
+    /// <summary>Есть ли несохранённые правки плитки. От них зависит, можно ли перечитать диск.</summary>
+    public bool Dirty => _draft.Dirty;
+
     /// <summary>Свёрнута ли плитка. Свёрнутая показывает только заголовок и действия.</summary>
     public bool Collapsed
     {
@@ -179,18 +182,27 @@ public partial class TuningTile : EditorPanel
         _body.AddChild(PathLabel());
 
         string group = null;
+        bool groupOn = true;
         foreach (var field in _draft.Fields)
         {
             if (field.Group != group)
             {
                 group = field.Group;
+                var toggle = SectionToggle(_draft.Fields, group);
+                groupOn = toggle == null || _draft.Value(toggle).AsBool();
                 if (!string.IsNullOrEmpty(group))
-                    _body.AddChild(GroupHeading(group));
+                    _body.AddChild(GroupHeading(group, toggle));
             }
 
-            _body.AddChild(field.Kind == TuningFieldKind.Complex
+            if (IsSectionToggle(field))
+                continue;
+
+            Control row = field.Kind == TuningFieldKind.Complex
                 ? ComplexRow(field)
-                : FieldRow(field));
+                : FieldRow(field);
+            if (!groupOn)
+                row.Modulate = new Color(1f, 1f, 1f, 0.4f);
+            _body.AddChild(row);
         }
     }
 
@@ -241,13 +253,58 @@ public partial class TuningTile : EditorPanel
         return label;
     }
 
-    private static Control GroupHeading(string title)
+    /// <summary>
+    /// Заголовок группы полей. Если у группы есть логический признак с суффиксом
+    /// <c>Enabled</c>, он выносится в заголовок тумблером и отдельной строкой не
+    /// показывается: выключение относится к секции целиком, а не к ещё одному числу.
+    /// </summary>
+    private Control GroupHeading(string title, TuningField enabledField)
     {
-        var heading = new Label { Text = title };
+        var row = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+
+        var heading = new Label
+        {
+            Text = title,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         heading.AddThemeColorOverride("font_color", new Color(0.72f, 0.84f, 1f));
         heading.AddThemeFontSizeOverride("font_size", 12);
-        return heading;
+        row.AddChild(heading);
+
+        if (enabledField == null)
+            return row;
+
+        bool on = _draft.Value(enabledField).AsBool();
+        var toggle = new CheckButton
+        {
+            Text = "Enabled",
+            ButtonPressed = on,
+            TooltipText = string.IsNullOrEmpty(enabledField.Hint)
+                ? enabledField.Name
+                : $"{enabledField.Name}\n{enabledField.Hint}",
+        };
+        if (_draft.IsEdited(enabledField))
+            toggle.Modulate = new Color(1f, 0.85f, 0.5f);
+        toggle.Toggled += pressed => Commit(enabledField, pressed);
+        row.AddChild(toggle);
+        return row;
     }
+
+    /// <summary>
+    /// Логический признак участия секции в подсчёте: имя оканчивается на <c>Enabled</c>,
+    /// поле стоит внутри группы. Такие поля рисуются в заголовке, а не отдельной строкой.
+    /// </summary>
+    private static bool IsSectionToggle(TuningField field) =>
+        field != null
+        && field.Kind == TuningFieldKind.Bool
+        && !string.IsNullOrEmpty(field.Group)
+        && field.Name.EndsWith("Enabled", StringComparison.Ordinal);
+
+    private static TuningField SectionToggle(IReadOnlyList<TuningField> fields, string group) =>
+        string.IsNullOrEmpty(group)
+            ? null
+            : fields.FirstOrDefault(field => field.Group == group && IsSectionToggle(field));
 
     // ── Строки полей ──────────────────────────────────────────────────────────────
 

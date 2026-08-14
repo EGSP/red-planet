@@ -2,7 +2,8 @@ using Godot;
 
 /// <summary>
 /// Плашки террора у правого края: итог, бюджет постоянного давления рядом с ним
-/// и четыре слагаемых, из которых итог собран.
+/// и слагаемые, из которых итог собран. Слагаемое, выключенное в настройках,
+/// на панель не выводится: нулевой вклад иначе читался бы как поломка показателя.
 ///
 /// ПОКАЗЫВАЕТСЯ ВКЛАД ПОСЛЕ КРИВОЙ, а не сырая сумма весов. Это не оформительская мелочь:
 /// по сырой сумме игрок не смог бы объяснить себе, почему двадцать новых заборов не сдвинули
@@ -25,12 +26,14 @@ public partial class TerrorBar : CanvasLayer
     /// <summary>Одно слагаемое: имя, вклад в очках террора и сырая величина под ним.</summary>
     private sealed class Plate
     {
+        public Control Root;
         public Label Value;
         public Label Raw;
     }
 
     private Label _total;
     private Label _budget;
+    private Control _partsSeparator;
     private Plate _production;
     private Plate _expansion;
     private Plate _army;
@@ -73,7 +76,8 @@ public partial class TerrorBar : CanvasLayer
 
         (_total, _budget) = AddTotal(rows);
 
-        rows.AddChild(new HSeparator());
+        _partsSeparator = new HSeparator();
+        rows.AddChild(_partsSeparator);
 
         _production = AddPlate(rows, "производство");
         _expansion = AddPlate(rows, "экспансия");
@@ -129,7 +133,7 @@ public partial class TerrorBar : CanvasLayer
         name.AddThemeColorOverride("font_color", PartColor);
         row.AddChild(name);
 
-        var plate = new Plate();
+        var plate = new Plate { Root = row };
 
         // Сырая величина идёт перед вкладом и мельче: главное здесь — очки террора,
         // а «сколько всего» служит подсказкой при настройке
@@ -168,18 +172,34 @@ public partial class TerrorBar : CanvasLayer
         var pressure = GameManager.I.System<PressureSystem>();
         _budget.Text = pressure != null ? $"{pressure.Budget:0.#}" : "—";
 
-        Show(_production, terror.Production, terror.RawProduction);
-        Show(_expansion, terror.Expansion, terror.RawExpansion);
-        Show(_army, terror.Army, terror.RawArmy);
+        var settings = terror.Settings;
+        bool production = settings?.ProductionEnabled ?? true;
+        bool expansion = settings?.ExpansionEnabled ?? true;
+        bool army = settings?.ArmyEnabled ?? true;
+        bool time = settings?.TimeEnabled ?? true;
 
-        // У времени сырая величина — секунды, и в секундах она нечитаема: показываем
-        // минуты и секунды, как показывают длительность партии
-        _time.Value.Text = $"{terror.Time:0.#}";
-        _time.Raw.Text = Elapsed(terror.RawTime);
+        _partsSeparator.Visible = production || expansion || army || time;
+
+        Show(_production, terror.Production, terror.RawProduction, production);
+        Show(_expansion, terror.Expansion, terror.RawExpansion, expansion);
+        Show(_army, terror.Army, terror.RawArmy, army);
+
+        _time.Root.Visible = time;
+        if (time)
+        {
+            // У времени сырая величина — секунды, и в секундах она нечитаема: показываем
+            // минуты и секунды, как показывают длительность партии
+            _time.Value.Text = $"{terror.Time:0.#}";
+            _time.Raw.Text = Elapsed(terror.RawTime);
+        }
     }
 
-    private static void Show(Plate plate, float value, float raw)
+    private static void Show(Plate plate, float value, float raw, bool enabled)
     {
+        plate.Root.Visible = enabled;
+        if (!enabled)
+            return;
+
         plate.Value.Text = $"{value:0.#}";
         plate.Raw.Text = $"{raw:0.#}";
     }

@@ -2,31 +2,33 @@
 
 [ext_resource type="Script" uid="uid://cxj0ilhp618hp" path="res://scripts/pressure/TerrorSettings.cs" id="1_settings"]
 
-[sub_resource type="Curve" id="Curve_army"]
+[sub_resource type="Curve" id="Curve_lsvjd"]
 _data = [Vector2(0, 0), 0.0, 4.0, 0, 0, Vector2(0.1, 0.2512), 1.5071, 1.5071, 0, 0, Vector2(0.25, 0.4353), 1.0447, 1.0447, 0, 0, Vector2(0.5, 0.6598), 0.7917, 0.7917, 0, 0, Vector2(0.75, 0.8415), 0.6732, 0.6732, 0, 0, Vector2(1, 1), 0.6, 0.0, 0, 0]
 point_count = 6
 
-[sub_resource type="Curve" id="Curve_expansion"]
+[sub_resource type="Curve" id="Curve_7psm6"]
 _data = [Vector2(0, 0), 0.0, 4.0, 0, 0, Vector2(0.1, 0.2512), 1.5071, 1.5071, 0, 0, Vector2(0.25, 0.4353), 1.0447, 1.0447, 0, 0, Vector2(0.5, 0.6598), 0.7917, 0.7917, 0, 0, Vector2(0.75, 0.8415), 0.6732, 0.6732, 0, 0, Vector2(1, 1), 0.6, 0.0, 0, 0]
 point_count = 6
 
-[sub_resource type="Curve" id="Curve_production"]
+[sub_resource type="Curve" id="Curve_ai1sg"]
 _data = [Vector2(0, 0), 0.0, 4.0, 0, 0, Vector2(0.1, 0.2512), 1.5071, 1.5071, 0, 0, Vector2(0.25, 0.4353), 1.0447, 1.0447, 0, 0, Vector2(0.5, 0.6598), 0.7917, 0.7917, 0, 0, Vector2(0.75, 0.8415), 0.6732, 0.6732, 0, 0, Vector2(1, 1), 0.6, 0.0, 0, 0]
 point_count = 6
 
-[sub_resource type="Curve" id="Curve_time"]
+[sub_resource type="Curve" id="Curve_din1r"]
 _data = [Vector2(0, 0), 0.0, 4.0, 0, 0, Vector2(0.1, 0.2512), 1.5071, 1.5071, 0, 0, Vector2(0.25, 0.4353), 1.0447, 1.0447, 0, 0, Vector2(0.5, 0.6598), 0.7917, 0.7917, 0, 0, Vector2(0.75, 0.8415), 0.6732, 0.6732, 0, 0, Vector2(1, 1), 0.6, 0.0, 0, 0]
 point_count = 6
 
 [resource]
 script = ExtResource("1_settings")
 EnergyPerMetal = 85.71
-ProductionCurve = SubResource("Curve_production")
+ProductionEnabled = false
+ProductionCurve = SubResource("Curve_ai1sg")
 ProductionTail = 0.15
-ExpansionCurve = SubResource("Curve_expansion")
+ExpansionEnabled = false
+ExpansionCurve = SubResource("Curve_7psm6")
 ExpansionTail = 0.15
-ArmyCurve = SubResource("Curve_army")
+ArmyCurve = SubResource("Curve_lsvjd")
 ArmyTail = 0.15
-TimeCurve = SubResource("Curve_time")
+TimeCurve = SubResource("Curve_din1r")
 TimeTail = 0.15
 FallbackExponent = 0.6

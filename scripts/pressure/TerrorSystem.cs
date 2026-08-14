@@ -114,9 +114,9 @@ public partial class TerrorSystem : GameSystem
     {
         var settings = Settings;
 
-        RawProduction = Produce(settings);
-        RawExpansion = Expand();
-        RawArmy = Arm();
+        RawProduction = settings.ProductionEnabled ? Produce(settings) : 0f;
+        RawExpansion = settings.ExpansionEnabled ? Expand() : 0f;
+        RawArmy = settings.ArmyEnabled ? Arm() : 0f;
         RawTime += interval;
 
         Production = settings.Production(RawProduction);

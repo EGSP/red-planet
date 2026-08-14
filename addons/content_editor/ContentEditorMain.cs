@@ -410,7 +410,7 @@ public partial class ContentEditorMain : Control
         toolbar.AddChild(scope);
 
         _reloadAllButton = EditorControls.Add(toolbar, "Reload all files", "Reload", ReloadEverything,
-            "Re-read every .toml of the project. Drafts of unsaved tabs are kept.");
+            "Re-read every .toml and every Globals .tres. Drafts of unsaved tabs and dirty tiles are kept.");
 
         _status = new Label
         {

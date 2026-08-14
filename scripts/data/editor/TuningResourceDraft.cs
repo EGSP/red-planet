@@ -102,7 +102,9 @@ public sealed class TuningResourceDraft
 
         try
         {
-            Resource = ResourceLoader.Exists(Path) ? ResourceLoader.Load<Resource>(Path) : null;
+            Resource = ResourceLoader.Exists(Path)
+                ? ResourceLoader.Load<Resource>(Path, cacheMode: ResourceLoader.CacheMode.Replace)
+                : null;
         }
         catch (Exception ex)
         {

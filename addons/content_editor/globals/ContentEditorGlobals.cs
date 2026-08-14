@@ -53,11 +53,17 @@ public partial class ContentEditorGlobals : ScrollContainer, IContentEditorMode
     {
         EnsureUi();
 
-        // Ресурс мог быть изменён извне — инспектором Godot либо правкой файла. Плитка
-        // без несохранённых правок перечитывается молча; плитка с правками их сохраняет,
+        // Ресурс мог быть изменён извне — инспектором Godot либо правкой файла.
+        // Refresh только перестраивает виджеты по уже прочитанным полям и диск не трогает.
+        // Плитка без несохранённых правок перечитывается; плитка с правками их сохраняет,
         // поскольку иначе обновление соседнего режима уничтожало бы работу.
         foreach (var tile in _tiles)
-            EditorControls.Run($"refresh {tile.Id}", tile.Refresh);
+        {
+            if (tile.Dirty)
+                EditorControls.Run($"refresh {tile.Id}", tile.Refresh);
+            else
+                EditorControls.Run($"reload {tile.Id}", tile.Reload);
+        }
     }
 
     public void CaptureInto(ContentEditorWorkspace workspace)
