@@ -19,6 +19,9 @@ public static class ContentEditorSelfTest
         failed += Check("set key in table array item", SetKeyInTableArrayItem);
         failed += Check("add table array item", AddTableArrayItem);
         failed += Check("remove table array item with comment", RemoveTableArrayItem);
+        failed += Check("scene binding reads assigned resource", SceneBindingReads);
+        failed += Check("scene binding replaces the sole reference", SceneBindingReplaces);
+        failed += Check("scene binding adds a reference when shared", SceneBindingAddsReference);
         return failed;
     }
 
@@ -172,4 +175,65 @@ public static class ContentEditorSelfTest
     private static bool SnakeEnum() =>
         TomlPatchWriter.ToSnake("MetalArea") == "metal_area"
         && TomlPatchWriter.FormatEnum("AttackMove") == "\"attack_move\"";
+
+    // ── Замена ссылки на настроечный ресурс в сцене ───────────────────────────────
+
+    /// <summary>Сцена из двух узлов: один ресурс у каждого и один общий на двоих.</summary>
+    private const string SceneSource = """
+        [gd_scene load_steps=3 format=3]
+
+        [ext_resource type="Resource" uid="uid://aaa" path="res://resources/tuning/terror.tres" id="30_terror"]
+        [ext_resource type="Resource" uid="uid://bbb" path="res://resources/tuning/pressure.tres" id="37_pressure"]
+
+        [node name="Session" type="Node2D"]
+
+        [node name="TerrorSystem" type="Node" parent="Systems"]
+        script = ExtResource("1_script")
+        Settings = ExtResource("30_terror")
+
+        [node name="PressureSystem" type="Node" parent="Systems"]
+        Settings = ExtResource("37_pressure")
+        """;
+
+    private static bool SceneBindingReads() =>
+        TuningSceneText.PathOf(SceneSource, "TerrorSystem", "Settings")
+            == "res://resources/tuning/terror.tres"
+        && TuningSceneText.PathOf(SceneSource, "PressureSystem", "Settings")
+            == "res://resources/tuning/pressure.tres"
+        && TuningSceneText.PathOf(SceneSource, "NoSuchNode", "Settings") == null;
+
+    private static bool SceneBindingReplaces()
+    {
+        string result = TuningSceneText.Rebind(
+            SceneSource, "TerrorSystem", "Settings",
+            "res://resources/tuning/terror_2.tres", "uid://ccc");
+
+        return result != null
+               && TuningSceneText.PathOf(result, "TerrorSystem", "Settings")
+                   == "res://resources/tuning/terror_2.tres"
+               // Настройка соседнего узла остаётся прежней.
+               && TuningSceneText.PathOf(result, "PressureSystem", "Settings")
+                   == "res://resources/tuning/pressure.tres"
+               && result.Contains("uid://ccc")
+               && !result.Contains("uid://aaa");
+    }
+
+    private static bool SceneBindingAddsReference()
+    {
+        // Тот же ресурс назначен двум узлам: замена пути затронула бы обоих, поэтому
+        // ожидается отдельная запись и правка одного присваивания.
+        string shared = SceneSource.Replace(
+            "Settings = ExtResource(\"37_pressure\")",
+            "Settings = ExtResource(\"30_terror\")");
+
+        string result = TuningSceneText.Rebind(
+            shared, "TerrorSystem", "Settings",
+            "res://resources/tuning/terror_2.tres", "uid://ccc");
+
+        return result != null
+               && TuningSceneText.PathOf(result, "TerrorSystem", "Settings")
+                   == "res://resources/tuning/terror_2.tres"
+               && TuningSceneText.PathOf(result, "PressureSystem", "Settings")
+                   == "res://resources/tuning/terror.tres";
+    }
 }

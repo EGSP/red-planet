@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using Godot;
 
 /// <summary>
@@ -47,7 +48,7 @@ public partial class ContentEditorPreview : Control
     public void Bind(ContentEditorStore store)
     {
         _store = store;
-        _knownSessionCount = store?.Sessions.Count ?? 0;
+        _knownSessionCount = store?.SessionsIn(ContentEditorScope.Entities).Count() ?? 0;
         EnsureToolbar();
         UpdateToolbarState();
         QueueRedraw();
@@ -59,7 +60,7 @@ public partial class ContentEditorPreview : Control
     /// </summary>
     public void RefreshFromStore()
     {
-        int count = _store?.Sessions.Count ?? 0;
+        int count = _store?.SessionsIn(ContentEditorScope.Entities).Count() ?? 0;
         if (count != _knownSessionCount)
         {
             _knownSessionCount = count;
@@ -176,10 +177,9 @@ public partial class ContentEditorPreview : Control
         if (_store == null)
             return;
 
-        foreach (var session in _store.Sessions)
+        foreach (var session in _store.SessionsIn(ContentEditorScope.Entities))
         {
-            // Волна не имеет силуэта и на поле не показывается, хотя вкладка у неё есть.
-            if (!session.ShowOnField || session.Kind == ContentEntityKind.Wave)
+            if (!session.ShowOnField)
                 continue;
 
             bool active = _store.ActiveSession == session;
@@ -279,13 +279,13 @@ public partial class ContentEditorPreview : Control
         if (!IsInstanceValid(_fitButton))
             return;
 
-        int total = _store?.Sessions.Count ?? 0;
+        int total = _store?.SessionsIn(ContentEditorScope.Entities).Count() ?? 0;
         bool anyVisible = false;
         if (_store != null)
         {
-            foreach (var session in _store.Sessions)
+            foreach (var session in _store.SessionsIn(ContentEditorScope.Entities))
             {
-                if (session.ShowOnField && session.Kind != ContentEntityKind.Wave)
+                if (session.ShowOnField)
                 {
                     anyVisible = true;
                     break;
@@ -581,9 +581,9 @@ public partial class ContentEditorPreview : Control
         var min = Vector2.Zero;
         var max = Vector2.Zero;
 
-        foreach (var session in _store.Sessions)
+        foreach (var session in _store.SessionsIn(ContentEditorScope.Entities))
         {
-            if (!session.ShowOnField || session.Kind == ContentEntityKind.Wave)
+            if (!session.ShowOnField)
                 continue;
 
             var def = _store.PreviewUnit(session.Id);
@@ -633,9 +633,9 @@ public partial class ContentEditorPreview : Control
         OpenEntitySession best = null;
         float bestDist = float.MaxValue;
 
-        foreach (var session in _store.Sessions)
+        foreach (var session in _store.SessionsIn(ContentEditorScope.Entities))
         {
-            if (!session.ShowOnField || session.Kind == ContentEntityKind.Wave)
+            if (!session.ShowOnField)
                 continue;
 
             float radius = Const.Unit;

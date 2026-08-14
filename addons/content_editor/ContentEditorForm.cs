@@ -1,22 +1,21 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using Godot;
 
 /// <summary>
-/// Форма свойств активной вкладки.
+/// Форма свойств активной сущности режима «Entities».
 ///
 /// ПОЛЯ СТРОЯТСЯ ИЗ ContentSchema, а не вручную: новый ключ в схеме появляется здесь сам.
-/// Значения читаются из Catalog после CompileWithOverrides (итог с учётом черновика).
-/// Provenance считает Store по наличию ключа в DraftText и в цепочке base.
+/// Значения читаются из Catalog после CompileWithOverrides, то есть с учётом черновика;
+/// источник значения считает Store по наличию ключа в черновике и в цепочке base.
 ///
-/// ПРАВКА. Любое изменение виджета сразу пишет ключ в DraftText через SetField.
-/// Если новое значение совпало с унаследованным, локальный ключ удаляется — файл
-/// не раздувается копиями base. Кнопка «Сбросить» делает то же явно.
+/// ПРАВКА. Любое изменение виджета сразу пишет ключ в черновик. Если новое значение
+/// совпало с унаследованным, локальный ключ удаляется: файл не раздувается копиями base.
+/// Кнопка возврата делает то же явно.
 ///
-/// _rebuildGuard защищает от рекурсии: Refresh пересоздаёт виджеты, а их сигналы
-/// при выставлении ButtonPressed/Selected не должны снова вызывать SetField.
+/// _rebuildGuard защищает от рекурсии: обновление пересоздаёт виджеты, а их сигналы при
+/// выставлении ButtonPressed или Selected не должны снова записывать значение.
 /// </summary>
 [Tool]
 public partial class ContentEditorForm : ScrollContainer
@@ -26,18 +25,25 @@ public partial class ContentEditorForm : ScrollContainer
     private VBoxContainer _root;
     private bool _rebuildGuard;
     private string _fieldFilterText = "";
-    private readonly HashSet<string> _expandedSections = new()
+
+    /// <summary>Раскрытые секции. Умолчание показывает то, что правят чаще всего.</summary>
+    private readonly HashSet<string> _expanded = new(StringComparer.Ordinal)
     {
         "",
         "body",
         "movement",
     };
 
+    /// <summary>Открыть страницу значений файла переменных.</summary>
     public event Action<string> VarsPanelRequested;
-    public event Action GraphPanelRequested;
-    public event Action FieldFilterChanged;
 
-    /// <summary>Текст фильтра полей. Не сбрасывается при смене сущности и Refresh.</summary>
+    /// <summary>Открыть страницу графа зависимостей.</summary>
+    public event Action GraphPanelRequested;
+
+    /// <summary>Настройка формы изменилась: отбор полей либо состав раскрытых секций.</summary>
+    public event Action UiStateChanged;
+
+    /// <summary>Текст отбора полей. Не сбрасывается при смене сущности и обновлении.</summary>
     public string FieldFilter
     {
         get => _fieldFilterText;
@@ -46,6 +52,18 @@ public partial class ContentEditorForm : ScrollContainer
             _fieldFilterText = value ?? "";
             if (IsInstanceValid(_fieldFilter) && _fieldFilter.Text != _fieldFilterText)
                 _fieldFilter.Text = _fieldFilterText;
+        }
+    }
+
+    /// <summary>Раскрытые секции для снимка рабочего пространства.</summary>
+    public string[] ExpandedSections
+    {
+        get => _expanded.ToArray();
+        set
+        {
+            _expanded.Clear();
+            foreach (string section in value ?? Array.Empty<string>())
+                _expanded.Add(section);
         }
     }
 
@@ -62,43 +80,85 @@ public partial class ContentEditorForm : ScrollContainer
             return;
 
         EnsureRoot();
-        ClearChildren(_root);
+        EditorControls.ClearChildren(_root);
 
-        var session = _store?.ActiveSession;
+        var session = _store.ActiveSession;
         if (session == null)
         {
             _root.AddChild(new Label { Text = "Open an entity from the catalog" });
             return;
         }
 
-        // Имя сущности несёт заголовок панели, внутри которой стоит форма; повторять
-        // его строкой формы значит занимать место одним и тем же.
-        var path = new Label
+        // Имя сущности несёт заголовок панели, внутри которой стоит форма; повторять его
+        // строкой формы значит занимать место одним и тем же.
+        _root.AddChild(new Label
         {
             Text = session.Path,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Modulate = new Color(1f, 1f, 1f, 0.55f),
-        };
-        _root.AddChild(path);
+        });
 
-        var contextActions = new HBoxContainer();
-        // У волны нет силуэта, и на измерительном поле она не появляется, поэтому
-        // переключатель показа для неё бессмыслен.
-        if (session.Kind != ContentEntityKind.Wave)
+        _root.AddChild(BuildContextActions(session));
+
+        UnitDefinition unit = session.Kind is ContentEntityKind.Unit or ContentEntityKind.Building
+            ? _store.PreviewUnit(session.Id)
+            : null;
+
+        var sections = ContentSchema.FieldsFor(session.Kind)
+            .Where(field => field.Key is not ("id" or "kind"))
+            .Where(field => unit == null || field.VisibleForUnit == null || field.VisibleForUnit(unit))
+            .Where(MatchesFieldFilter)
+            .GroupBy(field => field.RootOnly ? "" : field.Section ?? "");
+
+        foreach (var section in sections)
         {
-            var showToggle = new CheckBox
-            {
-                Text = "Show on field",
-                ButtonPressed = session.ShowOnField,
-                SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            };
-            showToggle.Toggled += on =>
-            {
-                session.ShowOnField = on;
-                _store.NotifyChanged();
-            };
-            contextActions.AddChild(showToggle);
+            string key = section.Key;
+            bool expanded = _expanded.Contains(key);
+            _root.AddChild(EditorControls.SectionHeading(
+                string.IsNullOrEmpty(key) ? "General" : SectionTitle(key),
+                expanded,
+                () => ToggleSection(key)));
+
+            if (!expanded)
+                continue;
+
+            var body = new VBoxContainer();
+            body.AddThemeConstantOverride("separation", 8);
+            foreach (var field in section)
+                body.AddChild(BuildRow(session, field));
+            _root.AddChild(body);
         }
+
+        if (session.Kind is ContentEntityKind.Unit or ContentEntityKind.Building)
+            AddLinkedTools(unit);
+    }
+
+    private void ToggleSection(string key)
+    {
+        if (!_expanded.Add(key))
+            _expanded.Remove(key);
+
+        Refresh();
+        UiStateChanged?.Invoke();
+    }
+
+    /// <summary>Действия над сущностью целиком: показ на поле и граф зависимостей.</summary>
+    private Control BuildContextActions(OpenEntitySession session)
+    {
+        var actions = new HBoxContainer();
+
+        var showToggle = new CheckBox
+        {
+            Text = "Show on field",
+            ButtonPressed = session.ShowOnField,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        showToggle.Toggled += on => EditorControls.Run("toggle field visibility", () =>
+        {
+            session.ShowOnField = on;
+            _store.NotifyChanged();
+        });
+        actions.AddChild(showToggle);
 
         if (session.Kind is ContentEntityKind.Unit or ContentEntityKind.Building)
         {
@@ -108,63 +168,15 @@ public partial class ContentEditorForm : ScrollContainer
                 TooltipText = "Show inheritance, vars files and tools",
                 Icon = ContentEditorTheme.IconAny("GraphEdit", "Groups", "Node"),
             };
-            graph.Pressed += () => GraphPanelRequested?.Invoke();
-            contextActions.AddChild(graph);
-        }
-        _root.AddChild(contextActions);
-
-        var fields = ContentSchema.FieldsFor(session.Kind);
-
-        UnitDefinition unit = session.Kind is ContentEntityKind.Unit or ContentEntityKind.Building
-            ? _store.PreviewUnit(session.Id)
-            : null;
-
-        var visibleFields = fields
-            .Where(field => field.Key is not ("id" or "kind"))
-            .Where(field => unit == null || field.VisibleForUnit == null || field.VisibleForUnit(unit))
-            .Where(MatchesFieldFilter)
-            .GroupBy(field => field.RootOnly ? "" : field.Section ?? "");
-
-        foreach (var section in visibleFields)
-        {
-            string sectionKey = section.Key;
-            bool expanded = _expandedSections.Contains(sectionKey);
-            Texture2D arrow = expanded
-                ? ContentEditorTheme.Icon("GuiTreeArrowDown")
-                : ContentEditorTheme.Icon("GuiTreeArrowRight");
-            var heading = new Button
-            {
-                Text = (arrow == null ? $"{(expanded ? "▼" : "▶")}  " : "")
-                       + (string.IsNullOrEmpty(sectionKey) ? "General" : SectionTitle(sectionKey)),
-                Icon = arrow,
-                Flat = true,
-                Alignment = HorizontalAlignment.Left,
-                TooltipText = expanded ? "Collapse section" : "Expand section",
-            };
-            heading.AddThemeColorOverride("font_color", new Color(0.72f, 0.84f, 1f));
-            heading.Pressed += () =>
-            {
-                if (!_expandedSections.Add(sectionKey))
-                    _expandedSections.Remove(sectionKey);
-                Refresh();
-            };
-            _root.AddChild(heading);
-
-            if (!expanded)
-                continue;
-
-            var sectionBody = new VBoxContainer();
-            sectionBody.AddThemeConstantOverride("separation", 8);
-            foreach (var field in section)
-                sectionBody.AddChild(BuildRow(session, field));
-            _root.AddChild(sectionBody);
+            graph.Pressed += () => EditorControls.Run("open relations",
+                () => GraphPanelRequested?.Invoke());
+            actions.AddChild(graph);
         }
 
-        if (session.Kind is ContentEntityKind.Unit or ContentEntityKind.Building)
-            AddLinkedTools(session, unit);
+        return actions;
     }
 
-    private void AddLinkedTools(OpenEntitySession session, UnitDefinition unit)
+    private void AddLinkedTools(UnitDefinition unit)
     {
         if (unit?.ToolIds == null || unit.ToolIds.Length == 0)
             return;
@@ -172,6 +184,7 @@ public partial class ContentEditorForm : ScrollContainer
         _root.AddChild(new Label { Text = "Linked tools" });
         foreach (string toolId in unit.ToolIds)
         {
+            string id = toolId;
             var button = new Button
             {
                 Text = $"Open {toolId}",
@@ -179,94 +192,62 @@ public partial class ContentEditorForm : ScrollContainer
                 Alignment = HorizontalAlignment.Left,
                 TooltipText = $"Open the tool {toolId} in its own tab",
             };
-            string id = toolId;
-            button.Pressed += () => _store.Open(id);
+            button.Pressed += () => EditorControls.Run("open tool", () => _store.Open(id));
             _root.AddChild(button);
         }
     }
 
     private Control BuildRow(OpenEntitySession session, ContentFieldSpec field)
     {
-        var sourceInfo = _store.FieldSource(session, field);
-        var provenance = sourceInfo.Provenance;
+        var source = _store.FieldSource(session, field);
         bool local = _store.HasLocalValue(session, field);
-        var sourceAndActions = new HBoxContainer
-        {
-            CustomMinimumSize = new Vector2(176, 0),
-        };
+        bool hasSourceFile = source.Provenance is FieldProvenance.Base or FieldProvenance.Vars
+                             && !string.IsNullOrEmpty(source.Path);
 
-        var source = new Label
+        return EditorFieldRow.Build(new EditorFieldRowSpec
         {
-            Text = ProvenanceLabel(sourceInfo),
-            TooltipText = ProvenanceTooltip(sourceInfo),
-            Modulate = ProvenanceColor(provenance),
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        source.AddThemeFontSizeOverride("font_size", 11);
-        sourceAndActions.AddChild(source);
-
-        // Поле всегда редактируемо: первое изменение унаследованного значения создаёт
-        // локальный override. Отдельная широкая кнопка «Переопределить» занимала почти
-        // половину узкой формы и не добавляла действия.
-        if (local)
-        {
-            Texture2D resetIcon = ContentEditorTheme.IconAny("Reload", "Undo");
-            var reset = new Button
-            {
-                Text = resetIcon == null ? "↶" : "",
-                Icon = resetIcon,
-                Flat = true,
-                CustomMinimumSize = new Vector2(24, 24),
-                TooltipText = "Remove the local value and restore inheritance",
-            };
-            reset.Pressed += () =>
-            {
-                _store.SetField(session, field, null, clear: true);
-            };
-            sourceAndActions.AddChild(reset);
-        }
-        if ((provenance is FieldProvenance.Base or FieldProvenance.Vars)
-            && !string.IsNullOrEmpty(sourceInfo.Path))
-        {
-            string sourcePath = sourceInfo.Path;
-            Texture2D openIcon = ContentEditorTheme.IconAny("ExternalLink", "ActionCopy", "Forward");
-            var openSource = new Button
-            {
-                Text = openIcon == null ? "↗" : "",
-                Icon = openIcon,
-                Flat = true,
-                CustomMinimumSize = new Vector2(24, 24),
-                TooltipText = $"Open source file\n{sourcePath}",
-            };
-            openSource.Pressed += () => OpenSource(sourcePath);
-            sourceAndActions.AddChild(openSource);
-        }
-
-        object value = _store.EffectiveValue(session, field);
-        Control editor = BuildEditor(session, field, value);
-        string tooltip = $"{field.Section ?? "root"}.{field.Key}";
-        if (!string.IsNullOrEmpty(field.Hint))
-            tooltip += "\n" + field.Hint;
-
-        var row = new EditorPropertyRow();
-        row.Configure(
-            field.Label,
-            tooltip,
-            editor,
-            sourceAndActions,
-            EditorFieldEditor.BelowTitle(field));
-        return row;
+            Field = field,
+            Value = _store.EffectiveValue(session, field),
+            SourceLabel = ProvenanceLabel(source),
+            SourceTooltip = ProvenanceTooltip(source),
+            SourceColor = ProvenanceColor(source.Provenance),
+            // Поле всегда редактируемо: первое изменение унаследованного значения создаёт
+            // локальный ключ. Отдельная кнопка «Переопределить» занимала половину строки
+            // и не добавляла действия.
+            CanReset = local,
+            ResetTooltip = "Remove the local value and restore inheritance",
+            Commit = value => Commit(session, field, value),
+            Reset = local ? () => _store.SetField(session, field, null, clear: true) : null,
+            OpenSource = hasSourceFile ? () => OpenSource(source.Path) : null,
+            OpenSourceTooltip = hasSourceFile ? $"Open source file\n{source.Path}" : "",
+        });
     }
 
+    private void Commit(OpenEntitySession session, ContentFieldSpec field, object value)
+    {
+        if (_rebuildGuard)
+            return;
+
+        _rebuildGuard = true;
+        try
+        {
+            _store.SetField(session, field, value, clear: false);
+        }
+        finally
+        {
+            _rebuildGuard = false;
+        }
+    }
+
+    /// <summary>
+    /// Определения с <c>id</c> открываются второй вкладкой редактора. Файлы переменных
+    /// сущностями каталога не являются, поэтому показываются контекстной страницей,
+    /// а при невозможности — системным редактором TOML.
+    /// </summary>
     private void OpenSource(string path)
     {
-        // Определения с id открываются второй вкладкой редактора контента. Vars-файлы
-        // не являются сущностями каталога, поэтому для них используется системный
-        // редактор, связанный с расширением TOML.
         if (TomlResolver.IsVars(path)
-            && (_store.ActiveSession?.Kind is ContentEntityKind.Unit or ContentEntityKind.Building))
+            && _store.ActiveSession?.Kind is ContentEntityKind.Unit or ContentEntityKind.Building)
         {
             VarsPanelRequested?.Invoke(path);
             return;
@@ -277,17 +258,6 @@ public partial class ContentEditorForm : ScrollContainer
 
         OS.ShellOpen(ProjectSettings.GlobalizePath(path));
     }
-
-    private Control BuildEditor(OpenEntitySession session, ContentFieldSpec field, object value) =>
-        EditorFieldEditor.Build(field, value, editable: true, committed =>
-        {
-            if (_rebuildGuard)
-                return;
-
-            _rebuildGuard = true;
-            _store.SetField(session, field, committed, clear: false);
-            _rebuildGuard = false;
-        });
 
     private bool MatchesFieldFilter(ContentFieldSpec field)
     {
@@ -305,10 +275,7 @@ public partial class ContentEditorForm : ScrollContainer
         if (_root != null)
             return;
 
-        var outer = new VBoxContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
+        var outer = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         outer.AddThemeConstantOverride("separation", 6);
         AddChild(outer);
 
@@ -318,57 +285,33 @@ public partial class ContentEditorForm : ScrollContainer
             Text = _fieldFilterText,
             RightIcon = ContentEditorTheme.Icon("Search"),
         };
-        _fieldFilter.TextChanged += text =>
+        _fieldFilter.TextChanged += text => EditorControls.Run("filter fields", () =>
         {
             _fieldFilterText = text ?? "";
             Refresh();
-            FieldFilterChanged?.Invoke();
-        };
+            UiStateChanged?.Invoke();
+        });
         outer.AddChild(_fieldFilter);
 
-        _root = new VBoxContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
+        _root = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _root.AddThemeConstantOverride("separation", 6);
         outer.AddChild(_root);
-    }
-
-    private static void ClearChildren(Node parent)
-    {
-        foreach (Node child in parent.GetChildren())
-        {
-            // RemoveChild исключает старый Control из раскладки немедленно. Один QueueFree
-            // оставлял старую и новую формы одновременно до конца кадра.
-            parent.RemoveChild(child);
-            child.QueueFree();
-        }
     }
 
     private static string ProvenanceLabel(FieldSourceInfo source) => source.Provenance switch
     {
         FieldProvenance.Local => "in this file",
-        FieldProvenance.Base => $"inherited · {SourceFileName(source.Path)}",
-        FieldProvenance.Vars => $"from vars · {SourceFileName(source.Path)}",
+        FieldProvenance.Base => $"inherited · {TomlText.FileName(source.Path)}",
+        FieldProvenance.Vars => $"from vars · {TomlText.FileName(source.Path)}",
         FieldProvenance.Default => "default",
         _ => "none",
     };
 
-    private static string SourceFileName(string path)
-    {
-        if (string.IsNullOrEmpty(path))
-            return "unknown file";
-        int slash = path.LastIndexOf('/');
-        return slash >= 0 ? path[(slash + 1)..] : path;
-    }
-
     private static string ProvenanceTooltip(FieldSourceInfo source) => source.Provenance switch
     {
         FieldProvenance.Local => "Value is written in the current file",
-        FieldProvenance.Base =>
-            $"Value comes from the parent definition\n{source.Path}",
-        FieldProvenance.Vars =>
-            $"Value comes from a shared vars file\n{source.Path}",
+        FieldProvenance.Base => $"Value comes from the parent definition\n{source.Path}",
+        FieldProvenance.Vars => $"Value comes from a shared vars file\n{source.Path}",
         FieldProvenance.Default => "Value is the code default",
         _ => "Value is missing",
     };
@@ -381,6 +324,7 @@ public partial class ContentEditorForm : ScrollContainer
         _ => new Color(1f, 1f, 1f, 0.5f),
     };
 
+    /// <summary>Название секции для человека: ключ TOML в подписи выглядит техническим.</summary>
     private static string SectionTitle(string section) => section switch
     {
         "body" => "Body",

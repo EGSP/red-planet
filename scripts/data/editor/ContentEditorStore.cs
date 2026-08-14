@@ -1,231 +1,170 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using Godot;
-using Tomlyn;
-using Tomlyn.Model;
 
 /// <summary>
-/// Откуда взялось итоговое значение поля после Resolve.
-/// Форма показывает эту метку рядом с подписью, чтобы было видно, правка ли это
-/// текущего файла или унаследованное число.
-/// </summary>
-public enum FieldProvenance
-{
-    /// <summary>Ключ записан в черновике текущего файла.</summary>
-    Local,
-
-    /// <summary>Ключа в текущем файле нет; значение пришло из цепочки <c>base</c>.</summary>
-    Base,
-
-    /// <summary>Значение задано ссылкой на <c>*.vars.toml</c> либо пришло из vars.</summary>
-    Vars,
-
-    /// <summary>Ни в файле, ни в base ключа нет — действует умолчание из определения в коде.</summary>
-    Default,
-
-    /// <summary>Поле недоступно для этой сущности (нет сессии или нет определения).</summary>
-    Missing,
-}
-
-/// <summary>Происхождение итогового значения и TOML-файл, в котором оно задано.</summary>
-public sealed class FieldSourceInfo
-{
-    public FieldProvenance Provenance { get; init; }
-    public string Path { get; init; }
-}
-
-public sealed class VarsPanelData
-{
-    public string ContextId { get; init; }
-    public string Path { get; init; }
-    public string FileName { get; init; }
-    public List<VarsPanelRow> Rows { get; init; } = new();
-}
-
-public sealed class VarsPanelRow
-{
-    public string Section { get; init; }
-    public string Key { get; init; }
-    public string Value { get; init; }
-}
-
-public enum ContentGraphNodeKind
-{
-    Unit,
-    Building,
-    Base,
-    Vars,
-    Weapon,
-    WorkTool,
-}
-
-public sealed class ContentGraphNode
-{
-    public string Key { get; init; }
-    public string Title { get; init; }
-    public string Detail { get; init; }
-    public string Path { get; init; }
-    public ContentGraphNodeKind Kind { get; init; }
-}
-
-public sealed class ContentGraphEdge
-{
-    public string From { get; init; }
-    public string To { get; init; }
-    public string Label { get; init; }
-}
-
-public sealed class ContentGraphData
-{
-    public string ContextId { get; init; }
-    public string RootKey { get; init; }
-    public List<ContentGraphNode> Nodes { get; init; } = new();
-    public List<ContentGraphEdge> Edges { get; init; } = new();
-}
-
-/// <summary>Одна запись каталога редактора — файл с <c>id</c>, ещё до сборки Catalog.</summary>
-/// <summary>
-/// Строка карты волн, прочитанная снисходительно из черновика. Отличается от
-/// <see cref="WaveDefinition"/> тем, что существует и для волны, не прошедшей проверку:
-/// правка проходит через недопустимые промежуточные состояния, и строка на карте
-/// не должна при этом исчезать.
-/// </summary>
-public sealed class WaveOverview
-{
-    public string Id { get; init; }
-    public string Path { get; init; }
-    public string FileName { get; init; }
-    public string DisplayName { get; init; }
-    public string[] Tags { get; init; } = Array.Empty<string>();
-    public float TerrorMin { get; init; }
-    public float TerrorMax { get; init; }
-    public float Budget { get; init; }
-    public float BudgetPerTerror { get; init; }
-    public float ChillMultiplier { get; init; }
-    public int ListCount { get; init; }
-
-    /// <summary>Прошла ли волна проверку связности и попала ли в собранный каталог.</summary>
-    public bool Compiled { get; init; }
-
-    public bool Fits(float terror) =>
-        (TerrorMin < 0f || terror >= TerrorMin) && (TerrorMax < 0f || terror <= TerrorMax);
-
-    public float BudgetAt(float terror) => Math.Max(Budget + BudgetPerTerror * terror, 0f);
-}
-
-/// <summary>Один блок [[unit_list]] черновика волны.</summary>
-public sealed class WaveUnitListView
-{
-    public int Index { get; init; }
-    public string Mode { get; init; }
-    public string[] UnitIds { get; init; } = Array.Empty<string>();
-    public float Share { get; init; }
-    public bool HasShare { get; init; }
-}
-
-public sealed class ContentEditorEntry
-{
-    public string Id;
-    public string Path;
-    public string FileName;
-    public string DisplayName;
-    public ContentEntityKind Kind;
-
-    /// <summary>Шаблоны с <c>abstract = true</c> в каталог игры не попадают, но файл существует.</summary>
-    public bool Abstract;
-}
-
-/// <summary>
-/// Итог проверки внешних правок: что можно подтянуть молча и что конфликтует
-/// с несохранённым черновиком.
-/// </summary>
-public sealed class ExternalChangeReport
-{
-    /// <summary>Открытые вкладки без локальных правок, уже перечитанные с диска.</summary>
-    public readonly List<string> Reloaded = new();
-
-    /// <summary>
-    /// Открытые вкладки с Dirty=true, у которых метка времени на диске новее LoadedStamp.
-    /// Черновик не трогаем: иначе правка в редакторе контента будет потеряна.
-    /// </summary>
-    public readonly List<string> Conflicts = new();
-
-    /// <summary>Файлы каталога, появившиеся или изменившиеся без открытой вкладки.</summary>
-    public int CatalogChanged;
-
-    public bool Any => Reloaded.Count > 0 || Conflicts.Count > 0 || CatalogChanged > 0;
-}
-
-/// <summary>Сериализуемый снимок вкладок, переживающий перезагрузку C#-сборки.</summary>
-public sealed class ContentEditorWorkspace
-{
-    public string ActiveId { get; set; }
-    public List<ContentEditorSessionSnapshot> Sessions { get; set; } = new();
-    public string FormFieldFilter { get; set; }
-    public string BalanceViewId { get; set; }
-    public string[] BalanceVisibleColumns { get; set; }
-    public string BalanceSortColumnId { get; set; }
-    public bool BalanceSortAsc { get; set; }
-    public List<ContentEditorSavedView> BalanceSavedViews { get; set; } = new();
-}
-
-public sealed class ContentEditorSavedView
-{
-    public string Name { get; set; }
-    public string[] ColumnIds { get; set; }
-}
-
-public sealed class ContentEditorSessionSnapshot
-{
-    public string Id { get; set; }
-    public string DraftText { get; set; }
-    public ulong LoadedStamp { get; set; }
-    public bool Dirty { get; set; }
-    public bool ShowOnField { get; set; }
-    public float FieldX { get; set; }
-    public float FieldY { get; set; }
-}
-
-/// <summary>
-/// Рабочее пространство редактора контента.
+/// Рабочее пространство редактора контента: тексты файлов, черновики открытых вкладок
+/// и собранный по ним каталог.
 ///
-/// ДВА СЛОЯ ТЕКСТА. <see cref="_texts"/> — последний известный снимок с диска.
+/// ДВА СЛОЯ ТЕКСТА. <see cref="ContentFileIndex"/> хранит последний известный снимок диска.
 /// У каждой открытой вкладки свой <see cref="OpenEntitySession.DraftText"/>: правки формы
-/// идут только туда, пока пользователь не нажмёт «Применить».
+/// идут только туда, пока не нажато «Применить».
 ///
 /// СБОРКА. <see cref="Catalog"/> собирается через <see cref="ContentCompiler.CompileWithOverrides"/>
-/// с подстановкой черновиков. Предпросмотр и таблица баланса читают именно этот каталог,
-/// а не глобальный <see cref="Content.Catalog"/>, пока правки не сохранены.
+/// с подстановкой черновиков. Предпросмотр, таблица баланса и панель формы волны читают
+/// именно его, а не глобальный <see cref="Content.Catalog"/>, пока правки не сохранены.
 ///
-/// ВНЕШНИЕ ПРАВКИ. Метка времени файла сравнивается с <see cref="OpenEntitySession.LoadedStamp"/>.
-/// Чистую вкладку можно перечитать молча; грязную — только после явного решения пользователя.
+/// ОБЛАСТИ. Сессии разделены на области <see cref="ContentEditorScope"/>: вкладки режима
+/// сущностей и правку волн. Общими остаются тексты, черновики и сборка; активная сессия
+/// у каждой области своя, поэтому выбор волны на карте не подменяет открытую сущность.
+///
+/// РАЗДЕЛЕНИЕ ТРУДА. Обход файлов и опознание записей — <see cref="ContentFileIndex"/>;
+/// соответствие ключей и полей определения — <see cref="ContentValueReader"/>; поиск
+/// источника значения — <see cref="ContentProvenance"/>; граф — <see cref="ContentGraphBuilder"/>;
+/// снисходительное чтение волн — <see cref="WaveDraftReader"/>. Здесь остаётся состояние
+/// и порядок действий над ним.
 /// </summary>
 public sealed class ContentEditorStore
 {
-    private readonly Dictionary<string, string> _texts = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, ulong> _timestamps = new(StringComparer.Ordinal);
-    private readonly List<ContentEditorEntry> _entries = new();
+    private readonly ContentFileIndex _index = new();
     private readonly Dictionary<string, OpenEntitySession> _sessions = new(StringComparer.Ordinal);
-    private readonly List<WaveOverview> _waveOverviews = new();
 
+    /// <summary>Активная сессия каждой области. Ключ отсутствует, пока область пуста.</summary>
+    private readonly Dictionary<ContentEditorScope, string> _activeByScope = new();
+
+    private List<WaveOverview> _waveOverviews = new();
+
+    /// <summary>Каталог, собранный с учётом несохранённых черновиков.</summary>
     public Catalog Catalog { get; private set; } = new();
-    public IReadOnlyList<ContentEditorEntry> Entries => _entries;
+
+    /// <summary>Записи каталога редактора, включая шаблоны с <c>abstract = true</c>.</summary>
+    public IReadOnlyList<ContentEditorEntry> Entries => _index.Entries;
+
+    /// <summary>Все открытые сессии независимо от области.</summary>
     public IReadOnlyCollection<OpenEntitySession> Sessions => _sessions.Values;
 
-    public OpenEntitySession ActiveSession { get; private set; }
+    /// <summary>Обзор всех волн по черновикам, в том числе не прошедших проверку.</summary>
+    public IReadOnlyList<WaveOverview> WaveOverviews => _waveOverviews;
 
-    /// <summary>Форма, поле и вкладки подписаны на это событие и перерисовываются целиком.</summary>
+    /// <summary>Активная вкладка режима сущностей.</summary>
+    public OpenEntitySession ActiveSession => ActiveIn(ContentEditorScope.Entities);
+
+    /// <summary>Волна, выбранная в режиме волн.</summary>
+    public OpenEntitySession ActiveWave => ActiveIn(ContentEditorScope.Waves);
+
+    /// <summary>Форма, поле, карта волн и вкладки подписаны на это событие.</summary>
     public event Action Changed;
 
+    /// <summary>Оповестить интерфейс о правке, не менявшей текст (например, показ на поле).</summary>
     public void NotifyChanged() => Changed?.Invoke();
 
-    public ContentEditorWorkspace CaptureWorkspace() => new()
+    // ── Области и сессии ──────────────────────────────────────────────────────────
+
+    /// <summary>Открытые сессии одной области в порядке словаря (порядке открытия).</summary>
+    public IEnumerable<OpenEntitySession> SessionsIn(ContentEditorScope scope) =>
+        _sessions.Values.Where(session => session.Scope == scope);
+
+    /// <summary>Активная сессия области либо <c>null</c>.</summary>
+    public OpenEntitySession ActiveIn(ContentEditorScope scope) =>
+        _activeByScope.TryGetValue(scope, out string id)
+        && _sessions.TryGetValue(id, out var session)
+        && session.Scope == scope
+            ? session
+            : null;
+
+    /// <summary>Сессия по идентификатору либо <c>null</c>.</summary>
+    public OpenEntitySession Session(string id) =>
+        id != null && _sessions.TryGetValue(id, out var session) ? session : null;
+
+    /// <summary>
+    /// Открыть файл во вкладке своей области. Уже открытая сессия просто становится
+    /// активной, поэтому повторный щелчок по записи каталога не создаёт второй вкладки.
+    /// </summary>
+    public OpenEntitySession Open(string id)
     {
-        ActiveId = ActiveSession?.Id,
-        Sessions = _sessions.Values.Select(session => new ContentEditorSessionSnapshot
+        if (_sessions.TryGetValue(id, out var existing))
+        {
+            SetActive(existing);
+            Changed?.Invoke();
+            return existing;
+        }
+
+        var entry = _index.ById(id);
+        if (entry == null || _index.Text(entry.Path) is not { } text)
+            return null;
+
+        var session = new OpenEntitySession(entry, text, _index.KnownStamp(entry.Path));
+        if (session.Scope == ContentEditorScope.Entities)
+            AutoPlace(session);
+
+        _sessions[id] = session;
+        SetActive(session);
+        Changed?.Invoke();
+        return session;
+    }
+
+    /// <summary>Открыть определение по пути; файлы переменных сущностями не являются.</summary>
+    public bool OpenPath(string path) =>
+        _index.ByPath(path) is { } entry && Open(entry.Id) != null;
+
+    /// <summary>Сделать сессию активной в её области.</summary>
+    public void Activate(string id)
+    {
+        if (!_sessions.TryGetValue(id, out var session))
+            return;
+
+        SetActive(session);
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Закрыть вкладку. Сессия с черновиком закрывается только при <paramref name="discard"/>:
+    /// решение о судьбе несохранённой правки принимает пользователь, а не Store.
+    /// </summary>
+    public bool Close(string id, bool discard)
+    {
+        if (!_sessions.TryGetValue(id, out var session))
+            return true;
+
+        if (session.Dirty && !discard)
+            return false;
+
+        Drop(session);
+        Recompile();
+        Changed?.Invoke();
+        return true;
+    }
+
+    private void SetActive(OpenEntitySession session) =>
+        _activeByScope[session.Scope] = session.Id;
+
+    /// <summary>Убрать сессию и передать признак активной соседней вкладке той же области.</summary>
+    private void Drop(OpenEntitySession session)
+    {
+        _sessions.Remove(session.Id);
+        if (_activeByScope.GetValueOrDefault(session.Scope) != session.Id)
+            return;
+
+        var next = SessionsIn(session.Scope).LastOrDefault();
+        if (next != null)
+            _activeByScope[session.Scope] = next.Id;
+        else
+            _activeByScope.Remove(session.Scope);
+    }
+
+    // ── Снимок рабочего пространства ──────────────────────────────────────────────
+
+    /// <summary>Снять состояние вкладок для записи в снимок.</summary>
+    public void CaptureInto(ContentEditorWorkspace workspace)
+    {
+        if (workspace == null)
+            return;
+
+        workspace.ActiveEntityId = ActiveSession?.Id;
+        workspace.ActiveWaveId = ActiveWave?.Id;
+        workspace.Sessions = _sessions.Values.Select(session => new ContentEditorSessionSnapshot
         {
             Id = session.Id,
             DraftText = session.DraftText,
@@ -234,12 +173,13 @@ public sealed class ContentEditorStore
             ShowOnField = session.ShowOnField,
             FieldX = session.FieldPosition.X,
             FieldY = session.FieldPosition.Y,
-        }).ToList(),
-    };
+        }).ToList();
+    }
 
     /// <summary>
-    /// Восстановить вкладки после загрузки файлов. Отсутствующие сущности пропускаются;
-    /// сохранённый LoadedStamp позволяет обычной проверке обнаружить внешний конфликт.
+    /// Восстановить вкладки после чтения файлов с диска. Записи, которых больше нет,
+    /// пропускаются; сохранённая метка времени позволяет обычной проверке обнаружить
+    /// внешний конфликт.
     /// </summary>
     public void RestoreWorkspace(ContentEditorWorkspace workspace)
     {
@@ -247,169 +187,79 @@ public sealed class ContentEditorStore
             return;
 
         _sessions.Clear();
+        _activeByScope.Clear();
+
         foreach (var snapshot in workspace.Sessions)
         {
-            var entry = _entries.FirstOrDefault(e => e.Id == snapshot.Id);
-            if (entry == null || !_texts.ContainsKey(entry.Path))
+            var entry = _index.ById(snapshot.Id);
+            if (entry == null || !_index.Has(entry.Path))
                 continue;
 
             var session = new OpenEntitySession(
-                entry,
-                _texts[entry.Path],
-                _timestamps.GetValueOrDefault(entry.Path));
+                entry, _index.Text(entry.Path), _index.KnownStamp(entry.Path));
             session.Restore(snapshot);
             _sessions[session.Id] = session;
         }
 
-        ActiveSession = workspace.ActiveId != null
-                        && _sessions.TryGetValue(workspace.ActiveId, out var active)
-            ? active
-            : _sessions.Values.LastOrDefault();
+        RestoreActive(ContentEditorScope.Entities, workspace.ActiveEntityId);
+        RestoreActive(ContentEditorScope.Waves, workspace.ActiveWaveId);
+
         Recompile();
         Changed?.Invoke();
     }
 
+    private void RestoreActive(ContentEditorScope scope, string id)
+    {
+        if (id != null && _sessions.TryGetValue(id, out var session) && session.Scope == scope)
+        {
+            _activeByScope[scope] = id;
+            return;
+        }
+
+        if (SessionsIn(scope).LastOrDefault() is { } fallback)
+            _activeByScope[scope] = fallback.Id;
+    }
+
+    // ── Чтение с диска и внешние правки ───────────────────────────────────────────
+
     /// <summary>
-    /// Полная перечитывка всех .toml определений.
+    /// Полная перечитка всех <c>.toml</c> определений.
     ///
-    /// Открытые вкладки, чьи файлы исчезли, закрываются. Черновики оставшихся
-    /// вкладок по умолчанию не сбрасываются: иначе «Перечитать» уничтожил бы
-    /// несохранённую работу. Чистые вкладки UI обновляет отдельно через
-    /// <see cref="AcceptExternalReload"/> либо через <see cref="CheckExternalChanges"/>.
+    /// Вкладки, чьи файлы исчезли, закрываются. Черновики оставшихся вкладок не
+    /// сбрасываются: иначе «Перечитать» уничтожил бы несохранённую работу. Чистые вкладки
+    /// интерфейс подтягивает отдельно через <see cref="AcceptExternalReload"/>.
     /// </summary>
     public void ReloadFromDisk()
     {
-        _texts.Clear();
-        _timestamps.Clear();
-        _entries.Clear();
+        _index.ReloadAll();
 
-        foreach (string path in EnumerateToml())
-        {
-            string text = ReadText(path);
-            if (text == null)
-                continue;
-
-            _texts[path] = text;
-            _timestamps[path] = FileStamp(path);
-            TryRegisterEntry(path, text);
-        }
-
-        // Сохранить черновики открытых вкладок, если файлы ещё существуют
-        var alive = new List<string>();
-        foreach (var session in _sessions.Values)
-        {
-            if (_texts.ContainsKey(session.Path))
-                alive.Add(session.Id);
-        }
-
-        var drop = _sessions.Keys.Where(id => !alive.Contains(id)).ToList();
-        foreach (string id in drop)
-            _sessions.Remove(id);
-
-        if (ActiveSession != null && !_sessions.ContainsKey(ActiveSession.Id))
-            ActiveSession = _sessions.Values.LastOrDefault();
+        foreach (var session in _sessions.Values.Where(s => !_index.Has(s.Path)).ToList())
+            Drop(session);
 
         Recompile();
         Changed?.Invoke();
     }
 
     /// <summary>
-    /// Сверить метки времени на диске с загруженными. Вызывать при возврате фокуса
-    /// в Godot и при показе вкладки «Контент»: правка в Cursor или другом редакторе
-    /// иначе останется незамеченной до явного «Перечитать».
+    /// Сверить метки времени на диске с загруженными. Вызывать при возврате фокуса в Godot
+    /// и при показе вкладки «Content»: правка во внешнем редакторе иначе останется
+    /// незамеченной до явного «Перечитать».
     ///
-    /// Чистые вкладки подтягиваются сразу. Грязные попадают в Conflicts — UI обязан
-    /// спросить, сбросить черновик или оставить его.
+    /// Чистые вкладки подтягиваются сразу. Грязные попадают в <see cref="ExternalChangeReport.Conflicts"/> —
+    /// интерфейс обязан спросить, сбросить черновик или оставить его.
     /// </summary>
     public ExternalChangeReport CheckExternalChanges()
     {
         var report = new ExternalChangeReport();
-        bool catalogTouched = false;
-        var pathsOnDisk = EnumerateToml().ToHashSet(StringComparer.Ordinal);
-
-        // Сначала обновить снимки файлов, у которых нет открытой вкладки или вкладка чистая
-        foreach (string path in pathsOnDisk)
-        {
-            ulong stamp = FileStamp(path);
-            ulong known = _timestamps.GetValueOrDefault(path);
-            if (stamp == 0 || stamp == known)
-                continue;
-
-            var open = _sessions.Values.FirstOrDefault(s => s.Path == path);
-            if (open != null)
-                continue;
-
-            string text = ReadText(path);
-            if (text == null)
-                continue;
-
-            _texts[path] = text;
-            _timestamps[path] = stamp;
-            catalogTouched = true;
-        }
-
-        // Удалённые закрытые файлы иначе навсегда оставались в индексе.
-        foreach (string path in _texts.Keys.Where(path => !pathsOnDisk.Contains(path)).ToList())
-        {
-            if (_sessions.Values.Any(session => session.Path == path))
-                continue;
-
-            _texts.Remove(path);
-            _timestamps.Remove(path);
-            catalogTouched = true;
-        }
+        var onDisk = ContentFileIndex.EnumerateToml().ToHashSet(StringComparer.Ordinal);
+        bool catalogTouched = RefreshClosedFiles(onDisk) | ForgetDeletedFiles(onDisk);
 
         foreach (var session in _sessions.Values.ToList())
-        {
-            ulong stamp = FileStamp(session.Path);
-            if (stamp == session.LoadedStamp)
-                continue;
-
-            if (stamp == 0)
-            {
-                // Dirty-вкладка может намеренно восстановить удалённый файл. Чистая
-                // принимает удаление сразу; LoadedStamp=0 означает уже подтверждённое
-                // решение «оставить черновик».
-                if (session.LoadedStamp == 0)
-                    continue;
-
-                if (session.Dirty)
-                {
-                    report.Conflicts.Add(session.Id);
-                    continue;
-                }
-
-                _sessions.Remove(session.Id);
-                _texts.Remove(session.Path);
-                _timestamps.Remove(session.Path);
-                if (ActiveSession == session)
-                    ActiveSession = _sessions.Values.LastOrDefault();
-                report.Reloaded.Add($"{session.Id} (file deleted)");
-                catalogTouched = true;
-                continue;
-            }
-
-            if (session.Dirty)
-            {
-                report.Conflicts.Add(session.Id);
-                continue;
-            }
-
-            string text = ReadText(session.Path);
-            if (text == null)
-                continue;
-
-            _texts[session.Path] = text;
-            _timestamps[session.Path] = stamp;
-            session.AcceptExternalReload(text, stamp);
-            report.Reloaded.Add(session.Id);
-        }
+            catalogTouched |= RefreshOpenFile(session, report);
 
         if (catalogTouched)
         {
-            _entries.Clear();
-            foreach (var pair in _texts)
-                TryRegisterEntry(pair.Key, pair.Value);
+            _index.RebuildEntries(_index.Texts);
             report.CatalogChanged++;
         }
 
@@ -422,108 +272,147 @@ public sealed class ContentEditorStore
         return report;
     }
 
+    /// <summary>Подтянуть файлы без открытой вкладки: конфликтовать здесь не с чем.</summary>
+    private bool RefreshClosedFiles(IReadOnlyCollection<string> onDisk)
+    {
+        bool touched = false;
+        foreach (string path in onDisk)
+        {
+            ulong stamp = ContentFileIndex.Stamp(path);
+            if (stamp == 0 || stamp == _index.KnownStamp(path))
+                continue;
+
+            if (_sessions.Values.Any(session => session.Path == path))
+                continue;
+
+            if (ContentFileIndex.ReadText(path) is not { } text)
+                continue;
+
+            _index.Remember(path, text, stamp);
+            touched = true;
+        }
+
+        return touched;
+    }
+
+    /// <summary>Убрать из индекса удалённые файлы, у которых нет открытой вкладки.</summary>
+    private bool ForgetDeletedFiles(IReadOnlyCollection<string> onDisk)
+    {
+        bool touched = false;
+        foreach (string path in _index.Texts.Keys.Where(path => !onDisk.Contains(path)).ToList())
+        {
+            if (_sessions.Values.Any(session => session.Path == path))
+                continue;
+
+            _index.Forget(path);
+            touched = true;
+        }
+
+        return touched;
+    }
+
     /// <summary>
-    /// Принять внешнюю версию файла для грязной вкладки: черновик заменяется текстом
-    /// с диска. Вызывать только после подтверждения в UI.
+    /// Сверить один открытый файл. Возвращает признак того, что каталог требует пересборки.
+    /// </summary>
+    private bool RefreshOpenFile(OpenEntitySession session, ExternalChangeReport report)
+    {
+        ulong stamp = ContentFileIndex.Stamp(session.Path);
+        if (stamp == session.LoadedStamp)
+            return false;
+
+        if (stamp == 0)
+            return AcceptDeletion(session, report);
+
+        if (session.Dirty)
+        {
+            report.Conflicts.Add(session.Id);
+            return false;
+        }
+
+        if (ContentFileIndex.ReadText(session.Path) is not { } text)
+            return false;
+
+        _index.Remember(session.Path, text, stamp);
+        session.AcceptExternalReload(text, stamp);
+        report.Reloaded.Add(session.Id);
+        return false;
+    }
+
+    /// <summary>
+    /// Файл открытой вкладки исчез с диска. Чистая вкладка принимает удаление сразу;
+    /// вкладка с черновиком спрашивает: черновиком можно намеренно восстановить файл.
+    /// Метка ноль означает уже принятое решение «оставить черновик».
+    /// </summary>
+    private bool AcceptDeletion(OpenEntitySession session, ExternalChangeReport report)
+    {
+        if (session.LoadedStamp == 0)
+            return false;
+
+        if (session.Dirty)
+        {
+            report.Conflicts.Add(session.Id);
+            return false;
+        }
+
+        Drop(session);
+        _index.Forget(session.Path);
+        report.Reloaded.Add($"{session.Id} (file deleted)");
+        return true;
+    }
+
+    /// <summary>
+    /// Принять внешнюю версию файла: черновик заменяется текстом с диска. Вызывать только
+    /// после подтверждения в интерфейсе.
     /// </summary>
     public void AcceptExternalReload(string id)
     {
         if (!_sessions.TryGetValue(id, out var session))
             return;
 
-        string text = ReadText(session.Path);
-        if (text == null)
+        if (ContentFileIndex.ReadText(session.Path) is not { } text)
         {
-            _sessions.Remove(id);
-            _texts.Remove(session.Path);
-            _timestamps.Remove(session.Path);
-            _entries.RemoveAll(entry => entry.Path == session.Path);
-            if (ActiveSession == session)
-                ActiveSession = _sessions.Values.LastOrDefault();
+            // Файла больше нет: вкладку держать не на чем.
+            Drop(session);
+            _index.Forget(session.Path);
             Recompile();
             Changed?.Invoke();
             return;
         }
 
-        ulong stamp = FileStamp(session.Path);
-        _texts[session.Path] = text;
-        _timestamps[session.Path] = stamp;
+        ulong stamp = ContentFileIndex.Stamp(session.Path);
+        _index.Remember(session.Path, text, stamp);
         session.AcceptExternalReload(text, stamp);
         Recompile();
         Changed?.Invoke();
     }
 
     /// <summary>
-    /// Оставить черновик поверх внешнего файла: обновляем только LoadedStamp, чтобы
-    /// следующая проверка не считала тот же конфликт повторно. Запись на диск по-прежнему
-    /// потребует явного «Применить» и перезапишет внешнюю правку.
+    /// Оставить черновик поверх внешнего файла: обновляется только метка времени, чтобы
+    /// тот же конфликт не всплыл повторно. Запись на диск по-прежнему потребует «Применить»
+    /// и перезапишет внешнюю правку.
     /// </summary>
     public void KeepDraftDespiteExternal(string id)
     {
         if (!_sessions.TryGetValue(id, out var session))
             return;
 
-        ulong stamp = FileStamp(session.Path);
-        if (stamp == 0)
-        {
-            session.AcknowledgeExternalStamp(0);
-            _timestamps.Remove(session.Path);
-            Changed?.Invoke();
-            return;
-        }
-
+        ulong stamp = ContentFileIndex.Stamp(session.Path);
         session.AcknowledgeExternalStamp(stamp);
-        _timestamps[session.Path] = stamp;
+        if (stamp == 0)
+            _index.Forget(session.Path);
+        else
+            _index.Remember(session.Path, _index.Text(session.Path) ?? session.DraftText, stamp);
+
         Changed?.Invoke();
     }
 
-    public OpenEntitySession Open(string id)
-    {
-        if (_sessions.TryGetValue(id, out var existing))
-        {
-            ActiveSession = existing;
-            Changed?.Invoke();
-            return existing;
-        }
+    // ── Правка черновика ──────────────────────────────────────────────────────────
 
-        var entry = _entries.FirstOrDefault(e => e.Id == id);
-        if (entry == null || !_texts.TryGetValue(entry.Path, out string text))
-            return null;
-
-        var session = new OpenEntitySession(entry, text, _timestamps.GetValueOrDefault(entry.Path));
-        AutoPlace(session);
-        _sessions[id] = session;
-        ActiveSession = session;
-        Changed?.Invoke();
-        return session;
-    }
-
-    public void Activate(string id)
-    {
-        if (_sessions.TryGetValue(id, out var session))
-        {
-            ActiveSession = session;
-            Changed?.Invoke();
-        }
-    }
-
-    public bool Close(string id, bool discard)
-    {
-        if (!_sessions.TryGetValue(id, out var session))
-            return true;
-
-        if (session.Dirty && !discard)
-            return false;
-
-        _sessions.Remove(id);
-        if (ActiveSession == session)
-            ActiveSession = _sessions.Values.LastOrDefault();
-
-        Recompile();
-        Changed?.Invoke();
-        return true;
-    }
-
+    /// <summary>
+    /// Записать значение поля в черновик либо удалить ключ. Значение, совпавшее
+    /// с унаследованным, локальным ключом не становится: файл не должен содержать копий
+    /// родительских чисел.
+    /// </summary>
     public void SetField(OpenEntitySession session, ContentFieldSpec field, object value, bool clear)
     {
         if (session == null || field == null)
@@ -538,20 +427,92 @@ public sealed class ContentEditorStore
         }
         else
         {
-            string encoded = Encode(field, value);
+            string encoded = ContentValueReader.Encode(field, value);
             if (encoded == null)
                 return;
 
-            // Если значение совпадает с унаследованным — локальный ключ не нужен
             string without = TomlPatchWriter.RemoveKey(session.DraftText, section, field.Key);
-            if (InheritedEquals(session.Path, without, section, field.Key, encoded))
-                session.DraftText = without;
-            else
-                session.DraftText = TomlPatchWriter.SetKey(session.DraftText, section, field.Key, encoded);
+            var texts = DraftMap();
+            texts[session.Path] = without;
+
+            session.DraftText =
+                ContentProvenance.InheritedEquals(session.Path, section, field.Key, encoded, texts)
+                    ? without
+                    : TomlPatchWriter.SetKey(session.DraftText, section, field.Key, encoded);
         }
 
-        // TextSubmitted и FocusExited могут прийти для одного и того же LineEdit подряд.
-        // Повторная сборка при неизменившемся тексте не нужна и порождала лишние Refresh.
+        CommitDraft(session, prior);
+    }
+
+    /// <summary>Значение ключа внутри блока массива таблиц.</summary>
+    public object ArrayItemValue(
+        OpenEntitySession session, string array, int index, ContentFieldSpec field) =>
+        session == null || field == null
+            ? null
+            : WaveDraftReader.ArrayItemValue(session.DraftText, array, index, field.Key);
+
+    /// <summary>Записан ли ключ в этом блоке массива таблиц.</summary>
+    public bool HasArrayItemValue(
+        OpenEntitySession session, string array, int index, ContentFieldSpec field) =>
+        ArrayItemValue(session, array, index, field) != null;
+
+    /// <summary>Записать либо удалить ключ внутри блока массива таблиц.</summary>
+    public void SetArrayItemField(
+        OpenEntitySession session, string array, int index,
+        ContentFieldSpec field, object value, bool clear)
+    {
+        if (session == null || field == null)
+            return;
+
+        string prior = session.DraftText;
+        if (clear)
+        {
+            session.DraftText = TomlPatchWriter.RemoveArrayItemKey(
+                session.DraftText, array, index, field.Key);
+        }
+        else
+        {
+            string encoded = ContentValueReader.Encode(field, value);
+            if (encoded == null)
+                return;
+
+            session.DraftText = TomlPatchWriter.SetArrayItemKey(
+                session.DraftText, array, index, field.Key, encoded);
+        }
+
+        CommitDraft(session, prior);
+    }
+
+    /// <summary>Добавить блок массива таблиц с начальными ключами.</summary>
+    public void AddArrayItem(
+        OpenEntitySession session, string array, IReadOnlyList<(string Key, string Value)> initial)
+    {
+        if (session == null)
+            return;
+
+        string prior = session.DraftText;
+        session.DraftText = TomlPatchWriter.AddArrayItem(session.DraftText, array, initial);
+        CommitDraft(session, prior);
+    }
+
+    /// <summary>Удалить блок массива таблиц вместе с относящимся к нему пояснением.</summary>
+    public void RemoveArrayItem(OpenEntitySession session, string array, int index)
+    {
+        if (session == null)
+            return;
+
+        string prior = session.DraftText;
+        session.DraftText = TomlPatchWriter.RemoveArrayItem(session.DraftText, array, index);
+        CommitDraft(session, prior);
+    }
+
+    /// <summary>
+    /// Общий хвост правки черновика: отметить, пересобрать и оповестить. Правка, не
+    /// изменившая текст, ничего не запускает: <c>TextSubmitted</c> и <c>FocusExited</c>
+    /// приходят для одного и того же поля подряд.
+    /// </summary>
+    private void CommitDraft(OpenEntitySession session, string prior)
+    {
         if (string.Equals(prior, session.DraftText, StringComparison.Ordinal))
             return;
 
@@ -560,18 +521,23 @@ public sealed class ContentEditorStore
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Записать черновик на диск. Возвращает описание отказа либо <c>null</c> при успехе.
+    /// Запись идёт через временный файл: прерывание не должно оставить половину файла.
+    /// </summary>
     public string Apply(OpenEntitySession session)
     {
         if (session == null)
             return "no open entity";
 
-        ulong stamp = FileStamp(session.Path);
+        ulong stamp = ContentFileIndex.Stamp(session.Path);
         if (stamp != 0 && session.LoadedStamp != 0 && stamp != session.LoadedStamp)
             return "file changed externally; reload from disk";
 
-        var probe = CompileTexts(DraftMap());
-        if (probe.Errors > 0)
-            return $"compile failed: {probe.Errors} errors";
+        var probe = new Catalog();
+        int errors = ContentCompiler.CompileWithOverrides(probe, DraftMap());
+        if (errors > 0)
+            return $"compile failed: {errors} errors";
 
         string absolute = ProjectSettings.GlobalizePath(session.Path);
         string temp = absolute + ".tmp";
@@ -579,18 +545,16 @@ public sealed class ContentEditorStore
         try
         {
             File.WriteAllText(temp, session.DraftText);
-            if (File.Exists(absolute))
-                File.Delete(absolute);
-            File.Move(temp, absolute);
+            File.Move(temp, absolute, overwrite: true);
         }
         catch (Exception ex)
         {
             return $"write failed: {ex.Message}";
         }
 
-        _texts[session.Path] = session.DraftText;
-        session.AcceptSaved(FileStamp(session.Path));
-        _timestamps[session.Path] = session.LoadedStamp;
+        ulong saved = ContentFileIndex.Stamp(session.Path);
+        _index.Remember(session.Path, session.DraftText, saved);
+        session.AcceptSaved(saved);
 
         Content.Reload();
         Recompile();
@@ -598,74 +562,77 @@ public sealed class ContentEditorStore
         return null;
     }
 
+    /// <summary>Вернуть черновик к последнему известному тексту файла.</summary>
     public void Revert(OpenEntitySession session)
     {
-        if (session == null || !_texts.TryGetValue(session.Path, out string text))
+        if (session == null || _index.Text(session.Path) is not { } text)
             return;
 
-        session.Revert(text, _timestamps.GetValueOrDefault(session.Path));
+        session.Revert(text, _index.KnownStamp(session.Path));
         Recompile();
         Changed?.Invoke();
     }
 
-    public FieldProvenance Provenance(OpenEntitySession session, ContentFieldSpec field)
-        => FieldSource(session, field).Provenance;
+    // ── Чтение значений ───────────────────────────────────────────────────────────
 
+    /// <summary>Происхождение значения поля: локальное, унаследованное, из vars или умолчание.</summary>
     public FieldSourceInfo FieldSource(OpenEntitySession session, ContentFieldSpec field)
     {
         if (session == null || field == null)
             return new FieldSourceInfo { Provenance = FieldProvenance.Missing };
 
-        string section = field.RootOnly ? null : field.Section;
-        if (HasLocalKey(session.DraftText, section, field.Key))
-        {
-            var table = ParseTable(session.DraftText);
-            if (TryRawField(table, section, field.Key, out object localValue)
-                && TryVarsTarget(localValue, out string varsPath))
-            {
-                return new FieldSourceInfo
-                {
-                    Provenance = FieldProvenance.Vars,
-                    Path = varsPath,
-                };
-            }
-
-            return new FieldSourceInfo
-            {
-                Provenance = FieldProvenance.Local,
-                Path = session.Path,
-            };
-        }
-
-        if (InheritedSource(session.Path, session.DraftText, section, field.Key) is { } inherited)
-            return inherited;
-
-        return new FieldSourceInfo { Provenance = FieldProvenance.Default };
+        return ContentProvenance.Of(
+            session.Path,
+            session.DraftText,
+            field.RootOnly ? null : field.Section,
+            field.Key,
+            DraftMap());
     }
 
-    /// <summary>Открыть определение по пути; vars-файлы не являются сущностями каталога.</summary>
-    public bool OpenPath(string path)
+    /// <summary>
+    /// Есть ли ключ непосредственно в черновике. Происхождение Vars на этот вопрос
+    /// не отвечает: ссылка на файл переменных может быть и локальной, и унаследованной.
+    /// </summary>
+    public bool HasLocalValue(OpenEntitySession session, ContentFieldSpec field) =>
+        session != null
+        && field != null
+        && TomlText.HasKey(session.DraftText, field.RootOnly ? null : field.Section, field.Key);
+
+    /// <summary>Действующее значение поля: итог наследования, подстановки и умолчаний кода.</summary>
+    public object EffectiveValue(OpenEntitySession session, ContentFieldSpec field)
     {
-        var entry = _entries.FirstOrDefault(candidate =>
-            string.Equals(candidate.Path, path, StringComparison.Ordinal));
-        if (entry == null)
-            return false;
+        if (session == null)
+            return null;
 
-        return Open(entry.Id) != null;
+        return session.Kind switch
+        {
+            ContentEntityKind.Wave =>
+                ContentValueReader.Wave(Catalog.Wave(session.Id), session.DraftText, field),
+            ContentEntityKind.Weapon or ContentEntityKind.WorkTool =>
+                ContentValueReader.Tool(Catalog.Tool(session.Id), field),
+            _ => ContentValueReader.Unit(Catalog.Unit(session.Id), field, Catalog.Tags),
+        };
     }
 
+    /// <summary>Собранное определение юнита либо постройки с учётом черновиков.</summary>
+    public UnitDefinition PreviewUnit(string id) => Catalog.Unit(id);
+
+    /// <summary>Собранное определение оружия либо рабочего инструмента с учётом черновиков.</summary>
+    public ToolDefinition PreviewTool(string id) => Catalog.Tool(id);
+
+    /// <summary>Содержимое файла переменных для контекстной панели активной сущности.</summary>
     public VarsPanelData VarsPanel(string path)
     {
         var session = ActiveSession;
         if (session == null
             || string.IsNullOrEmpty(path)
             || !TomlResolver.IsVars(path)
-            || !_texts.TryGetValue(path, out string text))
+            || _index.Text(path) is not { } text)
         {
             return null;
         }
 
-        var table = ParseTable(text);
+        var table = TomlText.Parse(text);
         if (table == null)
             return null;
 
@@ -673,98 +640,45 @@ public sealed class ContentEditorStore
         {
             ContextId = session.Id,
             Path = path,
-            FileName = FileNameOf(path),
+            FileName = TomlText.FileName(path),
         };
-        AddVarsRows(result.Rows, null, table);
+        VarsPanelReader.Fill(result.Rows, null, table);
         return result;
     }
 
-    /// <summary>
-    /// Построить зависимости только активной сессии. Граф использует сырой TOML,
-    /// поскольку разрешённый каталог уже не содержит путей base и vars.
-    /// </summary>
-    public ContentGraphData ActiveContextGraph()
-    {
-        var session = ActiveSession;
-        if (session == null)
-            return null;
+    /// <summary>Граф зависимостей активной сущности режима «Entities».</summary>
+    public ContentGraphData ActiveContextGraph() =>
+        new ContentGraphBuilder(_index, Catalog, DraftMap()).Build(ActiveSession);
 
-        var texts = DraftMap();
-        var graph = new ContentGraphData
-        {
-            ContextId = session.Id,
-            RootKey = session.Path,
-        };
-        var nodeKeys = new HashSet<string>(StringComparer.Ordinal);
-        var edgeKeys = new HashSet<string>(StringComparer.Ordinal);
+    // ── Волны ─────────────────────────────────────────────────────────────────────
 
-        AddGraphNode(graph, nodeKeys, session.Path, session.Id, session.DisplayName,
-            GraphKind(session.Kind, session.Id, session.Path));
-        AddTomlDependencies(
-            session.Path, session.Path, texts, graph, nodeKeys, edgeKeys,
-            new HashSet<string>(StringComparer.Ordinal));
+    /// <summary>Виды противника, пригодные для списков волны.</summary>
+    public IReadOnlyList<string> EnemyUnitIds() =>
+        Catalog.Units
+            .Where(unit => unit.Class == UnitClass.Enemy && !string.IsNullOrEmpty(unit.Id))
+            .OrderBy(unit => unit.Id, StringComparer.Ordinal)
+            .Select(unit => unit.Id)
+            .ToList();
 
-        if (session.Kind is ContentEntityKind.Unit or ContentEntityKind.Building)
-        {
-            var unit = PreviewUnit(session.Id);
-            foreach (string toolId in unit?.ToolIds ?? Array.Empty<string>())
-            {
-                var entry = _entries.FirstOrDefault(candidate => candidate.Id == toolId);
-                if (entry == null)
-                    continue;
+    /// <summary>Отображаемое имя вида либо его идентификатор, если имени нет.</summary>
+    public string UnitDisplayName(string id) =>
+        Catalog.Unit(id) is { } unit && !string.IsNullOrEmpty(unit.DisplayName)
+            ? unit.DisplayName
+            : id;
 
-                var tool = PreviewTool(toolId);
-                var kind = tool is WeaponDefinition
-                    ? ContentGraphNodeKind.Weapon
-                    : ContentGraphNodeKind.WorkTool;
-                AddGraphNode(graph, nodeKeys, entry.Path, toolId,
-                    tool?.DisplayName ?? entry.DisplayName, kind);
-                AddGraphEdge(graph, edgeKeys, session.Path, entry.Path,
-                    kind == ContentGraphNodeKind.Weapon ? "weapon" : "tool");
-                AddTomlDependencies(
-                    entry.Path, entry.Path, texts, graph, nodeKeys, edgeKeys,
-                    new HashSet<string>(StringComparer.Ordinal));
-            }
-        }
+    /// <summary>Блоки <c>[[unit_list]]</c> черновика волны в порядке файла.</summary>
+    public IReadOnlyList<WaveUnitListView> WaveLists(OpenEntitySession session) =>
+        session == null
+            ? new List<WaveUnitListView>()
+            : WaveDraftReader.UnitLists(session.DraftText);
 
-        return graph;
-    }
+    /// <summary>Обзор волны по идентификатору.</summary>
+    public WaveOverview WaveOverview(string id) =>
+        id == null ? null : _waveOverviews.FirstOrDefault(wave => wave.Id == id);
 
-    /// <summary>
-    /// Есть ли ключ непосредственно в черновике. Provenance=Vars не отвечает на этот
-    /// вопрос: ссылка на vars может быть как локальной, так и унаследованной.
-    /// </summary>
-    public bool HasLocalValue(OpenEntitySession session, ContentFieldSpec field)
-    {
-        if (session == null || field == null)
-            return false;
+    // ── Измерительное поле ────────────────────────────────────────────────────────
 
-        string section = field.RootOnly ? null : field.Section;
-        return HasLocalKey(session.DraftText, section, field.Key);
-    }
-
-    public object EffectiveValue(OpenEntitySession session, ContentFieldSpec field)
-    {
-        if (session == null)
-            return null;
-
-        if (session.Kind == ContentEntityKind.Wave)
-            return ReadWaveValue(session, field);
-
-        if (session.Kind is ContentEntityKind.Weapon or ContentEntityKind.WorkTool)
-        {
-            var tool = Catalog.Tool(session.Id);
-            return ReadToolValue(tool, field);
-        }
-
-        var unit = Catalog.Unit(session.Id);
-        return ReadUnitValue(unit, field, Catalog.Tags);
-    }
-
-    public UnitDefinition PreviewUnit(string id) => Catalog.Unit(id);
-
-    public ToolDefinition PreviewTool(string id) => Catalog.Tool(id);
-
+    /// <summary>Расставить открытые сущности рядами по их действительным габаритам.</summary>
     public void LayoutOpenSessions()
     {
         float x = 0f;
@@ -773,7 +687,8 @@ public sealed class ContentEditorStore
         const float gap = Const.Unit * 2.5f;
         const float rowWidth = Const.Unit * 14f;
 
-        foreach (var session in _sessions.Values.OrderBy(s => s.Id, StringComparer.Ordinal))
+        foreach (var session in SessionsIn(ContentEditorScope.Entities)
+                     .OrderBy(s => s.Id, StringComparer.Ordinal))
         {
             var def = Catalog.Unit(session.Id);
             float width = def != null
@@ -798,284 +713,17 @@ public sealed class ContentEditorStore
         Changed?.Invoke();
     }
 
-    // ── Волны ─────────────────────────────────────────────────────────────────────
-    //
-    // Разбор волн здесь снисходителен и не зависит от Catalog: ContentCompiler отбрасывает
-    // волну целиком при любой ошибке проверки, а редактируемый черновик проходит через
-    // недопустимые промежуточные состояния (пустой список видов, доля вне пределов).
-    // Если бы карта волн читала только Catalog, строка исчезала бы посреди правки.
-
-    public IReadOnlyList<WaveOverview> WaveOverviews => _waveOverviews;
-
-    /// <summary>Виды противника, пригодные для списков волны.</summary>
-    public IReadOnlyList<string> EnemyUnitIds() =>
-        Catalog.Units
-            .Where(unit => unit.Class == UnitClass.Enemy && !string.IsNullOrEmpty(unit.Id))
-            .OrderBy(unit => unit.Id, StringComparer.Ordinal)
-            .Select(unit => unit.Id)
-            .ToList();
-
-    public string UnitDisplayName(string id) =>
-        Catalog.Unit(id) is { } unit && !string.IsNullOrEmpty(unit.DisplayName)
-            ? unit.DisplayName
-            : id;
-
-    /// <summary>Блоки [[unit_list]] черновика в порядке файла.</summary>
-    public IReadOnlyList<WaveUnitListView> WaveLists(OpenEntitySession session)
-    {
-        var result = new List<WaveUnitListView>();
-        if (session == null)
-            return result;
-
-        var table = ParseTable(session.DraftText);
-        if (table == null || !table.TryGetValue("unit_list", out object raw))
-            return result;
-
-        int index = 0;
-        foreach (TomlTable item in TableItems(raw))
-        {
-            result.Add(new WaveUnitListView
-            {
-                Index = index++,
-                Mode = item.TryGetValue("mode", out object mode) && mode is string modeName
-                    ? modeName
-                    : "allow",
-                UnitIds = item.TryGetValue("units", out object units) && units is TomlArray array
-                    ? array.OfType<string>().ToArray()
-                    : Array.Empty<string>(),
-                Share = item.TryGetValue("target_budget_share", out object share)
-                    ? Convert.ToSingle(share, CultureInfo.InvariantCulture)
-                    : 0f,
-                HasShare = item.ContainsKey("target_budget_share"),
-            });
-        }
-
-        return result;
-    }
-
-    public object ArrayItemValue(
-        OpenEntitySession session, string array, int index, ContentFieldSpec field)
-    {
-        if (session == null || field == null)
-            return null;
-
-        var table = ParseTable(session.DraftText);
-        if (table == null || !table.TryGetValue(array, out object raw))
-            return null;
-
-        var items = TableItems(raw).ToList();
-        if (index < 0 || index >= items.Count)
-            return null;
-
-        return items[index].TryGetValue(field.Key, out object value) ? ConvertRaw(value) : null;
-    }
-
-    public bool HasArrayItemValue(
-        OpenEntitySession session, string array, int index, ContentFieldSpec field) =>
-        ArrayItemValue(session, array, index, field) != null;
-
-    public void SetArrayItemField(
-        OpenEntitySession session, string array, int index,
-        ContentFieldSpec field, object value, bool clear)
-    {
-        if (session == null || field == null)
-            return;
-
-        string prior = session.DraftText;
-        if (clear)
-        {
-            session.DraftText = TomlPatchWriter.RemoveArrayItemKey(
-                session.DraftText, array, index, field.Key);
-        }
-        else
-        {
-            string encoded = Encode(field, value);
-            if (encoded == null)
-                return;
-
-            session.DraftText = TomlPatchWriter.SetArrayItemKey(
-                session.DraftText, array, index, field.Key, encoded);
-        }
-
-        CommitDraft(session, prior);
-    }
-
-    public void AddArrayItem(
-        OpenEntitySession session, string array, IReadOnlyList<(string Key, string Value)> initial)
-    {
-        if (session == null)
-            return;
-
-        string prior = session.DraftText;
-        session.DraftText = TomlPatchWriter.AddArrayItem(session.DraftText, array, initial);
-        CommitDraft(session, prior);
-    }
-
-    public void RemoveArrayItem(OpenEntitySession session, string array, int index)
-    {
-        if (session == null)
-            return;
-
-        string prior = session.DraftText;
-        session.DraftText = TomlPatchWriter.RemoveArrayItem(session.DraftText, array, index);
-        CommitDraft(session, prior);
-    }
-
-    /// <summary>Общий хвост правки черновика: отметить, пересобрать и оповестить.</summary>
-    private void CommitDraft(OpenEntitySession session, string prior)
-    {
-        if (string.Equals(prior, session.DraftText, StringComparison.Ordinal))
-            return;
-
-        session.MarkDirty();
-        Recompile();
-        Changed?.Invoke();
-    }
-
-    private object ReadWaveValue(OpenEntitySession session, ContentFieldSpec field)
-    {
-        var wave = Catalog.Wave(session.Id);
-        if (wave == null)
-            return RawValue(session.DraftText, field.RootOnly ? null : field.Section, field.Key);
-
-        if (field.RootOnly || string.IsNullOrEmpty(field.Section))
-        {
-            return field.Key switch
-            {
-                "id" => wave.Id,
-                "name" => wave.DisplayName,
-                "tags" => wave.Tags.ToList(),
-                "prefer_next" => wave.PreferNext.ToList(),
-                "terror_range" => new List<float> { wave.TerrorMin, wave.TerrorMax },
-                "army_power_budget" => wave.ArmyPowerBudget,
-                "army_power_per_terror" => wave.ArmyPowerPerTerror,
-                "chill_interval_multiplier" => wave.ChillIntervalMultiplier,
-                "chill_interval_offset" => wave.ChillIntervalOffset,
-                _ => null,
-            };
-        }
-
-        if (field.Section != "spawn")
-            return null;
-
-        var shape = wave.Shape;
-        return field.Key switch
-        {
-            "near_arc_degrees" => shape.NearArcDegrees,
-            "far_arc_degrees" => shape.FarArcDegrees,
-            "wave_start" => shape.WaveStart,
-            "radius_depth_multiplier" => shape.RadiusDepthMultiplier,
-            "spacing_cells" => shape.SpacingCells,
-            "groups" => shape.Groups,
-            "groups_arc_degrees" => shape.GroupsArcDegrees,
-            "group_delay_seconds" => shape.GroupDelaySeconds,
-            _ => null,
-        };
-    }
-
-    private void RebuildWaveOverviews()
-    {
-        _waveOverviews.Clear();
-        var texts = DraftMap();
-
-        foreach (var entry in _entries.Where(candidate => candidate.Kind == ContentEntityKind.Wave))
-        {
-            if (!texts.TryGetValue(entry.Path, out string text))
-                continue;
-
-            var table = ParseTable(text);
-            if (table == null)
-                continue;
-
-            var range = table.TryGetValue("terror_range", out object rangeValue)
-                        && rangeValue is TomlArray rangeArray
-                ? rangeArray.Select(item => Convert.ToSingle(item, CultureInfo.InvariantCulture)).ToArray()
-                : Array.Empty<float>();
-
-            var overview = new WaveOverview
-            {
-                Id = entry.Id,
-                Path = entry.Path,
-                FileName = entry.FileName,
-                DisplayName = entry.DisplayName,
-                Tags = table.TryGetValue("tags", out object tags) && tags is TomlArray tagArray
-                    ? tagArray.OfType<string>().ToArray()
-                    : Array.Empty<string>(),
-                TerrorMin = range.Length > 0 ? range[0] : -1f,
-                TerrorMax = range.Length > 1 ? range[1] : -1f,
-                Budget = Number(table, "army_power_budget", 10f),
-                BudgetPerTerror = Number(table, "army_power_per_terror", 0f),
-                ChillMultiplier = Number(table, "chill_interval_multiplier", 1f),
-                ListCount = table.TryGetValue("unit_list", out object lists)
-                    ? TableItems(lists).Count()
-                    : 0,
-                Compiled = Catalog.Wave(entry.Id) != null,
-            };
-
-            _waveOverviews.Add(overview);
-        }
-    }
-
-    private static float Number(TomlTable table, string key, float fallback) =>
-        table.TryGetValue(key, out object value)
-            ? Convert.ToSingle(value, CultureInfo.InvariantCulture)
-            : fallback;
-
-    /// <summary>Элементы массива таблиц независимо от того, чем их представил разбор.</summary>
-    private static IEnumerable<TomlTable> TableItems(object raw) => raw switch
-    {
-        TomlTableArray array => array,
-        TomlArray array => array.OfType<TomlTable>(),
-        TomlTable single => new[] { single },
-        _ => Array.Empty<TomlTable>(),
-    };
-
-    private static object RawValue(string text, string section, string key)
-    {
-        var table = ParseTable(text);
-        if (table == null)
-            return null;
-
-        if (!string.IsNullOrEmpty(section))
-        {
-            if (!table.TryGetValue(section, out object sectionValue)
-                || sectionValue is not TomlTable sectionTable)
-            {
-                return null;
-            }
-
-            table = sectionTable;
-        }
-
-        return table.TryGetValue(key, out object value) ? ConvertRaw(value) : null;
-    }
-
-    private static object ConvertRaw(object value) => value switch
-    {
-        double number => (float)number,
-        long number => (int)number,
-        TomlArray array when array.All(item => item is string) =>
-            array.OfType<string>().ToList(),
-        TomlArray array => array
-            .Select(item => Convert.ToSingle(item, CultureInfo.InvariantCulture))
-            .ToList(),
-        _ => value,
-    };
-
-    private static bool IsWavePath(string path) =>
-        path != null && path.Contains("/waves/", StringComparison.Ordinal);
-
+    /// <summary>
+    /// Поставить впервые открытую сущность правее всех уже открытых с учётом их габарита.
+    /// Постоянный шаг приводил к наложению крупных силуэтов и подписей.
+    /// </summary>
     private void AutoPlace(OpenEntitySession session)
     {
-        // Новая сущность ставится правее всех уже открытых с учётом их габарита.
-        // Постоянный шаг в три клетки приводил к наложению титанов и подписей.
         float left = 0f;
-        float newHalf = HalfWidth(session.Id);
-
-        foreach (var open in _sessions.Values)
+        foreach (var open in SessionsIn(ContentEditorScope.Entities))
             left = Mathf.Max(left, open.FieldPosition.X + HalfWidth(open.Id) + Const.Unit * 2.5f);
 
-        session.FieldPosition = new Vector2(left + newHalf, 0f);
+        session.FieldPosition = new Vector2(left + HalfWidth(session.Id), 0f);
     }
 
     private float HalfWidth(string id)
@@ -1089,919 +737,73 @@ public sealed class ContentEditorStore
             : Mathf.Max(UnitSilhouette.Extent(def, def.RadiusPx), def.RadiusPx);
     }
 
-    private void Recompile()
+    // ── Сборка ────────────────────────────────────────────────────────────────────
+
+    /// <summary>Тексты всех файлов с подстановкой черновиков открытых вкладок.</summary>
+    public Dictionary<string, string> DraftMap()
     {
-        var texts = DraftMap();
-        var result = CompileTexts(texts);
-        Catalog = result.Catalog;
-
-        // id, name, abstract и локальный kind могут измениться как в форме, так и
-        // во внешнем редакторе. Индекс должен соответствовать тем же текстам, из
-        // которых только что собран Catalog.
-        _entries.Clear();
-        foreach (var pair in texts)
-            TryRegisterEntry(pair.Key, pair.Value);
-
-        ReclassifyEntries();
-        ReconcileOpenSessions();
-        RebuildWaveOverviews();
-    }
-
-    /// <summary>
-    /// Локальный kind может находиться в base, поэтому окончательный вид определяется
-    /// только после компиляции. Это существенно для оружия и рабочих инструментов.
-    /// </summary>
-    private void ReclassifyEntries()
-    {
-        foreach (var entry in _entries)
-        {
-            if (entry.Kind == ContentEntityKind.Wave)
-                continue;
-
-            if (Catalog.Tool(entry.Id) is WeaponDefinition)
-                entry.Kind = ContentEntityKind.Weapon;
-            else if (Catalog.Tool(entry.Id) is WorkToolDefinition)
-                entry.Kind = ContentEntityKind.WorkTool;
-            else if (Catalog.Unit(entry.Id) is { } unit)
-                entry.Kind = unit.IsStructure
-                    ? ContentEntityKind.Building
-                    : ContentEntityKind.Unit;
-        }
-    }
-
-    private void ReconcileOpenSessions()
-    {
-        var sessions = _sessions.Values.ToList();
-        _sessions.Clear();
-        foreach (var session in sessions)
-        {
-            var entry = _entries.FirstOrDefault(candidate => candidate.Path == session.Path);
-            if (entry == null)
-                continue;
-
-            session.UpdateEntry(entry);
-            _sessions[session.Id] = session;
-        }
-
-        if (ActiveSession != null && !_sessions.ContainsValue(ActiveSession))
-            ActiveSession = _sessions.Values.LastOrDefault();
-    }
-
-    private Dictionary<string, string> DraftMap()
-    {
-        var map = new Dictionary<string, string>(_texts, StringComparer.Ordinal);
+        var map = new Dictionary<string, string>(_index.Texts, StringComparer.Ordinal);
         foreach (var session in _sessions.Values)
             map[session.Path] = session.DraftText;
         return map;
     }
 
-    private (Catalog Catalog, int Errors) CompileTexts(Dictionary<string, string> texts)
+    /// <summary>
+    /// Пересобрать каталог по черновикам и согласовать с ним индекс и открытые вкладки.
+    /// Порядок важен: вид записи известен только после сборки, а сессия обращается
+    /// к записи за именем и видом.
+    /// </summary>
+    private void Recompile()
     {
+        var texts = DraftMap();
         var catalog = new Catalog();
-        int errors = ContentCompiler.CompileWithOverrides(catalog, texts);
-        return (catalog, errors);
-    }
+        ContentCompiler.CompileWithOverrides(catalog, texts);
+        Catalog = catalog;
 
-    private void TryRegisterEntry(string path, string text)
-    {
-        var table = ParseTable(text);
-        if (table == null)
-            return;
-
-        if (!table.TryGetValue("id", out object idValue) || idValue is not string id || id.Length == 0)
-            return;
-
-        bool abstractFlag = table.TryGetValue("abstract", out object abs) && abs is true;
-        string name = table.TryGetValue("name", out object nameValue) && nameValue is string n ? n : id;
-
-        ContentEntityKind kind;
-        if (IsWavePath(path))
-        {
-            // Волна опознаётся по расположению файла: ключа kind у неё нет, а класс
-            // сущности к ней неприменим.
-            kind = ContentEntityKind.Wave;
-        }
-        else if (table.TryGetValue("kind", out object kindValue) && kindValue is string kindName)
-        {
-            kind = kindName == "weapon" ? ContentEntityKind.Weapon : ContentEntityKind.WorkTool;
-        }
-        else
-        {
-            bool building = path.Contains("/buildings/", StringComparison.Ordinal);
-            kind = building ? ContentEntityKind.Building : ContentEntityKind.Unit;
-        }
-
-        _entries.Add(new ContentEditorEntry
-        {
-            Id = id,
-            Path = path,
-            FileName = FileNameOf(path),
-            DisplayName = name,
-            Kind = kind,
-            Abstract = abstractFlag,
-        });
-    }
-
-    private static string FileNameOf(string path)
-    {
-        int slash = path.LastIndexOf('/');
-        return slash >= 0 ? path[(slash + 1)..] : path;
-    }
-
-    private bool InheritedEquals(
-        string path, string draftWithoutKey, string section, string key, string encoded)
-    {
-        // Сравниваем текстовое представление унаследованного значения с кандидатом
-        if (!TryResolveValue(path, draftWithoutKey, section, key, out object inherited))
-            return false;
-
-        string inheritedText = EncodeObject(inherited);
-        return string.Equals(NormalizeToml(inheritedText), NormalizeToml(encoded), StringComparison.Ordinal);
-    }
-
-    private FieldSourceInfo InheritedSource(
-        string path, string draftText, string section, string key)
-    {
-        var texts = DraftMap();
-        texts[path] = draftText;
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        return FindSourceInFoundation(path, section, key, texts, visited);
+        _index.RebuildEntries(texts);
+        _index.Reclassify(catalog);
+        ReconcileOpenSessions();
+        _waveOverviews = WaveDraftReader.Overviews(_index.Entries, texts, catalog);
     }
 
     /// <summary>
-    /// Найти исходный ключ в сырой цепочке base, не материализуя значение. После Resolve
-    /// ссылка на vars уже превращена в число, поэтому прежняя проверка ошибочно помечала
-    /// такие значения как обычный base.
+    /// Согласовать сессии с обновлёнными записями: правка ключа <c>id</c> меняет ключ
+    /// сессии, а исчезнувшая запись означает закрытие вкладки.
     /// </summary>
-    private static FieldSourceInfo FindSourceInFoundation(
-        string path,
-        string section,
-        string key,
-        IReadOnlyDictionary<string, string> texts,
-        HashSet<string> visited)
+    private void ReconcileOpenSessions()
     {
-        if (!visited.Add(path) || !texts.TryGetValue(path, out string text))
-            return null;
+        var sessions = _sessions.Values.ToList();
+        var previousActive = new Dictionary<ContentEditorScope, string>(_activeByScope);
+        _sessions.Clear();
 
-        var table = ParseTable(text);
-        if (table == null)
-            return null;
-
-        if (!string.IsNullOrEmpty(section)
-            && table.TryGetValue(section, out object sectionValue)
-            && sectionValue is TomlTable localSection)
+        foreach (var session in sessions)
         {
-            if (localSection.TryGetValue("base", out object sectionBase)
-                && sectionBase is string sectionBasePath
-                && TomlResolver.TryCanonicalPath(
-                    sectionBasePath, out string targetPath, out _))
-            {
-                return FindSourceInChain(targetPath, section, key, texts, visited);
-            }
-        }
-
-        if (table.TryGetValue("base", out object rootBase)
-            && rootBase is string rootBasePath
-            && TomlResolver.TryCanonicalPath(rootBasePath, out string basePath, out _))
-        {
-            return FindSourceInChain(basePath, section, key, texts, visited);
-        }
-
-        return null;
-    }
-
-    private static FieldSourceInfo FindSourceInChain(
-        string path,
-        string section,
-        string key,
-        IReadOnlyDictionary<string, string> texts,
-        HashSet<string> visited)
-    {
-        if (!visited.Add(path) || !texts.TryGetValue(path, out string text))
-            return null;
-
-        var table = ParseTable(text);
-        if (table == null)
-            return null;
-
-        // Секционный base на vars-файл использует его корневые ключи.
-        if (TomlResolver.IsVars(path) && table.TryGetValue(key, out _))
-        {
-            return new FieldSourceInfo
-            {
-                Provenance = FieldProvenance.Vars,
-                Path = path,
-            };
-        }
-
-        if (string.IsNullOrEmpty(section))
-        {
-            if (table.TryGetValue(key, out object value))
-                return SourceAt(path, value);
-        }
-        else if (table.TryGetValue(section, out object sectionValue)
-                 && sectionValue is TomlTable sectionTable)
-        {
-            if (sectionTable.TryGetValue(key, out object value))
-                return SourceAt(path, value);
-
-            if (sectionTable.TryGetValue("base", out object sectionBase)
-                && sectionBase is string sectionBasePath
-                && TomlResolver.TryCanonicalPath(
-                    sectionBasePath, out string sectionTarget, out _))
-            {
-                return FindSourceInChain(sectionTarget, section, key, texts, visited);
-            }
-        }
-
-        if (table.TryGetValue("base", out object rootBase)
-            && rootBase is string rootBasePath
-            && TomlResolver.TryCanonicalPath(rootBasePath, out string basePath, out _))
-        {
-            return FindSourceInChain(basePath, section, key, texts, visited);
-        }
-
-        return null;
-    }
-
-    private static FieldSourceInfo SourceAt(string definingPath, object value)
-    {
-        if (TryVarsTarget(value, out string varsPath))
-        {
-            return new FieldSourceInfo
-            {
-                Provenance = FieldProvenance.Vars,
-                Path = varsPath,
-            };
-        }
-
-        return new FieldSourceInfo
-        {
-            Provenance = FieldProvenance.Base,
-            Path = definingPath,
-        };
-    }
-
-    private static bool TryVarsTarget(object value, out string path)
-    {
-        path = null;
-        return value is string text
-               && text.Contains(".vars.toml", StringComparison.Ordinal)
-               && TomlResolver.TryCanonicalPath(text, out path, out _);
-    }
-
-    private static bool TryRawField(
-        TomlTable table, string section, string key, out object value)
-    {
-        value = null;
-        if (table == null)
-            return false;
-
-        if (string.IsNullOrEmpty(section))
-            return table.TryGetValue(key, out value);
-
-        return table.TryGetValue(section, out object sectionValue)
-               && sectionValue is TomlTable sectionTable
-               && sectionTable.TryGetValue(key, out value);
-    }
-
-    private static void AddVarsRows(
-        List<VarsPanelRow> rows, string section, TomlTable table)
-    {
-        foreach (var pair in table.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            string nestedSection = string.IsNullOrEmpty(section)
-                ? pair.Key
-                : $"{section}.{pair.Key}";
-            if (pair.Value is TomlTable nested)
-            {
-                AddVarsRows(rows, nestedSection, nested);
-                continue;
-            }
-
-            rows.Add(new VarsPanelRow
-            {
-                Section = section ?? "",
-                Key = pair.Key,
-                Value = EncodeObject(pair.Value),
-            });
-        }
-    }
-
-    private void AddTomlDependencies(
-        string nodeKey,
-        string path,
-        IReadOnlyDictionary<string, string> texts,
-        ContentGraphData graph,
-        HashSet<string> nodeKeys,
-        HashSet<string> edgeKeys,
-        HashSet<string> visited)
-    {
-        if (!visited.Add(path) || !texts.TryGetValue(path, out string text))
-            return;
-
-        var table = ParseTable(text);
-        if (table == null)
-            return;
-
-        if (table.TryGetValue("base", out object rootBase))
-            AddBaseDependency(nodeKey, rootBase, "inherits", texts, graph, nodeKeys, edgeKeys, visited);
-
-        foreach (var pair in table)
-        {
-            if (pair.Value is TomlTable section
-                && section.TryGetValue("base", out object sectionBase))
-            {
-                AddBaseDependency(
-                    nodeKey, sectionBase, $"section [{pair.Key}]", texts,
-                    graph, nodeKeys, edgeKeys, visited);
-            }
-        }
-
-        AddVarsReferences(nodeKey, null, table, texts, graph, nodeKeys, edgeKeys);
-    }
-
-    private void AddBaseDependency(
-        string from,
-        object rawPath,
-        string label,
-        IReadOnlyDictionary<string, string> texts,
-        ContentGraphData graph,
-        HashSet<string> nodeKeys,
-        HashSet<string> edgeKeys,
-        HashSet<string> visited)
-    {
-        if (rawPath is not string text
-            || !TomlResolver.TryCanonicalPath(text, out string target, out _)
-            || !texts.ContainsKey(target))
-        {
-            return;
-        }
-
-        AddGraphNodeForPath(graph, nodeKeys, target);
-        AddGraphEdge(graph, edgeKeys, from, target, label);
-        AddTomlDependencies(target, target, texts, graph, nodeKeys, edgeKeys, visited);
-    }
-
-    private void AddVarsReferences(
-        string from,
-        string section,
-        TomlTable table,
-        IReadOnlyDictionary<string, string> texts,
-        ContentGraphData graph,
-        HashSet<string> nodeKeys,
-        HashSet<string> edgeKeys)
-    {
-        foreach (var pair in table)
-        {
-            if (pair.Value is TomlTable nested)
-            {
-                string nestedSection = string.IsNullOrEmpty(section)
-                    ? pair.Key
-                    : $"{section}.{pair.Key}";
-                AddVarsReferences(from, nestedSection, nested, texts, graph, nodeKeys, edgeKeys);
-                continue;
-            }
-
-            if (pair.Value is not string value
-                || !TomlResolver.TryCanonicalPath(value, out string target, out string property)
-                || !TomlResolver.IsVars(target)
-                || !texts.ContainsKey(target))
-            {
-                continue;
-            }
-
-            AddGraphNodeForPath(graph, nodeKeys, target);
-            string field = string.IsNullOrEmpty(section) ? pair.Key : $"{section}.{pair.Key}";
-            string label = string.IsNullOrEmpty(property)
-                ? field
-                : $"{field} → {property}";
-            AddGraphEdge(graph, edgeKeys, from, target, label);
-        }
-    }
-
-    private void AddGraphNodeForPath(
-        ContentGraphData graph, HashSet<string> nodeKeys, string path)
-    {
-        var entry = _entries.FirstOrDefault(candidate => candidate.Path == path);
-        string id = entry?.Id ?? FileNameOf(path);
-        string title = entry?.DisplayName ?? FileNameOf(path);
-        AddGraphNode(graph, nodeKeys, path, id, title, GraphKind(entry?.Kind, id, path, entry?.Abstract == true));
-    }
-
-    private static void AddGraphNode(
-        ContentGraphData graph,
-        HashSet<string> nodeKeys,
-        string key,
-        string id,
-        string title,
-        ContentGraphNodeKind kind)
-    {
-        if (!nodeKeys.Add(key))
-            return;
-
-        graph.Nodes.Add(new ContentGraphNode
-        {
-            Key = key,
-            Title = FileNameOf(key),
-            Detail = string.IsNullOrEmpty(title) || string.Equals(title, id, StringComparison.Ordinal)
-                ? id
-                : $"{id} · {title}",
-            Path = key,
-            Kind = kind,
-        });
-    }
-
-    private static void AddGraphEdge(
-        ContentGraphData graph,
-        HashSet<string> edgeKeys,
-        string from,
-        string to,
-        string label)
-    {
-        string edgeKey = $"{from}\n{to}\n{label}";
-        if (!edgeKeys.Add(edgeKey))
-            return;
-
-        graph.Edges.Add(new ContentGraphEdge { From = from, To = to, Label = label });
-    }
-
-    private ContentGraphNodeKind GraphKind(
-        ContentEntityKind? kind, string id, string path = null, bool abstractEntry = false)
-    {
-        if (!string.IsNullOrEmpty(path) && TomlResolver.IsVars(path))
-            return ContentGraphNodeKind.Vars;
-        if (abstractEntry)
-            return ContentGraphNodeKind.Base;
-
-        return kind switch
-        {
-            ContentEntityKind.Building => ContentGraphNodeKind.Building,
-            ContentEntityKind.Weapon => ContentGraphNodeKind.Weapon,
-            ContentEntityKind.WorkTool => ContentGraphNodeKind.WorkTool,
-            ContentEntityKind.Unit => ContentGraphNodeKind.Unit,
-            _ when PreviewTool(id) is WeaponDefinition => ContentGraphNodeKind.Weapon,
-            _ when PreviewTool(id) is WorkToolDefinition => ContentGraphNodeKind.WorkTool,
-            _ => ContentGraphNodeKind.Base,
-        };
-    }
-
-    private bool TryResolveValue(
-        string path, string draftText, string section, string key, out object value)
-    {
-        value = null;
-        var texts = DraftMap();
-        texts[path] = draftText;
-
-        var raw = new Dictionary<string, TomlTable>(StringComparer.Ordinal);
-        foreach (var pair in texts)
-        {
-            var table = ParseTable(pair.Value);
-            if (table != null)
-                raw[pair.Key] = table;
-        }
-
-        if (TomlResolver.Resolve(raw, out var resolved) > 0)
-            return false;
-
-        if (!resolved.TryGetValue(path, out var doc))
-            return false;
-
-        if (string.IsNullOrEmpty(section))
-            return doc.TryGetValue(key, out value);
-
-        if (!doc.TryGetValue(section, out object sectionValue) || sectionValue is not TomlTable sectionTable)
-            return false;
-
-        return sectionTable.TryGetValue(key, out value);
-    }
-
-    private static bool HasLocalKey(string text, string section, string key)
-    {
-        var table = ParseTable(text);
-        if (table == null)
-            return false;
-
-        if (string.IsNullOrEmpty(section))
-            return table.ContainsKey(key);
-
-        return table.TryGetValue(section, out object sectionValue)
-               && sectionValue is TomlTable sectionTable
-               && sectionTable.ContainsKey(key);
-    }
-
-    private static string Encode(ContentFieldSpec field, object value)
-    {
-        if (value == null)
-            return null;
-
-        return field.Type switch
-        {
-            ContentFieldType.Bool => TomlPatchWriter.FormatBool((bool)value),
-            ContentFieldType.Float or ContentFieldType.NullableFloat =>
-                TomlPatchWriter.FormatFloat(Convert.ToSingle(value, CultureInfo.InvariantCulture)),
-            ContentFieldType.Int => TomlPatchWriter.FormatInt(Convert.ToInt32(value, CultureInfo.InvariantCulture)),
-            ContentFieldType.String or ContentFieldType.RequiredString or ContentFieldType.Path =>
-                TomlPatchWriter.FormatString(Convert.ToString(value, CultureInfo.InvariantCulture)),
-            ContentFieldType.Enum => TomlPatchWriter.FormatEnum(Convert.ToString(value, CultureInfo.InvariantCulture)),
-            ContentFieldType.Color when value is Color color =>
-                TomlPatchWriter.FormatColor(color.R, color.G, color.B, color.A),
-            ContentFieldType.StringList when value is IList<string> list =>
-                TomlPatchWriter.FormatStringList(list.ToList()),
-            ContentFieldType.FloatList when value is IList<float> floats =>
-                TomlPatchWriter.FormatFloatList(floats.ToList()),
-            ContentFieldType.Scale when value is string scaleName =>
-                TomlPatchWriter.FormatString(scaleName),
-            ContentFieldType.Scale =>
-                TomlPatchWriter.FormatFloat(Convert.ToSingle(value, CultureInfo.InvariantCulture)),
-            ContentFieldType.Vector2List when value is IList<Vector2> vectors =>
-                FormatVectors(vectors),
-            _ => Convert.ToString(value, CultureInfo.InvariantCulture),
-        };
-    }
-
-    private static string FormatVectors(IList<Vector2> vectors)
-    {
-        var parts = new List<string>();
-        foreach (var v in vectors)
-            parts.Add($"[{TomlPatchWriter.FormatFloat(v.X)}, {TomlPatchWriter.FormatFloat(v.Y)}]");
-        return "[" + string.Join(", ", parts) + "]";
-    }
-
-    private static string EncodeObject(object value) => value switch
-    {
-        null => "",
-        bool flag => TomlPatchWriter.FormatBool(flag),
-        double number => TomlPatchWriter.FormatFloat((float)number),
-        long number => TomlPatchWriter.FormatInt((int)number),
-        float number => TomlPatchWriter.FormatFloat(number),
-        int number => TomlPatchWriter.FormatInt(number),
-        string text => text.StartsWith('/') || text.StartsWith("res://")
-            ? TomlPatchWriter.FormatString(text)
-            : TomlPatchWriter.FormatString(text),
-        TomlArray array => FormatTomlArray(array),
-        _ => value.ToString(),
-    };
-
-    private static string FormatTomlArray(TomlArray array)
-    {
-        var parts = new List<string>();
-        foreach (object item in array)
-            parts.Add(EncodeObject(item));
-        return "[" + string.Join(", ", parts) + "]";
-    }
-
-    private static string NormalizeToml(string text) =>
-        (text ?? "").Replace(" ", "").Replace("\"", "").ToLowerInvariant();
-
-    private static object ReadUnitValue(UnitDefinition def, ContentFieldSpec field, TagRegistry tags)
-    {
-        if (def == null || field == null)
-            return null;
-
-        string key = field.Key;
-        string section = field.Section ?? "";
-
-        if (field.RootOnly)
-            return key switch
-            {
-                "id" => def.Id,
-                "name" => def.DisplayName,
-                "class" => def.Class.ToString(),
-                "color" => def.Color,
-                "tags" => TagNames(def, tags),
-                "tools" => def.ToolIds,
-                "buildbar" => def.Buildbar,
-                _ => null,
-            };
-
-        return section switch
-        {
-            "body" => key switch
-            {
-                "max_health" => def.MaxHealth,
-                "radius" => def.Radius,
-                "vision_range" => def.VisionRange,
-                "hull" => def.Hull.ToString(),
-                "hull_trim" => def.HullTrim.ToString(),
-                "hull_aspect" => def.HullAspect,
-                "sprite" => def.Sprite,
-                "sprite_scale" => def.SpriteScale,
-                "sprite_rotation" => def.SpriteRotationDegrees,
-                "ao_inner" => def.AmbientOcclusionInner,
-                "ao_outer" => def.AmbientOcclusionOuter,
-                "armor_rings" => def.ArmorRings,
-                "front_plate" => def.FrontPlate,
-                _ => null,
-            },
-            "movement" => key switch
-            {
-                "speed" => def.Speed,
-                "turn_speed" => def.TurnSpeedDegrees,
-                "acceleration" => def.Acceleration,
-                "brake" => def.Brake,
-                _ => null,
-            },
-            "footprint" => key switch
-            {
-                "rows" => def.Rows,
-                "facing_degrees" => def.FacingDegrees,
-                "requires_metal_spot" => def.RequiresMetalSpot,
-                "pattern" => def.Pattern.ToString(),
-                "pattern_alt" => def.PatternAlt.ToString(),
-                "pattern_step" => def.PatternStep,
-                _ => null,
-            },
-            "assembly" => key switch
-            {
-                "cost_metal" => def.Assembly?.CostMetal,
-                "frame_health" => def.Assembly?.FrameHealth,
-                _ => null,
-            },
-            "conversion" => key switch
-            {
-                "energy_drain" => def.Conversion?.EnergyDrain,
-                "metal_output" => def.Conversion?.MetalOutput,
-                _ => null,
-            },
-            "production" => key switch
-            {
-                "energy" => def.EnergyProduction,
-                "metal" => def.MetalProduction,
-                _ => null,
-            },
-            "storage" => key switch
-            {
-                "metal" => def.MetalStorage,
-                "energy" => def.EnergyStorage,
-                _ => null,
-            },
-            "terror" => key switch
-            {
-                "expansion_power" => def.ExpansionPowerWeight,
-                "army_power" => def.ArmyPowerWeight,
-                "ignore_modifiers" => def.IgnoreTerrorModifiers,
-                _ => null,
-            },
-            "battle" => key switch
-            {
-                "approach_hold" => def.ApproachHoldFraction,
-                _ => null,
-            },
-            "plant" => key switch
-            {
-                "factory_cooldown" => def.Plant?.FactoryCooldown,
-                "build_power" => def.Plant?.BuildPower,
-                "energy_per_power" => def.Plant?.EnergyPerPower,
-                "rolloff_directions" => def.Plant?.RolloffDirections,
-                "rolloff_clearance" => def.Plant?.RolloffClearance,
-                _ => null,
-            },
-            "orders" => key switch
-            {
-                "allow" => OrderNames(def.DeclaredOrders),
-                "deny" => OrderNames(def.DeniedOrders),
-                _ => null,
-            },
-            _ => null,
-        };
-    }
-
-    private static object ReadToolValue(ToolDefinition tool, ContentFieldSpec field)
-    {
-        if (tool == null || field == null)
-            return null;
-
-        return field.Key switch
-        {
-            "id" => tool.Id,
-            "name" => tool.DisplayName,
-            "kind" => tool is WeaponDefinition ? "weapon" : "work",
-            "range" => tool.Range,
-            "aim_while_moving" => tool.AimWhileMoving,
-            "sprite" => tool.Sprite,
-            "sprite_rotation" => tool.SpriteRotationDegrees,
-            "damage" => (tool as WeaponDefinition)?.Damage,
-            "fire_interval" => (tool as WeaponDefinition)?.FireInterval,
-            "projectile_speed" => (tool as WeaponDefinition)?.ProjectileSpeed,
-            "spread_degrees" => (tool as WeaponDefinition)?.SpreadDegrees,
-            "aim_cone_degrees" => (tool as WeaponDefinition)?.AimConeDegrees,
-            "projectile_radius" => (tool as WeaponDefinition)?.ProjectileRadius,
-            "projectile_color" => (tool as WeaponDefinition)?.ProjectileColor,
-            "power" => (tool as WorkToolDefinition)?.Power,
-            "energy_per_power" => (tool as WorkToolDefinition)?.EnergyPerPower,
-            "works" => WorkNames(tool as WorkToolDefinition),
-            "repairs_units" => (tool as WorkToolDefinition)?.RepairsUnits,
-            _ => null,
-        };
-    }
-
-    private static string[] TagNames(UnitDefinition def, TagRegistry tags)
-    {
-        if (def == null || tags == null)
-            return System.Array.Empty<string>();
-
-        var names = new List<string>();
-        foreach (string name in tags.Names)
-        {
-            if (tags.TryParse(new[] { name }, "editor", out var single) && def.Tags.Has(single))
-                names.Add(name);
-        }
-
-        return names.ToArray();
-    }
-
-    private static string[] OrderNames(OrderSet set)
-    {
-        var names = new List<string>();
-        foreach (OrderKind kind in Enum.GetValues<OrderKind>())
-        {
-            if (set.Allows(kind))
-                names.Add(TomlPatchWriter.ToSnake(kind.ToString()));
-        }
-
-        return names.ToArray();
-    }
-
-    private static string[] WorkNames(WorkToolDefinition work)
-    {
-        if (work == null)
-            return Array.Empty<string>();
-
-        var names = new List<string>();
-        if (work.Kinds.HasFlag(WorkKinds.Build))
-            names.Add("build");
-        if (work.Kinds.HasFlag(WorkKinds.Repair) && !work.Kinds.HasFlag(WorkKinds.Build))
-            names.Add("repair");
-        else if (work.Kinds.HasFlag(WorkKinds.Repair) && work.Kinds.HasFlag(WorkKinds.Build))
-        {
-            // стройка уже подразумевает ремонт; явное repair нужно только без build
-        }
-
-        if (work.Kinds.HasFlag(WorkKinds.Build))
-            return new[] { "build" };
-
-        if (work.Kinds.HasFlag(WorkKinds.Repair))
-            return new[] { "repair" };
-
-        return names.ToArray();
-    }
-
-    private static IEnumerable<string> EnumerateToml()
-    {
-        string[] roots =
-        {
-            "res://resources/content/",
-            "res://resources/tools/",
-            "res://resources/units/",
-            "res://resources/buildings/",
-            "res://resources/waves/",
-        };
-
-        foreach (string root in roots)
-        foreach (string path in Files(root))
-            yield return path;
-    }
-
-    private static IEnumerable<string> Files(string dir)
-    {
-        using var access = DirAccess.Open(dir);
-        if (access == null)
-            yield break;
-
-        foreach (string file in access.GetFiles())
-            if (file.EndsWith(".toml"))
-                yield return dir + file;
-
-        foreach (string sub in access.GetDirectories())
-        {
-            if (sub.StartsWith('.'))
+            var entry = _index.ByPath(session.Path);
+            if (entry == null)
                 continue;
 
-            foreach (string path in Files(dir + sub + "/"))
-                yield return path;
+            string oldId = session.Id;
+            session.UpdateEntry(entry);
+            _sessions[session.Id] = session;
+
+            foreach (var pair in previousActive.ToList())
+            {
+                if (pair.Value == oldId)
+                    previousActive[pair.Key] = session.Id;
+            }
+        }
+
+        _activeByScope.Clear();
+        foreach (var pair in previousActive)
+        {
+            if (_sessions.TryGetValue(pair.Value ?? "", out var session) && session.Scope == pair.Key)
+                _activeByScope[pair.Key] = pair.Value;
+        }
+
+        foreach (ContentEditorScope scope in Enum.GetValues<ContentEditorScope>())
+        {
+            if (!_activeByScope.ContainsKey(scope) && SessionsIn(scope).LastOrDefault() is { } fallback)
+                _activeByScope[scope] = fallback.Id;
         }
     }
-
-    private static string ReadText(string path)
-    {
-        using var file = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
-        return file?.GetAsText();
-    }
-
-    private static ulong FileStamp(string path)
-    {
-        string absolute = ProjectSettings.GlobalizePath(path);
-        if (!File.Exists(absolute))
-            return 0;
-
-        return (ulong)File.GetLastWriteTimeUtc(absolute).Ticks;
-    }
-
-    private static TomlTable ParseTable(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-            return null;
-
-        var syntax = Toml.Parse(text);
-        return syntax.HasErrors ? null : syntax.ToModel();
-    }
-}
-
-/// <summary>
-/// Открытая вкладка сущности. Черновик живёт здесь до «Применить» или «Отменить».
-/// Положение на общем поле и флаг показа принадлежат вкладке, а не определению в Catalog.
-/// </summary>
-public sealed class OpenEntitySession
-{
-    public string Id { get; private set; }
-    public string Path { get; }
-    public string FileName { get; private set; }
-    public string DisplayName { get; private set; }
-    public ContentEntityKind Kind { get; private set; }
-
-    /// <summary>Рабочий текст файла. Правки формы меняют только его.</summary>
-    public string DraftText { get; set; }
-
-    /// <summary>
-    /// Метка времени файла на момент последней синхронизации с диском.
-    /// Сравнение с текущей меткой обнаруживает внешнюю правку.
-    /// </summary>
-    public ulong LoadedStamp { get; private set; }
-
-    public bool Dirty { get; private set; }
-
-    /// <summary>Если false — сущность остаётся во вкладке, но не рисуется на поле сравнения.</summary>
-    public bool ShowOnField { get; set; } = true;
-
-    /// <summary>Центр силуэта на измерительном поле, в пикселях мира.</summary>
-    public Vector2 FieldPosition { get; set; }
-
-    public OpenEntitySession(ContentEditorEntry entry, string text, ulong stamp)
-    {
-        Id = entry.Id;
-        Path = entry.Path;
-        FileName = entry.FileName;
-        DisplayName = entry.DisplayName;
-        Kind = entry.Kind;
-        DraftText = text;
-        LoadedStamp = stamp;
-    }
-
-    public void MarkDirty() => Dirty = true;
-
-    public void UpdateEntry(ContentEditorEntry entry)
-    {
-        if (entry == null || !string.Equals(entry.Path, Path, StringComparison.Ordinal))
-            return;
-
-        Id = entry.Id;
-        FileName = entry.FileName;
-        DisplayName = entry.DisplayName;
-        Kind = entry.Kind;
-    }
-
-    public void Restore(ContentEditorSessionSnapshot snapshot)
-    {
-        if (snapshot == null)
-            return;
-
-        DraftText = snapshot.DraftText ?? DraftText;
-        LoadedStamp = snapshot.LoadedStamp;
-        Dirty = snapshot.Dirty;
-        ShowOnField = snapshot.ShowOnField;
-        FieldPosition = new Vector2(snapshot.FieldX, snapshot.FieldY);
-    }
-
-    public void AcceptSaved(ulong stamp)
-    {
-        Dirty = false;
-        LoadedStamp = stamp;
-    }
-
-    public void Revert(string text, ulong stamp)
-    {
-        DraftText = text;
-        LoadedStamp = stamp;
-        Dirty = false;
-    }
-
-    /// <summary>Подтянуть внешний файл вместо черновика (чистая вкладка или после согласия).</summary>
-    public void AcceptExternalReload(string text, ulong stamp)
-    {
-        DraftText = text;
-        LoadedStamp = stamp;
-        Dirty = false;
-    }
-
-    /// <summary>
-    /// Запомнить новую метку времени, не трогая черновик: конфликт больше не всплывает,
-    /// пока файл снова не изменится снаружи.
-    /// </summary>
-    public void AcknowledgeExternalStamp(ulong stamp) => LoadedStamp = stamp;
-
-    public string TabTitle =>
-        Dirty
-            ? $"{FileName} ({DisplayName}) *"
-            : $"{FileName} ({DisplayName})";
 }

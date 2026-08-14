@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\scripts\data\editor\TomlPatchWriter.cs" Link="TomlPatchWriter.cs" />
+    <Compile Include="..\..\scripts\data\editor\TuningSceneText.cs" Link="TuningSceneText.cs" />
     <Compile Include="..\..\scripts\data\editor\ContentEditorSelfTest.cs" Link="ContentEditorSelfTest.cs" />
   </ItemGroup>
 </Project>
