@@ -17,12 +17,8 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+
 Content="*res://scripts/data/Content.cs"
-
-[display]
-
-window/stretch/mode="canvas_items"
-window/stretch/aspect="expand"
 
 [dotnet]
 

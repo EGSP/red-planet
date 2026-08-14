@@ -12,6 +12,13 @@ using Godot;
 /// каталога откладывается до первого показа: нет смысла читать все .toml, пока вкладку
 /// не открыли.
 ///
+/// ВЫГРУЗКА СБОРКИ. Узлы типов из игровой DLL нельзя оставлять в дереве редактора:
+/// горячая перезагрузка C# выгружает AssemblyLoadContext, пока эти узлы ещё живут,
+/// и редактор падает с 0xC0000005. _ExitTree освобождает дерево безусловно, находя
+/// узлы по имени, а не только по managed-полю. Остаточный узел после перезагрузки
+/// не переиспользуется: его освобождают и строят заново. Открытые вкладки и черновики
+/// возвращает снимок .godot/content_editor_workspace.cfg, а не то же нативное дерево.
+///
 /// ВНЕШНИЕ ПРАВКИ. Подписка на EditorFileSystem.FilesystemChanged ловит сохранение файла
 /// внутри Godot. Возврат фокуса окна и повторный показ вкладки ловят правку во внешнем
 /// редакторе (Cursor и т.п.), которую FilesystemChanged может не прислать сразу.
@@ -40,23 +47,24 @@ public partial class ContentEditorPlugin : EditorPlugin
         _active = false;
         RemoveFileSystemSubscription();
 
-        if (IsMainValid())
+        if (IsInstanceValid(_main))
         {
             _main.FloatingModeToggleRequested -= ToggleFloatingMode;
             _main.Shutdown();
-
-            if (_main.GetParent() != null)
-                _main.GetParent().RemoveChild(_main);
-            // QueueFree исполняется в конце кадра, а выгрузка C# может начаться раньше.
-            // Синхронное освобождение удаляет все signal delegates до unload assembly.
-            _main.Free();
         }
 
-        if (IsInstanceValid(_floatingWindow))
-        {
-            RemoveFloatingWindowSubscription();
-            _floatingWindow.Free();
-        }
+        RemoveFloatingWindowSubscription();
+
+        var editor = EditorInterface.Singleton;
+        var screen = editor?.GetEditorMainScreen();
+        var baseControl = editor?.GetBaseControl();
+
+        // Окно держит главный экран как потомка; его освобождают первым.
+        // Поиск по имени покрывает случай, когда managed-поле уже обнулено.
+        FreeNamedChild(baseControl, FloatingWindowName);
+        FreeNamedChild(screen, ContentEditorMain.EditorNodeName);
+        FreeNode(_main);
+        FreeNode(_floatingWindow);
 
         _main = null;
         _floatingWindow = null;
@@ -109,9 +117,8 @@ public partial class ContentEditorPlugin : EditorPlugin
     }
 
     /// <summary>
-    /// Получить целый главный экран либо создать новый. После перезагрузки C# поле _main
-    /// может обнулиться, хотя нативный дочерний Control ещё существует. Поиск по имени
-    /// позволяет повторно использовать его; узел иного типа удаляется как остаточный.
+    /// Получить целый главный экран либо создать новый. Остаточный узел прошлой сборки
+    /// не переиспользуется: его типы принадлежат выгружаемому контексту.
     /// </summary>
     private bool EnsureMain()
     {
@@ -128,56 +135,26 @@ public partial class ContentEditorPlugin : EditorPlugin
         if (!IsInstanceValid(screen) || !IsInstanceValid(baseControl))
             return false;
 
-        // После перезагрузки C# отдельное нативное окно может остаться в дереве,
-        // хотя поля нового managed-экземпляра плагина обнулены.
-        _floatingWindow = baseControl.GetNodeOrNull<Window>(FloatingWindowName);
-        var floatingMain = IsInstanceValid(_floatingWindow)
-            ? _floatingWindow.GetNodeOrNull<ContentEditorMain>(ContentEditorMain.EditorNodeName)
-            : null;
+        if (IsInstanceValid(_main))
+            _main.FloatingModeToggleRequested -= ToggleFloatingMode;
 
-        if (IsInstanceValid(floatingMain)
-            && floatingMain.Lifecycle != ContentEditorLifecycle.Disposed)
+        RemoveFloatingWindowSubscription();
+        FreeNamedChild(baseControl, FloatingWindowName);
+        FreeNamedChild(screen, ContentEditorMain.EditorNodeName);
+        _main = null;
+        _floatingWindow = null;
+
+        _main = new ContentEditorMain
         {
-            _main = floatingMain;
-        }
-        else
-        {
-            if (IsInstanceValid(_floatingWindow))
-            {
-                RemoveFloatingWindowSubscription();
-                _floatingWindow.QueueFree();
-                _floatingWindow = null;
-            }
-
-            Node existing = screen.GetNodeOrNull(ContentEditorMain.EditorNodeName);
-            if (existing is ContentEditorMain contentMain
-            && IsInstanceValid(contentMain)
-            && contentMain.Lifecycle != ContentEditorLifecycle.Disposed)
-            {
-                _main = contentMain;
-            }
-            else
-            {
-                if (IsInstanceValid(existing))
-                {
-                    screen.RemoveChild(existing);
-                    existing.QueueFree();
-                }
-
-                _main = new ContentEditorMain
-                {
-                    Name = ContentEditorMain.EditorNodeName,
-                    Visible = false,
-                };
-                screen.AddChild(_main);
-            }
-        }
+            Name = ContentEditorMain.EditorNodeName,
+            Visible = false,
+        };
+        screen.AddChild(_main);
 
         // EditorMainScreen не является Container для дочернего Control плагина.
         _main.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         SubscribeMain();
-        EnsureFloatingWindowSubscription();
-        _main.SetFloatingMode(IsFloating());
+        _main.SetFloatingMode(false);
         return true;
     }
 
@@ -314,5 +291,26 @@ public partial class ContentEditorPlugin : EditorPlugin
 
         _fileSystemSubscribed = false;
         _watchedFileSystem = null;
+    }
+
+    private static void FreeNamedChild(Node parent, string name)
+    {
+        if (!IsInstanceValid(parent))
+            return;
+
+        FreeNode(parent.GetNodeOrNull(name));
+    }
+
+    private static void FreeNode(Node node)
+    {
+        if (!IsInstanceValid(node))
+            return;
+
+        Node parent = node.GetParent();
+        if (IsInstanceValid(parent))
+            parent.RemoveChild(node);
+
+        // QueueFree ждёт конца кадра, а выгрузка C# может начаться раньше.
+        node.Free();
     }
 }

@@ -10,6 +10,14 @@ using Godot;
 ///
 /// Поэтому размер выставляется явно и обновляется при изменении окна. Все дальнейшие
 /// элементы кладутся уже внутрь каркаса, где обычные якоря работают как положено.
+///
+/// ЗДЕСЬ ЖЕ ПРИМЕНЯЕТСЯ МАСШТАБ ИНТЕРФЕЙСА (<see cref="UiScale"/>). Каркас — единственное
+/// место, общее для всех деревьев интерфейса и притом знающее свой слой, поэтому множитель
+/// ставится на слой отсюда, а не в каждой панели по отдельности. Мировые оверлеи лежат вне
+/// слоёв интерфейса и масштабом не задеваются, что и требуется: размером мира ведает камера.
+///
+/// Размер каркаса при этом делится на множитель: слой увеличивает всё нарисованное в нём,
+/// и каркас, оставленный в пикселях окна, вышел бы за экран ровно во столько же раз.
 /// </summary>
 public partial class UiFrame : Control
 {
@@ -17,21 +25,39 @@ public partial class UiFrame : Control
     {
         MouseFilter = MouseFilterEnum.Ignore;
 
-        Resize();
-        GetViewport().SizeChanged += Resize;
+        Apply();
+
+        GetViewport().SizeChanged += Apply;
+        UiScale.Changed += Apply;
     }
 
     public override void _ExitTree()
     {
+        UiScale.Changed -= Apply;
+
         var viewport = GetViewport();
 
         if (Alive.Is(viewport))
-            viewport.SizeChanged -= Resize;
+            viewport.SizeChanged -= Apply;
     }
 
-    private void Resize()
+    private void Apply()
     {
+        var viewport = GetViewport().GetVisibleRect().Size;
+        float scale = UiScale.Effective(viewport);
+
+        // Растеризация шрифтов согласуется с масштабом слоя, иначе текст расплывается;
+        // свойство принадлежит вьюпорту, поэтому значение у всех каркасов одно и то же
+        UiScale.ApplyOversampling(GetViewport(), scale);
+
+        // Каркас встречается и вне слоя — в предварительных сценах инструментов;
+        // там масштабировать нечего, и размер берётся как есть
+        if (GetParent() is CanvasLayer layer)
+            layer.Scale = new Vector2(scale, scale);
+        else
+            scale = 1f;
+
         Position = Vector2.Zero;
-        Size = GetViewport().GetVisibleRect().Size;
+        Size = viewport / scale;
     }
 }

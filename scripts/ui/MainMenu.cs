@@ -43,7 +43,7 @@ public partial class MainMenu : CanvasLayer
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 24) });
 
         AddButton(box, "Новая игра", () => this.Ancestor<Root>()?.NewGame());
-        AddButton(box, "Управление", () => this.Ancestor<Root>()?.OpenSettings());
+        AddButton(box, "Настройки", () => this.Ancestor<Root>()?.OpenSettings());
         AddButton(box, "Выйти из игры", () => this.Ancestor<Root>()?.QuitGame());
     }
 

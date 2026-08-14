@@ -157,45 +157,51 @@ public static class InputActions
     /// </summary>
     public static InputAction[] All => _all ??= Build();
 
+    /// <summary>
+    /// Набор собирается списком, а не массивом заданной длины. Длина, посчитанная вручную,
+    /// однажды разошлась с числом строк: в наборе оставался пустой элемент с именем null,
+    /// и экран настроек падал на нём при первом же открытии. Список исключает эту ошибку
+    /// целиком, поскольку считать нечего.
+    /// </summary>
     private static InputAction[] Build()
     {
-        var list = new InputAction[17 + GroupKeys.Length];
-        int i = 0;
+        var list = new List<InputAction>
+        {
+            new(UnitAttack, InputSection.Units, "Атаковать", Key.A,
+                InputScope.WithSelection),
+            new(UnitMove, InputSection.Units, "Идти", Key.M,
+                InputScope.WithSelection),
+            new(UnitPatrol, InputSection.Units, "Патрулировать", Key.P,
+                InputScope.WithSelection),
+            new(UnitRepair, InputSection.Units, "Чинить", Key.R,
+                InputScope.WithSelection),
+            new(UnitBuild, InputSection.Units, "Помощь строительству", Key.B,
+                InputScope.WithSelection),
+            new(UnitFollow, InputSection.Units, "Следовать", Key.F,
+                InputScope.WithSelection),
+            new(UnitDelete, InputSection.Units, "Снос", Key.Delete,
+                InputScope.WithSelection),
 
-        list[i++] = new(UnitAttack, InputSection.Units, "Атаковать", Key.A,
-            InputScope.WithSelection);
-        list[i++] = new(UnitMove, InputSection.Units, "Идти", Key.M,
-            InputScope.WithSelection);
-        list[i++] = new(UnitPatrol, InputSection.Units, "Патрулировать", Key.P,
-            InputScope.WithSelection);
-        list[i++] = new(UnitRepair, InputSection.Units, "Чинить", Key.R,
-            InputScope.WithSelection);
-        list[i++] = new(UnitBuild, InputSection.Units, "Помощь строительству", Key.B,
-            InputScope.WithSelection);
-        list[i++] = new(UnitFollow, InputSection.Units, "Следовать", Key.F,
-            InputScope.WithSelection);
-        list[i++] = new(UnitDelete, InputSection.Units, "Снос", Key.Delete,
-            InputScope.WithSelection);
-
-        list[i++] = new(SelectArmy, InputSection.Selection, "Боевые на экране", Key.A,
-            InputScope.WithoutSelection);
-        list[i++] = new(SelectBuilders, InputSection.Selection, "Строители на экране", Key.F,
-            InputScope.WithoutSelection);
+            new(SelectArmy, InputSection.Selection, "Боевые на экране", Key.A,
+                InputScope.WithoutSelection),
+            new(SelectBuilders, InputSection.Selection, "Строители на экране", Key.F,
+                InputScope.WithoutSelection),
+        };
 
         for (int slot = 0; slot < GroupKeys.Length; slot++)
-            list[i++] = new(GroupAction(slot), InputSection.Groups,
-                $"Группа {ControlGroups.Label(slot)}", GroupKeys[slot]);
+            list.Add(new(GroupAction(slot), InputSection.Groups,
+                $"Группа {ControlGroups.Label(slot)}", GroupKeys[slot]));
 
-        list[i++] = new(CameraZoomIn, InputSection.Camera, "Приблизить", Key.Z);
-        list[i++] = new(CameraZoomOut, InputSection.Camera, "Отдалить", Key.X);
+        list.Add(new(CameraZoomIn, InputSection.Camera, "Приблизить", Key.Z));
+        list.Add(new(CameraZoomOut, InputSection.Camera, "Отдалить", Key.X));
 
-        list[i++] = new(ViewOrdersAll, InputSection.View, "Очереди всех своих", Key.C);
-        list[i++] = new(GameCancel, InputSection.Game, "Отмена, меню паузы", Key.Escape);
-        list[i++] = new(SandboxToggle, InputSection.Debug, "Панель песочницы", Key.F2);
-        list[i++] = new(DebugToggle, InputSection.Debug, "Панель отладки", Key.F3);
-        list[i] = new(DebugRestart, InputSection.Debug, "Пересобрать сессию", Key.F5);
+        list.Add(new(ViewOrdersAll, InputSection.View, "Очереди всех своих", Key.C));
+        list.Add(new(GameCancel, InputSection.Game, "Отмена, меню паузы", Key.Escape));
+        list.Add(new(SandboxToggle, InputSection.Debug, "Панель песочницы", Key.F2));
+        list.Add(new(DebugToggle, InputSection.Debug, "Панель отладки", Key.F3));
+        list.Add(new(DebugRestart, InputSection.Debug, "Пересобрать сессию", Key.F5));
 
-        return list;
+        return list.ToArray();
     }
 
     /// <summary>Имя действия для слота боевой группы.</summary>

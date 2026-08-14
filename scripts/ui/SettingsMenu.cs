@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Настройки горячих клавиш: разделы по смыслу, строка на действие, назначение нажатием.
+/// Экран настроек: разделы разнесены по вкладкам — «Управление» и «Графика».
 ///
 /// ОТДЕЛЬНОЕ ДЕРЕВО ПОД КОРНЕМ ПРИЛОЖЕНИЯ, а не часть меню паузы. Настройки открываются
 /// и из главного меню, где сессии не существует вовсе, и из паузы, где она стоит; общего
@@ -10,9 +10,13 @@ using Godot;
 /// значило бы либо заводить второй такой же, либо тянуть настройки за сессией, которой
 /// они не принадлежат.
 ///
-/// РАЗДЕЛЫ БЕРУТСЯ ИЗ КАРТЫ ДЕЙСТВИЙ, а не перечисляются здесь: действие, забытое в этом
-/// файле, работало бы в игре, но не показывалось в настройках, и найти такую пропажу
-/// можно было бы только случайно.
+/// ВКЛАДКИ, А НЕ ОДИН СПИСОК. Управление занимает несколько десятков строк и требует
+/// прокрутки; настройки изображения к клавишам отношения не имеют и терялись бы в конце
+/// этого списка. Разделение по вкладкам оставляет каждому разделу собственную высоту.
+///
+/// РАЗДЕЛЫ УПРАВЛЕНИЯ БЕРУТСЯ ИЗ КАРТЫ ДЕЙСТВИЙ, а не перечисляются здесь: действие,
+/// забытое в этом файле, работало бы в игре, но не показывалось в настройках, и найти
+/// такую пропажу можно было бы только случайно.
 ///
 /// ОДНА КЛАВИША ВСТРЕЧАЕТСЯ В РАЗНЫХ РАЗДЕЛАХ, и это не ошибка: A задаёт приказ атаки
 /// выделенному отряду и она же отбирает боевые машины, когда отряда нет. Разделы для того
@@ -24,15 +28,34 @@ public partial class SettingsMenu : CanvasLayer
     private static readonly Color Shade = new(0f, 0f, 0f, 0.75f);
     private static readonly Color Heading = new(0.45f, 0.85f, 0.95f);
     private static readonly Color Waiting = new(1f, 0.72f, 0.28f);
+    private static readonly Color Hint = new(0.7f, 0.75f, 0.8f);
 
     /// <summary>Ширина колонки с названием действия. Клавиши должны стоять в один столбец.</summary>
     private const int TitleWidth = 280;
+
+    /// <summary>
+    /// Размер области вкладок. Высота ограничена, чтобы кнопки не выпихивались за экран,
+    /// и согласована с <see cref="UiScale"/>: от неё зависит, какие ступени масштаба
+    /// вообще доступны, поскольку этот экран — самое высокое из окон игры.
+    /// </summary>
+    private static readonly Vector2 PageSize = new(TitleWidth + 180, 320);
 
     /// <summary>Кнопки клавиш по имени действия — по ним обновляются подписи.</summary>
     private readonly Dictionary<string, Button> _keys = new();
 
     /// <summary>Действие, которому сейчас назначается клавиша, либо null.</summary>
     private string _capturing;
+
+    private HSlider _scaleSlider;
+    private Label _scaleValue;
+
+    /// <summary>
+    /// Идёт перетаскивание ползунка масштаба. Пока оно идёт, масштаб не применяется:
+    /// применение сдвигает сам ползунок под курсором, и захваченная мышью ручка начала бы
+    /// убегать от указателя. Значение применяется по отпусканию, а до тех пор меняется
+    /// только подпись.
+    /// </summary>
+    private bool _dragging;
 
     public override void _Ready()
     {
@@ -98,36 +121,22 @@ public partial class SettingsMenu : CanvasLayer
 
         var title = new Label
         {
-            Text = "Горячие клавиши",
+            Text = "Настройки",
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         title.AddThemeFontSizeOverride("font_size", 26);
         column.AddChild(title);
 
-        var hint = new Label
-        {
-            Text = "Щёлкните по клавише и нажмите новую. Escape — отмена.",
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-        hint.AddThemeFontSizeOverride("font_size", 12);
-        hint.AddThemeColorOverride("font_color", new Color(0.7f, 0.75f, 0.8f));
-        column.AddChild(hint);
+        var tabs = new TabContainer { CustomMinimumSize = PageSize };
+        column.AddChild(tabs);
 
-        column.AddChild(new HSeparator());
+        var controls = BuildControlsPage();
+        controls.Name = "Управление";
+        tabs.AddChild(controls);
 
-        // Высота ограничена, чтобы длинный список разделов не выпихивал кнопки за экран
-        var scroll = new ScrollContainer
-        {
-            CustomMinimumSize = new Vector2(TitleWidth + 180, 420),
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        column.AddChild(scroll);
-
-        var list = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        list.AddThemeConstantOverride("separation", 8);
-        scroll.AddChild(list);
-
-        BuildSections(list);
+        var graphics = BuildGraphicsPage();
+        graphics.Name = "Графика";
+        tabs.AddChild(graphics);
 
         column.AddChild(new HSeparator());
 
@@ -135,8 +144,37 @@ public partial class SettingsMenu : CanvasLayer
         buttons.AddThemeConstantOverride("separation", 10);
         column.AddChild(buttons);
 
-        AddButton(buttons, "По умолчанию", ResetAll);
         AddButton(buttons, "Закрыть", Close);
+    }
+
+    // ── вкладка управления ─────────────────────────────────────────────────────
+
+    private Control BuildControlsPage()
+    {
+        var page = new VBoxContainer();
+        page.AddThemeConstantOverride("separation", 8);
+
+        page.AddChild(HintLabel("Щёлкните по клавише и нажмите новую. Escape — отмена."));
+
+        var scroll = new ScrollContainer
+        {
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        page.AddChild(scroll);
+
+        var list = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        list.AddThemeConstantOverride("separation", 8);
+        scroll.AddChild(list);
+
+        BuildSections(list);
+
+        var footer = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        page.AddChild(footer);
+
+        AddButton(footer, "Клавиши по умолчанию", ResetKeys);
+
+        return page;
     }
 
     /// <summary>
@@ -200,12 +238,129 @@ public partial class SettingsMenu : CanvasLayer
         return row;
     }
 
+    // ── вкладка графики ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Масштаб интерфейса ползунком по ступеням <see cref="UiScale.Steps"/>. Ползунок ходит
+    /// по НОМЕРАМ ступеней, а не по самим множителям: промежуточных значений не существует,
+    /// и вещественный отрезок обещал бы игроку то, чего набор не даёт.
+    ///
+    /// Крупные ступени на малом окне недоступны — верхняя граница ползунка берётся у
+    /// <see cref="UiScale.MaxFor"/>, поскольку при них разметка перестала бы помещаться.
+    /// </summary>
+    private Control BuildGraphicsPage()
+    {
+        var page = new VBoxContainer();
+        page.AddThemeConstantOverride("separation", 10);
+
+        var caption = new Label { Text = "МАСШТАБ ИНТЕРФЕЙСА" };
+        caption.AddThemeFontSizeOverride("font_size", 13);
+        caption.AddThemeColorOverride("font_color", Heading);
+        page.AddChild(caption);
+
+        page.AddChild(HintLabel(
+            "Ступени кратны 25 %: при них размеры панелей остаются целыми числами "
+            + "пикселей. Шрифты растеризуются заново под выбранный масштаб, поэтому "
+            + "текст не размывается."));
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        page.AddChild(row);
+
+        float allowed = UiScale.MaxFor(GetViewport().GetVisibleRect().Size);
+
+        _scaleSlider = new HSlider
+        {
+            MinValue = 0,
+            MaxValue = UiScale.IndexOf(allowed),
+            Step = 1,
+            TickCount = UiScale.IndexOf(allowed) + 1,
+            TicksOnBorders = true,
+            Value = UiScale.IndexOf(UiScale.Current),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+            CustomMinimumSize = new Vector2(260, 0),
+        };
+
+        _scaleSlider.ValueChanged += OnScaleValueChanged;
+        _scaleSlider.DragStarted += () => _dragging = true;
+        _scaleSlider.DragEnded += OnScaleDragEnded;
+        row.AddChild(_scaleSlider);
+
+        _scaleValue = new Label
+        {
+            Text = UiScale.Label(UiScale.Current),
+            CustomMinimumSize = new Vector2(64, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        _scaleValue.AddThemeFontSizeOverride("font_size", 14);
+        row.AddChild(_scaleValue);
+
+        // Про недоступные ступени сказано прямо: молча укороченный ползунок выглядел бы
+        // так, будто крупных значений в игре нет вовсе
+        if (allowed < UiScale.Steps[^1])
+            page.AddChild(HintLabel(
+                $"В окне нынешнего размера доступно до {UiScale.Label(allowed)}: "
+                + "при большем значении интерфейс не помещается. Разверните окно "
+                + "на весь экран, чтобы открылись остальные ступени."));
+
+        // Распорка прижимает кнопку сброса к низу вкладки, как и на вкладке управления
+        page.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });
+
+        var footer = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        page.AddChild(footer);
+
+        AddButton(footer, "Масштаб по умолчанию", ResetScale);
+
+        return page;
+    }
+
+    private void OnScaleValueChanged(double value)
+    {
+        float step = UiScale.Steps[(int)value];
+        _scaleValue.Text = UiScale.Label(step);
+
+        if (!_dragging)
+            UiScale.Set(step);
+    }
+
+    private void OnScaleDragEnded(bool changed)
+    {
+        _dragging = false;
+
+        if (changed)
+            UiScale.Set(UiScale.Steps[(int)_scaleSlider.Value]);
+    }
+
+    private void ResetScale()
+    {
+        UiScale.Reset();
+        _scaleSlider.Value = UiScale.IndexOf(UiScale.Current);
+        _scaleValue.Text = UiScale.Label(UiScale.Current);
+    }
+
+    // ── общее ──────────────────────────────────────────────────────────────────
+
+    private static Label HintLabel(string text)
+    {
+        var label = new Label
+        {
+            Text = text,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+
+        label.AddThemeFontSizeOverride("font_size", 12);
+        label.AddThemeColorOverride("font_color", Hint);
+
+        return label;
+    }
+
     private static void AddButton(Node parent, string text, System.Action pressed)
     {
         var button = new Button
         {
             Text = text,
-            CustomMinimumSize = new Vector2(160, 36),
+            CustomMinimumSize = new Vector2(200, 36),
         };
 
         button.AddThemeFontSizeOverride("font_size", 15);
@@ -214,7 +369,7 @@ public partial class SettingsMenu : CanvasLayer
         parent.AddChild(button);
     }
 
-    // ── назначение ─────────────────────────────────────────────────────────────
+    // ── назначение клавиш ──────────────────────────────────────────────────────
 
     /// <summary>
     /// Начать назначение. Прежнее незаконченное отменяется: два ожидания разом означали бы,
@@ -252,7 +407,7 @@ public partial class SettingsMenu : CanvasLayer
         RefreshLabels();
     }
 
-    private void ResetAll()
+    private void ResetKeys()
     {
         StopCapture();
         Keybinds.ResetAll();

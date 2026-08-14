@@ -111,7 +111,7 @@ public partial class PauseMenu : CanvasLayer
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 16) });
 
         AddButton(box, "Продолжить", () => _session.SetPaused(false));
-        AddButton(box, "Управление", () => this.Ancestor<Root>()?.OpenSettings());
+        AddButton(box, "Настройки", () => this.Ancestor<Root>()?.OpenSettings());
         AddButton(box, "Перезапустить", Restart);
         AddButton(box, "Выйти в главное меню", ExitToMainMenu);
     }

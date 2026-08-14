@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Godot;
 
 /// <summary>
 /// Состояние главного экрана. Публичные входы сначала переводят объект в Ready;
-/// прямой доступ к виджетам в Constructed/Stale/Disposed запрещён.
+/// прямой доступ к виджетам в Constructed и Disposed запрещён.
 /// </summary>
 public enum ContentEditorLifecycle
 {
@@ -14,7 +13,6 @@ public enum ContentEditorLifecycle
     UiReady,
     Loading,
     Ready,
-    Stale,
     Faulted,
     Disposed,
 }
@@ -22,11 +20,11 @@ public enum ContentEditorLifecycle
 /// <summary>
 /// Главный экран редактора контента.
 ///
-/// ЧТО ЗДЕСЬ ОСТАЁТСЯ. Жизненный цикл (создание интерфейса, перезагрузка после сборки C#,
-/// завершение), верхняя полоса действий над всем проектом, переключение режимов, сверка
-/// с диском и снимок рабочего пространства. Содержимое режимов вынесено в отдельные
-/// классы, реализующие <see cref="IContentEditorMode"/>: главный экран одинаково связывает
-/// их со Store, обновляет и сохраняет их настройку.
+/// ЧТО ЗДЕСЬ ОСТАЁТСЯ. Жизненный цикл (создание интерфейса, завершение), верхняя полоса
+/// действий над всем проектом, переключение режимов, сверка с диском и снимок рабочего
+/// пространства. Содержимое режимов вынесено в отдельные классы, реализующие
+/// <see cref="IContentEditorMode"/>: главный экран одинаково связывает их со Store,
+/// обновляет и сохраняет их настройку.
 ///
 /// СОСТОЯНИЕ. Единственный источник правды — <see cref="ContentEditorStore"/>. Интерфейс
 /// подписан на его <c>Changed</c> и перерисовывается целиком отложенным вызовом.
@@ -43,17 +41,12 @@ public partial class ContentEditorMain : Control
     /// <summary>Пауза перед сверкой после FilesystemChanged: импорт шлёт несколько событий подряд.</summary>
     private const double ExternalCheckDelaySec = 0.35;
 
-    /// <summary>Период проверки DLL: EditorFileSystem не обязан сообщать о результате MSBuild.</summary>
-    private const double BuildCheckIntervalSec = 1.0;
-
     /// <summary>
     /// Пауза перед записью снимка. Правка в форме порождает событие на каждый набранный
     /// символ, и запись файла на каждое из них означала бы десятки обращений к диску
     /// в секунду. Отсрочка объединяет их в одну запись.
     /// </summary>
     private const double WorkspaceSaveDelaySec = 0.6;
-
-    private const string BuildTokenMeta = "_red_planet_content_editor_build";
 
     private ContentEditorStore _store = new();
 
@@ -81,10 +74,8 @@ public partial class ContentEditorMain : Control
     private int _uiGeneration;
     private double _externalCheckIn;
     private bool _externalCheckQueued;
-    private double _buildCheckIn;
     private double _workspaceSaveIn;
     private bool _workspaceSaveQueued;
-    private long _knownAssemblyStamp;
     private ContentEditorLifecycle _lifecycle = ContentEditorLifecycle.Constructed;
     private bool _reparenting;
 
@@ -115,9 +106,9 @@ public partial class ContentEditorMain : Control
 
     /// <summary>
     /// Перевести экран в полноценное состояние. Метод можно вызывать из _Ready,
-    /// _MakeVisible, уведомления фокуса и проверки сборки: повторный вызов безопасен.
+    /// _MakeVisible и уведомления фокуса: повторный вызов безопасен.
     /// </summary>
-    public bool EnsureOperational(bool forceReload = false)
+    public bool EnsureOperational()
     {
         if (_lifecycle == ContentEditorLifecycle.Disposed || !IsInstanceValid(this))
             return false;
@@ -128,7 +119,7 @@ public partial class ContentEditorMain : Control
         if (_lifecycle == ContentEditorLifecycle.Loading)
             return false;
 
-        if (!forceReload && _lifecycle == ContentEditorLifecycle.Ready)
+        if (_lifecycle == ContentEditorLifecycle.Ready)
             return true;
 
         _lifecycle = ContentEditorLifecycle.Loading;
@@ -152,10 +143,8 @@ public partial class ContentEditorMain : Control
 
             RefreshModes();
             _loaded = true;
-            _knownAssemblyStamp = CurrentAssemblyStamp();
-            _buildCheckIn = BuildCheckIntervalSec;
             _lifecycle = ContentEditorLifecycle.Ready;
-            SetStatus(forceReload ? "editor reloaded after build" : "catalog loaded");
+            SetStatus("catalog loaded");
             return true;
         }
         catch (Exception ex)
@@ -238,13 +227,6 @@ public partial class ContentEditorMain : Control
         if (_lifecycle is ContentEditorLifecycle.Disposed or ContentEditorLifecycle.Faulted)
             return;
 
-        _buildCheckIn -= delta;
-        if (_buildCheckIn <= 0)
-        {
-            _buildCheckIn = BuildCheckIntervalSec;
-            CheckAssemblyBuild();
-        }
-
         if (_externalCheckQueued)
         {
             _externalCheckIn -= delta;
@@ -270,19 +252,14 @@ public partial class ContentEditorMain : Control
     // ── Создание интерфейса ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// EditorPlugin может получить _MakeVisible сразу после AddChild, до _Ready. Кроме того,
-    /// после перезагрузки C# нативные дочерние Control могут пережить старый managed-экземпляр.
-    /// Маркер MVID и проверка ссылок отличают целый интерфейс от такого остаточного дерева.
+    /// EditorPlugin может получить _MakeVisible сразу после AddChild, до _Ready.
     /// </summary>
     private bool EnsureUiBuilt()
     {
         if (_lifecycle == ContentEditorLifecycle.Disposed)
             return false;
 
-        string buildToken = CurrentBuildToken();
-        bool sameBuild = HasMeta(BuildTokenMeta) && GetMeta(BuildTokenMeta).AsString() == buildToken;
-
-        if (_uiBuilt && sameBuild && UiReferencesAreValid())
+        if (_uiBuilt && UiReferencesAreValid())
             return true;
 
         ResetUiAndStore();
@@ -295,7 +272,6 @@ public partial class ContentEditorMain : Control
             BuildUi();
             _store.Changed += OnStoreChanged;
             _uiBuilt = true;
-            SetMeta(BuildTokenMeta, buildToken);
             SetProcess(true);
             _lifecycle = ContentEditorLifecycle.UiReady;
             return true;
@@ -704,50 +680,4 @@ public partial class ContentEditorMain : Control
         if (IsInstanceValid(_modeTabs) && _modeTabs.GetTabCount() > 0)
             _modeTabs.CurrentTab = Mathf.Clamp(workspace.ModeTab, 0, _modeTabs.GetTabCount() - 1);
     }
-
-    // ── Перезагрузка после сборки C# ──────────────────────────────────────────────
-
-    private static string CurrentBuildToken() =>
-        typeof(ContentEditorMain).Assembly.ManifestModule.ModuleVersionId.ToString("N");
-
-    private static long CurrentAssemblyStamp()
-    {
-        try
-        {
-            string location = typeof(ContentEditorMain).Assembly.Location;
-            return string.IsNullOrEmpty(location) || !File.Exists(location)
-                ? 0L
-                : File.GetLastWriteTimeUtc(location).Ticks;
-        }
-        catch
-        {
-            // Некоторые среды загружают сборку из памяти. MVID всё равно проверяется.
-            return 0L;
-        }
-    }
-
-    private void CheckAssemblyBuild()
-    {
-        if (_lifecycle != ContentEditorLifecycle.Ready)
-            return;
-
-        long current = CurrentAssemblyStamp();
-        if (current == 0L || _knownAssemblyStamp == 0L)
-        {
-            _knownAssemblyStamp = current;
-            return;
-        }
-
-        if (current == _knownAssemblyStamp)
-            return;
-
-        _knownAssemblyStamp = current;
-        _lifecycle = ContentEditorLifecycle.Stale;
-        SetStatus("new C# assembly detected; reloading editor");
-
-        // Не пересоздаём Control из _Process: текущий кадр может обходить их дерево.
-        CallDeferred(nameof(ReloadAfterDetectedBuild));
-    }
-
-    private void ReloadAfterDetectedBuild() => EnsureOperational(forceReload: true);
 }
