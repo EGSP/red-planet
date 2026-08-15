@@ -35,6 +35,12 @@ public partial class TuningTile : EditorPanel
 
     private bool _collapsed;
 
+    /// <summary>Перестроение содержимого выполняется прямо сейчас.</summary>
+    private bool _refreshing;
+
+    /// <summary>Во время перестроения поступил запрос на ещё одно перестроение.</summary>
+    private bool _refreshPending;
+
     /// <summary>Плитка изменилась и снимок рабочего места подлежит записи.</summary>
     public event Action StateChanged;
 
@@ -158,8 +164,40 @@ public partial class TuningTile : EditorPanel
         AddChild(_saveDialog);
     }
 
-    /// <summary>Перестроить содержимое под текущее состояние черновика.</summary>
+    /// <summary>
+    /// Перестроить содержимое под текущее состояние черновика.
+    ///
+    /// Удаление прежних виджетов снимает фокус с того из них, который его удерживал,
+    /// а обработчик потери фокуса способен записать значение и потребовать нового
+    /// перестроения. Вложенный вызов движком не выполняется, поскольку узел занят
+    /// удалением потомков; поэтому запрос откладывается и исполняется по выходе
+    /// из текущего перестроения.
+    /// </summary>
     public void Refresh()
+    {
+        if (_refreshing)
+        {
+            _refreshPending = true;
+            return;
+        }
+
+        _refreshing = true;
+        try
+        {
+            do
+            {
+                _refreshPending = false;
+                Rebuild();
+            }
+            while (_refreshPending);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    private void Rebuild()
     {
         UpdateHeader();
         EditorControls.ClearChildren(_body);

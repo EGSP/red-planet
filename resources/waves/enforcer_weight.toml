@@ -1,15 +1,15 @@
 # Тяжесть: доля бюджета на Enforcer. Поздняя волна, длинный отдых после удара.
 
 id   = "enforcer_weight"
-name = "Тяжесть"
+name = "Танковый кулак"
 tags = ["heavy_group", "enforcer"]
 
 prefer_next = ["swarm"]
 
 terror_range = [100.0, -1]
 
-army_power_budget     = 400.0
-army_power_per_terror = 0.3
+army_power_budget = 1
+army_power_per_terror = 1
 chill_interval_multiplier = 2.2
 
 [[unit_list]]

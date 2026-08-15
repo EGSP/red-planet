@@ -420,6 +420,15 @@ public partial class ContentEditorMain : Control
         };
         toolbar.AddChild(_status);
 
+        // Отчёты партий не относятся к содержимому проекта и потому стоят справа, за
+        // разделяющей их растяжкой: слева собраны действия над файлами каталога
+        EditorControls.Add(toolbar, "Metrics", "Folder", () => SetStatus(MetricsReports.OpenFolder()),
+            "Open the folder with session reports (user://metrics)");
+
+        EditorControls.Add(toolbar, "Convert reports", "File", () => SetStatus(MetricsReports.Convert()),
+            "Run tools/metrics_to_xlsx.py over every report in that folder and write .xlsx books "
+            + "with charts. Reports already converted are skipped; needs Python with openpyxl.");
+
         _floatingModeButton = new Button
         {
             Text = "Open fullscreen",

@@ -11,3 +11,10 @@
 
 # Срезы EventPipe / dotnet-trace (панель отладки → prf)
 /artifacts/traces/
+
+# Отчёты партий (MetricsSystem) и книги, полученные из них конвертером.
+# Пишутся в user://metrics, то есть вне репозитория; правило защищает от того,
+# чтобы скопированный или выгруженный сюда отчёт попал в историю
+/artifacts/metrics/
+session-*.jsonl
+session-*.xlsx

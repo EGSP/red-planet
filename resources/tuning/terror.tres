@@ -20,6 +20,7 @@ point_count = 6
 
 [resource]
 script = ExtResource("1_settings")
+SmoothingSeconds = 15.0
 EnergyPerMetal = 85.71
 ProductionEnabled = false
 ProductionCurve = SubResource("Curve_ai1sg")

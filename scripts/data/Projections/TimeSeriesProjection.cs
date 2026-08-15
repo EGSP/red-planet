@@ -23,8 +23,9 @@ using Godot;
 /// не меняется. Считается он в игровом времени, поэтому пауза останавливает и замеры,
 /// и связь «номер — минута партии» остаётся точной.
 ///
-/// КАК ЧИТАТЬ. <c>Window("terror.raw", 5f)</c> — хвост ряда за последние пять минут,
-/// без копирования: возвращается окно поверх самого списка.
+/// КАК ЧИТАТЬ. <c>Window("terror.raw", 5f)</c> — хвост ряда за последние пять минут;
+/// <c>Tail("terror.raw", 60)</c> — последние шестьдесят замеров. Без копирования:
+/// возвращается окно поверх самого списка.
 /// </summary>
 public sealed class TimeSeriesProjection : Projection
 {
@@ -94,6 +95,19 @@ public sealed class TimeSeriesProjection : Projection
 
     /// <summary>Весь ряд целиком. Пустое окно, если такого ряда никто не заводил.</summary>
     public ReadOnlySpan<float> All(string channel) => Window(channel, 0f);
+
+    /// <summary>
+    /// Хвост ряда из последних <paramref name="count"/> замеров. Короче, если ряд ещё
+    /// не дорос; пустое окно, если такого ряда никто не заводил.
+    /// </summary>
+    public ReadOnlySpan<float> Tail(string channel, int count)
+    {
+        if (!_channels.TryGetValue(channel, out var series) || count <= 0)
+            return ReadOnlySpan<float>.Empty;
+
+        var all = CollectionsMarshal.AsSpan(series);
+        return count >= all.Length ? all : all[^count..];
+    }
 
     /// <summary>Последнее значение ряда. Ноль, если замеров ещё не было.</summary>
     public float Last(string channel)

@@ -111,6 +111,11 @@ public partial class PauseMenu : CanvasLayer
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 16) });
 
         AddButton(box, "Продолжить", () => _session.SetPaused(false));
+
+        // Отчёт открывается отсюда, потому что смотреть графики посреди боя незачем:
+        // на паузе симуляция стоит, и ряды за время показа не меняются
+        AddButton(box, "Отчёт партии", () => this.Sibling<MetricsScreen>()?.Open());
+
         AddButton(box, "Настройки", () => this.Ancestor<Root>()?.OpenSettings());
         AddButton(box, "Перезапустить", Restart);
         AddButton(box, "Выйти в главное меню", ExitToMainMenu);

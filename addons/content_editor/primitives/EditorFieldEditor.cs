@@ -210,14 +210,32 @@ public static class EditorFieldEditor
     /// <summary>
     /// Ввод принимается и по Enter, и по потере фокуса: правка, после которой мышь ушла
     /// на другое поле, иначе терялась бы.
+    ///
+    /// ПОЧЕМУ СРАВНЕНИЕ С ПРИНЯТЫМ ТЕКСТОМ. Принятие правки заставляет вызывающую сторону
+    /// перестроить форму, а перестроение удаляет поле из дерева и тем самым снимает с него
+    /// фокус. Godot высылает FocusExited немедленно, внутри удаления узла, поэтому без
+    /// сравнения обработчик принимал бы тот же текст второй раз и запускал перестроение
+    /// повторно — уже внутри первого. Вложенный вызов не проходит: движок отвергает
+    /// добавление и удаление потомков у занятого этими операциями узла.
     /// </summary>
     private static void Commit(LineEdit edit, bool editable, Action<string> apply)
     {
-        edit.TextSubmitted += text => apply(text);
+        string accepted = edit.Text;
+
+        void Accept(string text)
+        {
+            if (string.Equals(text, accepted, StringComparison.Ordinal))
+                return;
+
+            accepted = text;
+            apply(text);
+        }
+
+        edit.TextSubmitted += Accept;
         edit.FocusExited += () =>
         {
             if (editable)
-                apply(edit.Text);
+                Accept(edit.Text);
         };
     }
 }

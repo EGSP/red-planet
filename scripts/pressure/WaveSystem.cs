@@ -107,6 +107,7 @@ public partial class WaveSystem : GameSystem
     private string[] _preferred = System.Array.Empty<string>();
     private float _timer;
     private float _gameTime;
+    private WaveDefinition _lastWave;
 
     /// <summary>
     /// Портал появился в мире, и очередная волна должна выйти вне отдыха. Флаг, а не запуск
@@ -126,6 +127,23 @@ public partial class WaveSystem : GameSystem
 
     /// <summary>Прошедшие волны, от старых к новым.</summary>
     public IReadOnlyList<WaveRecord> History => _history;
+
+    /// <summary>
+    /// Сглаженный террор, которым система пользуется при отборе и бюджете.
+    /// Это то же число, что <see cref="TerrorSystem.Smoothed"/>; поле держится здесь,
+    /// чтобы панель показывала вход волны, а не повторно читала показатель.
+    /// </summary>
+    public float Terror { get; private set; }
+
+    /// <summary>
+    /// Бюджет последней запущенной волны при <see cref="Terror"/>.
+    /// Ноль, пока ни одна волна не выходила: следующая ещё не выбрана, и чужую
+    /// формулу подставлять не из чего.
+    /// </summary>
+    public float Budget { get; private set; }
+
+    /// <summary>Была ли уже запущена хотя бы одна волна.</summary>
+    public bool HasLaunched => _lastWave != null;
 
     /// <summary>Сколько очагов уже набрано, но ещё не выведено на карту.</summary>
     public int PendingCount => _pending.Count;
@@ -186,6 +204,10 @@ public partial class WaveSystem : GameSystem
 
         _timer -= step;
 
+        float terror = GM.System<TerrorSystem>()?.Smoothed ?? 0f;
+        Terror = terror;
+        Budget = _lastWave?.Budget(terror) ?? 0f;
+
         // Вызов порталом расходуется здесь же, вне зависимости от исхода отбора: повторно
         // он придёт только со следующим порталом
         bool called = _portalCall;
@@ -194,7 +216,6 @@ public partial class WaveSystem : GameSystem
         if (_timer > 0f && !called)
             return;
 
-        float terror = GM.System<TerrorSystem>()?.Smoothed ?? 0f;
         var wave = Pick(terror);
 
         if (wave == null)
@@ -269,7 +290,9 @@ public partial class WaveSystem : GameSystem
     /// </summary>
     private void Launch(WaveDefinition wave, float terror, bool byPortal = false)
     {
+        _lastWave = wave;
         float budget = wave.Budget(terror);
+        Budget = budget;
 
         _composer.Compose(GM.Catalog, wave, budget, _rng);
 

@@ -116,15 +116,6 @@ public partial class ContentEditorPlugin : Node
             _main.CheckExternalChanges();
     }
 
-    public Texture2D GetPluginIcon()
-    {
-        var editor = EditorInterface.Singleton;
-        var baseControl = editor?.GetBaseControl();
-        return IsInstanceValid(baseControl)
-            ? baseControl.GetThemeIcon("ResourcePreloader", "EditorIcons")
-            : null;
-    }
-
     private void Teardown()
     {
         _active = false;

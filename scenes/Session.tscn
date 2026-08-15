@@ -41,7 +41,7 @@
 [ext_resource type="Resource" uid="uid://bgerl1npukrc7" path="res://resources/surface/lava/shadows_lava.tres" id="35_lf1gi"]
 [ext_resource type="Script" uid="uid://3fhl61arlssd" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
 [ext_resource type="Script" uid="uid://bpyei10ejuqti" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
-[ext_resource type="Script" path="res://scripts/ui/SandboxPanel.cs" id="36_sandboxpanel"]
+[ext_resource type="Script" uid="uid://d1agiccjh58sj" path="res://scripts/ui/SandboxPanel.cs" id="36_sandboxpanel"]
 [ext_resource type="Resource" uid="uid://dpydcpt1gpoip" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
 [ext_resource type="Script" uid="uid://bwl8ipmuljqfq" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
@@ -55,6 +55,8 @@
 [ext_resource type="Script" uid="uid://b8bkh2kwhs8h" path="res://scripts/ui/EventBar.cs" id="48_eventbar"]
 [ext_resource type="Resource" uid="uid://lo25rs6paxsf" path="res://resources/tuning/orders.tres" id="49_ordersettings"]
 [ext_resource type="Resource" uid="uid://dut65crdd0675" path="res://resources/tuning/graphics/graphics.tres" id="50_graphicssettings"]
+[ext_resource type="Script" path="res://scripts/metrics/MetricsSystem.cs" id="51_metrics"]
+[ext_resource type="Script" path="res://scripts/ui/MetricsScreen.cs" id="52_metricsscreen"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
@@ -158,6 +160,11 @@ script = ExtResource("31_victory")
 Phase = 2
 StepOrder = 30
 
+[node name="MetricsSystem" type="Node" parent="Systems" unique_id=1772864362]
+script = ExtResource("51_metrics")
+Phase = 2
+StepOrder = 40
+
 [node name="Playground" type="Node2D" parent="." unique_id=438516043]
 script = ExtResource("3_playground")
 
@@ -248,6 +255,9 @@ script = ExtResource("22_pause")
 
 [node name="OutcomeMenu" type="CanvasLayer" parent="View" unique_id=2055515651]
 script = ExtResource("33_outcomemenu")
+
+[node name="MetricsScreen" type="CanvasLayer" parent="View" unique_id=2055515652]
+script = ExtResource("52_metricsscreen")
 
 [connection signal="ZoomFactorChanged" from="View/Camera" to="Playground/Clouds/Sky" method="DriveBodyByZoomInverted"]
 [connection signal="ZoomFactorChanged" from="View/Camera" to="Playground/Clouds/Sky" method="DriveShadeByZoom"]

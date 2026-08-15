@@ -50,8 +50,17 @@ func _get_plugin_name() -> String:
 	return "Content"
 
 
+## Иконка вкладки главного экрана.
+##
+## Godot запрашивает её при регистрации плагина, то есть до того, как C#-мост создан
+## отложенным вызовом. Обращаться за иконкой к мосту поэтому нельзя, и она берётся
+## из темы редактора здесь. Состав EditorIcons меняется между версиями движка,
+## поэтому отсутствующее имя приводит к возврату null, а не к ошибке.
 func _get_plugin_icon() -> Texture2D:
-	return null
+	var control := _base_control() as Control
+	if control == null or not control.has_theme_icon("ResourcePreloader", "EditorIcons"):
+		return null
+	return control.get_theme_icon("ResourcePreloader", "EditorIcons")
 
 
 func _make_visible(visible: bool) -> void:

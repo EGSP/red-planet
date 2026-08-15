@@ -7,7 +7,7 @@
 # Это и делает его накатом, а не одиночным ударом.
 
 id   = "swarm_rush"
-name = "Рой"
+name = "Рой ботов"
 tags = ["swarm"]
 
 # После толпы уместен кулак: игрок только что развернул оборону против множества слабых
@@ -17,7 +17,7 @@ terror_range = [-1, -1]
 
 army_power_budget     = 1.0
 # Основной бюджет волны идет с общего террора. (120%)
-army_power_per_terror = 0
+army_power_per_terror = 1
 
 chill_interval_multiplier = 0.6
 

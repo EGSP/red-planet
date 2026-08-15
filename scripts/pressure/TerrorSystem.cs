@@ -34,6 +34,11 @@ using Godot;
 /// <see cref="WaveSystem"/> отбирает по нему применимые волны, а бюджет отдельной волны от
 /// показателя зависит лишь тогда, когда это задано в её файле: волна есть напряжение в моменте
 /// и приходит поверх бюджета фона, а не внутри него.
+///
+/// РЯД ЗНАЧЕНИЙ ВЕДЁТ НЕ ЭТА СИСТЕМА. Замеры для графиков публикует <see cref="MetricsSystem"/>,
+/// которая читает готовые свойства отсюда наравне со свойствами экономики и состава сил.
+/// Прежде их публиковал этот класс, и тогда шаг ряда был привязан к SampleInterval террора,
+/// хотя ряды экономики и боя к террору отношения не имеют.
 /// </summary>
 public partial class TerrorSystem : GameSystem
 {
@@ -42,9 +47,6 @@ public partial class TerrorSystem : GameSystem
 
     private float _elapsed;
     private bool _sampled;
-
-    /// <summary>Номер следующего замера. Он же отметка времени в регистре сведений.</summary>
-    public int Tick { get; private set; }
 
     // ── Сырые величины, до кривых ─────────────────────────────────────────────────
 
@@ -71,8 +73,8 @@ public partial class TerrorSystem : GameSystem
     public float Raw { get; private set; }
 
     /// <summary>
-    /// Показатель с задержкой. На него будет смотреть давление — см. SmoothingSeconds
-    /// в настройках. Игроку не показывается: это внутренняя величина.
+    /// Показатель с задержкой. Его читают давление и волны — см. SmoothingSeconds
+    /// в настройках. На панели террора он показан кривой поверх столбиков сырых замеров.
     /// </summary>
     public float Smoothed { get; private set; }
 
@@ -85,16 +87,6 @@ public partial class TerrorSystem : GameSystem
         // ронять подсчёт целиком. Умолчания класса дают осмысленные числа и запасную кривую
         GD.PushWarning("[TerrorSystem] настройки не назначены, взяты умолчания");
         Settings = new TerrorSettings();
-    }
-
-    protected override void OnLink()
-    {
-        // Шаг ряда задаётся один раз и с этого мига постоянен: номер замера служит
-        // в регистре отметкой времени, и менять шаг по ходу партии нельзя
-        var metrics = GM?.Metrics;
-
-        if (metrics != null)
-            metrics.Step = Settings.SampleInterval;
     }
 
     public override void Step(double dt)
@@ -127,9 +119,6 @@ public partial class TerrorSystem : GameSystem
         Raw = Production + Expansion + Army + Time;
 
         Smooth(settings, interval);
-        Publish();
-
-        Tick++;
     }
 
     /// <summary>
@@ -221,17 +210,4 @@ public partial class TerrorSystem : GameSystem
         float tau = Mathf.Max(0.01f, settings.SmoothingSeconds);
         Smoothed += (Raw - Smoothed) * (1f - Mathf.Exp(-interval / tau));
     }
-
-    private void Publish()
-    {
-        Metric("terror.raw", Raw);
-        Metric("terror.smoothed", Smoothed);
-        Metric("terror.production", Production);
-        Metric("terror.expansion", Expansion);
-        Metric("terror.army", Army);
-        Metric("terror.time", Time);
-    }
-
-    private void Metric(string channel, float value) =>
-        GM.Events.Append(new MetricSampled { Channel = channel, Value = value, Tick = Tick });
 }

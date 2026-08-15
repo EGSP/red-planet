@@ -97,6 +97,7 @@ public partial class OutcomeMenu : CanvasLayer
 
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 16) });
 
+        AddButton(box, "Отчёт партии", () => this.Sibling<MetricsScreen>()?.Open());
         AddButton(box, "Перезапустить", Restart);
         AddButton(box, "Выйти в главное меню", ExitToMainMenu);
     }
