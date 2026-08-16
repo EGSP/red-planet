@@ -15,10 +15,7 @@ radius     = 0.28
 
 [movement]
 speed      = 4.0
-turn_speed = 240.0
-
-[battle]
-approach_hold = 0.8
+turn_speed = 280
 
 [assembly]
 cost_metal   = 45.0

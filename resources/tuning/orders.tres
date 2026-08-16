@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="OrderSettings" format=3 uid="uid://lo25rs6paxsf"]
+
+[ext_resource type="Script" uid="uid://05ug5v5l2n3" path="res://scripts/units/OrderSettings.cs" id="1_orders"]
+
+[resource]
+script = ExtResource("1_orders")
+PatrolDwell = 15.0
+MinAreaRadiusPx = 470.0

@@ -107,9 +107,11 @@ YAML превратил бы её в логическое значение. Вл
 
 ```
 resources/buildbars/
-├─ buildbar.md               — этот документ
-├─ commander_buildbar.toml   — панель коммандера,  priority 1
-└─ fabricator_buildbar.toml  — панель фабрикатора, priority 2
+├─ buildbar.md                  — этот документ
+├─ commander_buildbar.toml      — панель коммандера,          priority 1
+├─ fabricator_buildbar.toml     — панель фабрикатора,         priority 2
+└─ fabricator_t2_buildbar.toml  — панель тяжёлого фабрикатора, priority 3
+                                  (титаны и портал)
 ```
 
 Панель появляется на экране только тогда, когда среди выделенных есть юнит, умеющий

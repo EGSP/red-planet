@@ -23,6 +23,20 @@ public partial class Content : Node
 
     public override void _EnterTree() => _ = Catalog;
 
+    /// <summary>
+/// Собрать справочники заново.
+///
+/// Автозагрузка Content поднимает каталог один раз за сеанс редактора. Правка .toml
+/// на диске (в том числе из вкладки «Контент») иначе не видна игре и tool-сценам
+/// до перезапуска. Reload заменяет статический снимок; вызывают его редактор после
+/// «Применить»/«Перечитать» и кнопки предпросмотров SessionPreview/BuildingsPreview.
+/// </summary>
+public static Catalog Reload()
+    {
+        _catalog = LoadCatalog();
+        return _catalog;
+    }
+
     private static Catalog LoadCatalog()
     {
         var catalog = new Catalog();

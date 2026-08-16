@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using Godot;
 
 /// <summary>
@@ -13,6 +14,11 @@ using Godot;
 /// сила решала бы её вероятностно. При перекрытии свой идущий полностью смещает своего
 /// стоящего — это и есть проталкивание сквозь союзников. Физического движка в проекте
 /// нет, поэтому оба ограничения написаны здесь руками.
+///
+/// ПЕРВЫЙ СЛОЙ ОТКЛЮЧАЕМ. Намерение бывает двух видов: строгое идёт по найденному пути,
+/// свободное (<see cref="Movement.Fluid"/>) — прямо на цель, оставляя всё расхождение
+/// локальному слою. Второй и третий слои от этого не меняются, поэтому различие сводится
+/// к одному условию: запрашивать путь или не запрашивать.
 ///
 /// ЧЕГО СИСТЕМА НЕ ДЕЛАЕТ. Не выбирает цель и не завершает приказы: обработчик приказа
 /// каждый кадр объявляет намерение через <see cref="Movement.Seek"/>, а сам решает,
@@ -47,6 +53,10 @@ public partial class MovementSystem : GameSystem
     private readonly List<int> _nearby = new();
 
     private PathfindingSystem _pathfinding;
+    private int _active;
+    private int _settled;
+    private int _blocked;
+    private int _leaving;
 
     protected override void OnLink() => _pathfinding = GM.System<PathfindingSystem>();
 
@@ -63,10 +73,33 @@ public partial class MovementSystem : GameSystem
         for (int pass = 0; pass < ResolvePasses; pass++)
             Resolve();
 
-        // Намерение живёт один кадр: подтвердит его обработчик приказа — сущность
-        // пойдёт дальше, не подтвердит — она сама собой станет удерживающей позицию
+        // Счётчики снимаются до очистки Active: после неё диагностический снимок уже
+        // не смог бы отличить двигавшиеся сущности от удерживавших позицию.
+        _active = 0;
+        _settled = 0;
+        _blocked = 0;
+        _leaving = 0;
+
         foreach (var actor in _actors)
+        {
+            var movement = actor.Movement;
+
+            if (movement.Active)
+                _active++;
+
+            if (movement.Settled)
+                _settled++;
+
+            if (movement.Blocked)
+                _blocked++;
+
+            if (movement.Leaving)
+                _leaving++;
+
+            // Намерение живёт один кадр: подтвердит его обработчик приказа — сущность
+            // пойдёт дальше, не подтвердит — она сама собой станет удерживающей позицию.
             actor.Movement.Active = false;
+        }
     }
 
     /// <summary>Список подвижных и раскладка по ячейкам. Пересобирается каждый кадр.</summary>
@@ -114,7 +147,12 @@ public partial class MovementSystem : GameSystem
         var position = mobile.GlobalPosition;
         float radius = mobile.HitRadius;
 
-        var handle = _pathfinding?.Request(mobile, position, movement.Goal, radius);
+        // Свободное движение пути не запрашивает вовсе: направление берётся прямо на цель,
+        // а разойтись с соседями — дело локального слоя. Забытый кеш чистится сам, по сроку
+        // невостребованности, поэтому снимать путь при смене режима не требуется
+        var handle = movement.Fluid
+            ? null
+            : _pathfinding?.Request(mobile, position, movement.Goal, radius);
 
         // Остаток пути и признак прибытия считаются по ЗАДАННОЙ цели, а не по концу
         // ломаной. Разница существенна для подхода к бою: цель боя — центр постройки,
@@ -663,6 +701,17 @@ public partial class MovementSystem : GameSystem
 
     /// <summary>Сколько подвижных сущностей обслужено в прошлом кадре. Читает панель отладки.</summary>
     public int Tracked => _actors.Count;
+
+    public override void CaptureSnapshot(JsonObject data)
+    {
+        data["tracked"] = Tracked;
+        data["active"] = _active;
+        data["settled"] = _settled;
+        data["blocked"] = _blocked;
+        data["leaving"] = _leaving;
+        data["resolve_passes"] = ResolvePasses;
+        data["bucket_size"] = BucketSize;
+    }
 
     /// <summary>Раскладка по ячейкам — рисует отладка.</summary>
     public IReadOnlyDictionary<Vector2I, List<int>> Buckets => _buckets;

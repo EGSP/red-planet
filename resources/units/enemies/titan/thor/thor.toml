@@ -9,7 +9,7 @@ tools = ["thor_siege"]
 
 [body]
 max_health   = 95000.0
-radius       = 0.95
+radius = 2.6
 vision_range = 13.0
 hull         = "crescent"
 armor_rings  = 2
@@ -18,9 +18,6 @@ armor_rings  = 2
 speed      = 2.6
 turn_speed = 35.0
 brake      = 3.0
-
-[battle]
-approach_hold = 0.8
 
 [terror]
 army_power = 1000.0

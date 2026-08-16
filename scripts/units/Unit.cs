@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 /// <summary>
 /// Юнит с очередью приказов. Движется к цели, а войдя в радиус инструмента —
@@ -41,6 +41,28 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     /// <summary>Сколько осталось до переигровки цели. Ведёт мозговая система, она же и решает.</summary>
     private float _retarget;
+
+    /// <summary>
+    /// Цель, на которую исполнитель отвлёкся по дороге при приказе «идти с боем».
+    /// Приказу не принадлежит: он общий на отряд, а отвлекается каждый на своё.
+    /// </summary>
+    private IDamageable _engaged;
+
+    /// <summary>
+    /// Приказ патруля, который исполняется прямо сейчас. По смене ссылки обнуляются
+    /// случайная точка и отсчёт пребывания: они принадлежат одному приказу, и переход
+    /// к следующей точке маршрута начинает счёт заново.
+    /// </summary>
+    private Order _patrolled;
+
+    /// <summary>Случайное место внутри области патруля, к которому исполнитель идёт сейчас.</summary>
+    private Vector2? _patrolPoint;
+
+    /// <summary>Сколько секунд исполнитель провёл в области патруля.</summary>
+    private float _patrolFor;
+
+    /// <summary>Сколько секунд осталось стоять на выбранном месте внутри области.</summary>
+    private float _patrolPause;
 
     /// <summary>
     /// Якорь внимания — см. <see cref="IWorker.Anchor"/>. Ставится при рождении и меняется
@@ -340,6 +362,11 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // сопровождения мог смениться, а ведущий — закончить работу
         _assisted = null;
 
+        // Цель, выбранная по дороге или в круге, принадлежит одному приказу и одному
+        // исполнителю: сменился приказ — прежняя цель ничего не значит
+        if (order.Kind is not (OrderKind.AttackMove or OrderKind.AttackArea or OrderKind.Patrol))
+            _engaged = null;
+
         switch (order.Kind)
         {
             case OrderKind.Move:
@@ -348,6 +375,18 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
             case OrderKind.Attack:
                 RunAttack(order, dt);
+                return;
+
+            case OrderKind.AttackMove:
+                RunAttackMove(order, dt);
+                return;
+
+            case OrderKind.AttackArea:
+                RunAttackArea(order);
+                return;
+
+            case OrderKind.Patrol:
+                RunPatrol(order, dt);
                 return;
 
             case OrderKind.Repair:
@@ -410,7 +449,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
         {
-            Movement.Seek(order.Pos, reach);
+            Movement.Seek(order.Pos, reach, order.Fluid);
             return;
         }
 
@@ -439,10 +478,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         var tool = Definition.BuildTool;
         float reach = tool?.RangePx ?? Const.Unit;
 
-        if (GlobalPosition.DistanceTo(target) > reach)
+        // Дистанция меряется до КРАЯ места работы, а не до его середины: строитель,
+        // вставший по диагонали от постройки, дотягивается до её угла, и отвергать его
+        // на этом основании нельзя. Поправку на габарит цели держит Reach, а сюда она
+        // приходит уже перенесённой на расстояние от центра — движение ведёт к центру
+        float stop = Reach.StopDistance(GlobalPosition, order.Body, reach);
+
+        if (GlobalPosition.DistanceTo(target) > stop)
         {
             Detach();
-            Movement.Seek(target, reach);
+            Movement.Seek(target, stop);
             return;
         }
 
@@ -502,16 +547,270 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        // Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
-        // границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
-        // откуда любое смещение цели или толчок соседа выводили его из радиуса.
-        // Безоружный подходит на длину инструмента: приказ хотя бы не зависает
+        Approach(victim, target);
+    }
+
+    /// <summary>
+    /// Атака по области: бить всё, что стоит в круге, а опустевший круг оставлять.
+    ///
+    /// ЦЕЛЬ ИЩЕТСЯ ОТ ЦЕНТРА КРУГА, А НЕ ОТ СЕБЯ. Круг задан игроком и с места не сходит,
+    /// поэтому исполнитель, стоящий далеко, видит его содержимое целиком и идёт к ближайшей
+    /// к центру цели. Отсчёт от себя означал бы, что приказ исчерпан всякий раз, когда до
+    /// круга ещё не дошли.
+    ///
+    /// ПУСТОЙ КРУГ НЕ СНИМАЕТ ПРИКАЗ СРАЗУ: исполнитель обязан дойти до центра области.
+    /// Иначе приказ, отданный по месту, где противника пока не видно, исчезал бы в тот же
+    /// кадр, и отряд оставался бы стоять — а игрок, указывая круг, посылает отряд именно
+    /// туда. Дойдя до центра и никого не найдя, исполнитель приказ оставляет.
+    ///
+    /// ЖДАТЬ ОТСТАВШИХ ЗДЕСЬ НЕ НУЖНО, в отличие от приказа движения. Сбор отряда нужен
+    /// затем, чтобы следующая точка цепочки бралась всеми разом; а круг оставляет каждый
+    /// по своему основанию — один нашёл цель и дерётся, другой дошёл до пустого центра, —
+    /// и общего мига, до которого имело бы смысл ждать, у них нет.
+    ///
+    /// ПОИСК ВЕДЁТСЯ КАЖДЫЙ КАДР, пока цели нет, — в отличие от приказа «идти с боем»,
+    /// где перебор растянут отсчётом переигровки. Отложить поиск здесь нельзя: пока он
+    /// не сделан, неизвестно, идти ли к центру или драться. Дорого это не обходится:
+    /// без цели приказ живёт ровно столько, сколько занимает дорога.
+    /// </summary>
+    private void RunAttackArea(Order order)
+    {
+        Detach();
+
+        // Цель, павшая или вытесненная за границу круга, приказу больше не принадлежит
+        if (_engaged != null
+            && (!Targeting.IsValid(_engaged as GodotObject)
+                || _engaged.GlobalPosition.DistanceTo(order.Pos) > order.Radius))
+            _engaged = null;
+
+        _engaged ??= Targeting.Nearest(order.Pos, Faction.Opposite(), order.Radius);
+
+        if (_engaged != null)
+        {
+            Approach(_engaged as Node2D, _engaged);
+            return;
+        }
+
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        {
+            Movement.Seek(order.Pos, reach);
+            return;
+        }
+
+        Orders.DropCurrent();
+    }
+
+    /// <summary>
+    /// Подход к цели боя. Правило одно на приказ атаки и на атаку по области: расходиться
+    /// в том, где именно юнит останавливается, два способа указать одну и ту же цель
+    /// не должны.
+    ///
+    /// Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
+    /// границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
+    /// откуда любое смещение цели или толчок соседа выводили его из радиуса.
+    /// Предел обзора режет подход: иначе дальнобойный вставал бы за пределами зрения,
+    /// откуда WeaponSystem огонь не откроет. Безоружный подходит на длину инструмента:
+    /// приказ хотя бы не зависает.
+    /// </summary>
+    private void Approach(Node2D victim, IDamageable target)
+    {
+        if (!Alive.Is(victim))
+            return;
+
+        var to = victim.GlobalPosition;
+
         float stop = Weapon != null
-            ? Targeting.ApproachDistance(Weapon, target, Definition.ApproachHoldFraction)
-            : Definition.WorkRangePx;
+            ? Targeting.ApproachDistance(Weapon, GlobalPosition, target,
+                Definition.ApproachHoldFraction, Definition.VisionRadiusPx)
+            : Reach.StopDistance(GlobalPosition, victim, Definition.WorkRangePx);
 
         if (GlobalPosition.DistanceTo(to) > stop)
             Movement.Seek(to, stop);
+    }
+
+    /// <summary>
+    /// Идти с боем: то же движение, но с остановками на всякую цель, попавшую в поле
+    /// внимания по дороге.
+    ///
+    /// СТРЕЛЯЕТ НЕ ЭТОТ КОД. Огонь ведёт <see cref="WeaponSystem"/>, и ведёт он его сам,
+    /// без всякого приказа: цель в пределах ствола и обзора обстреливается любым, кто
+    /// не занят работой. Здесь решается единственное — стоять или идти дальше, потому что
+    /// без остановки отряд проезжал бы мимо противника, огрызаясь на ходу.
+    ///
+    /// ЦЕЛЬ ИЩЕТСЯ НЕ КАЖДЫЙ КАДР. Перебор врагов стоит дорого, а обстановка за доли секунды
+    /// не меняется, поэтому используется общий отсчёт переигровки (<see cref="NeedsTarget"/>),
+    /// тот же, которым пользуется выдача задач. Найденная цель держится, пока жива
+    /// и не ушла за пределы внимания.
+    ///
+    /// ПРИКАЗ ОТ ГИБЕЛИ ЦЕЛИ НЕ КОНЧАЕТСЯ: цели по дороге ему не принадлежат, и он живёт
+    /// до прихода в точку, как обычное движение.
+    /// </summary>
+    private void RunAttackMove(Order order, double dt)
+    {
+        Detach();
+
+        if (Engaged())
+            return;
+
+        RunMove(order, dt);
+    }
+
+    /// <summary>
+    /// Отвлечение на цель в поле внимания: правило, общее для приказов «идти с боем»
+    /// и «патрулировать». Возвращает true, если исполнитель занят боем и дальше идти
+    /// ему сейчас не следует.
+    ///
+    /// Цель принадлежит исполнителю, а не приказу: приказ общий на отряд, а отвлекается
+    /// каждый на своё. Подход считается той же формулой огневой границы, что и у приказа
+    /// атаки, — расходиться в ней виды приказов не должны.
+    /// </summary>
+    private bool Engaged()
+    {
+        float attention = Definition.AttentionRadiusPx;
+
+        // Цель, павшая или отставшая, перестаёт задерживать: приказ ведёт дальше
+        if (_engaged != null
+            && (!Targeting.IsValid(_engaged as GodotObject)
+                || GlobalPosition.DistanceTo(_engaged.GlobalPosition) > attention))
+            _engaged = null;
+
+        if (_engaged == null && Weapon != null && NeedsTarget)
+        {
+            _engaged = Targeting.Nearest(GlobalPosition, Faction.Opposite(), attention);
+            NoteTargeted();
+        }
+
+        if (_engaged == null)
+            return false;
+
+        float hold = Targeting.ApproachDistance(Weapon, GlobalPosition, _engaged,
+            Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
+
+        if (GlobalPosition.DistanceTo(_engaged.GlobalPosition) > hold)
+            Movement.Seek(_engaged.GlobalPosition, hold);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Патруль: обход точки либо беготня по области, а по дороге — бой со всяким, кто попал
+    /// в поле внимания.
+    ///
+    /// СОБСТВЕННОГО ОКОНЧАНИЯ У ПРИКАЗА НЕТ. Приказ, после которого идти некуда, не снимается
+    /// вовсе: исполнитель ходит по нему, пока игрок не отдаст другой. Это и есть «бегать,
+    /// пока не отменить явно», и никакого особого механизма отмены оно не требует — новый
+    /// приказ заменяет очередь, как и всякий другой. Кольцевание же живёт в очереди
+    /// (<see cref="OrderQueue.Ringed"/>), а не здесь: маршрут — свойство очереди, а не шага.
+    ///
+    /// ОТСЧЁТ ВРЕМЕНИ В ОБЛАСТИ НУЖЕН НЕ ВСЕГДА. Он ограничивает пребывание только тогда,
+    /// когда переходить есть куда, — то есть когда в маршруте больше одного приказа. Иначе
+    /// ограничивать нечем: уйти из единственной области означало бы бросить приказ.
+    ///
+    /// СОСТОЯНИЕ ПАТРУЛЯ ЛИЧНОЕ. Случайная точка внутри круга и отсчёт пребывания
+    /// принадлежат исполнителю, а не приказу: приказ общий на отряд, а в область юниты
+    /// приходят в разное время и бегают каждый по-своему.
+    /// </summary>
+    private void RunPatrol(Order order, double dt)
+    {
+        Detach();
+
+        if (!ReferenceEquals(_patrolled, order))
+        {
+            _patrolled = order;
+            _patrolPoint = null;
+            _patrolFor = 0f;
+            _patrolPause = 0f;
+        }
+
+        if (Engaged())
+            return;
+
+        if (order.Radius > 0f)
+            RunPatrolArea(order, dt);
+        else
+            RunPatrolPoint(order);
+    }
+
+    /// <summary>Точка обхода: дойти и уступить место следующему приказу маршрута.</summary>
+    private void RunPatrolPoint(Order order)
+    {
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        {
+            Movement.Seek(order.Pos, reach);
+            return;
+        }
+
+        // Прибытие в составе приказа здесь не отмечается: сбор отряда патрулю не нужен —
+        // маршрут каждый проходит сам, и подпись «ждём отставших» на нём означала бы
+        // ожидание, которого нет
+        if (Orders.HasMore)
+            Orders.DropCurrent();
+    }
+
+    /// <summary>
+    /// Область патруля: бегать по случайным местам внутри круга. Место выбирается заново,
+    /// как только исполнитель до него добрался или упёрся, — так получается непрерывный
+    /// обход без заданного маршрута.
+    ///
+    /// Отсчёт пребывания идёт с прихода в круг, а не с получения приказа: дорога до области
+    /// патрулём не является, и мерить её тем же временем значило бы, что дальняя область
+    /// охраняется меньше ближней.
+    /// </summary>
+    private void RunPatrolArea(Order order, double dt)
+    {
+        bool inside = GlobalPosition.DistanceTo(order.Pos) <= order.Radius;
+
+        if (inside)
+            _patrolFor += (float)dt;
+
+        if (Orders.HasMore && _patrolFor >= Order.Settings.PatrolDwell)
+        {
+            Orders.DropCurrent();
+            return;
+        }
+
+        // Передышка на месте: намерение движения не подтверждается, и юнит стоит.
+        // Без неё он менял бы место сразу по прибытии и метался бы по кругу без остановки
+        if (_patrolPause > 0f)
+        {
+            _patrolPause -= (float)dt;
+            return;
+        }
+
+        // Первое место выбирается без передышки: стоять до начала обхода не за чем
+        if (_patrolPoint is not { } point)
+        {
+            _patrolPoint = PatrolPoint(order);
+            return;
+        }
+
+        float reach = Const.Unit * 0.2f;
+
+        if (!Movement.Settled && GlobalPosition.DistanceTo(point) > reach)
+        {
+            Movement.Seek(point, reach);
+            return;
+        }
+
+        // Дошли или ближе не пройти: постоять, а следующее место выбрать после передышки
+        _patrolPoint = null;
+        _patrolPause = Order.Settings.PatrolPause;
+    }
+
+    /// <summary>
+    /// Случайное место внутри круга. Корень из случайной доли даёт равномерность по площади:
+    /// без него места сгущались бы к середине, и края области оставались бы без обхода.
+    /// </summary>
+    private static Vector2 PatrolPoint(Order order)
+    {
+        float angle = GD.Randf() * Mathf.Tau;
+        float distance = order.Radius * Mathf.Sqrt(GD.Randf());
+
+        return order.Pos + Vector2.Right.Rotated(angle) * distance;
     }
 
     /// <summary>
@@ -523,7 +822,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Detach();
 
         var to = order.Entity.GlobalPosition;
-        float stop = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
+        float reach = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
+        float stop = Reach.StopDistance(GlobalPosition, order.Body, reach);
 
         if (GlobalPosition.DistanceTo(to) > stop)
             Movement.Seek(to, stop);
@@ -609,8 +909,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         Detach();
 
-        float stop = Targeting.ApproachDistance(Weapon, victim as IDamageable,
-            Definition.ApproachHoldFraction);
+        float stop = Targeting.ApproachDistance(Weapon, GlobalPosition, victim as IDamageable,
+            Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
 
         if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
             Movement.Seek(victim.GlobalPosition, stop);
@@ -651,12 +951,14 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         _assisted = work;
 
-        float reach = Definition.BuildTool.RangePx;
+        // До края того, над чем работает ведущий, а не до середины: помощник, оказавшийся
+        // с дальней стороны каркаса, дотягивается до ближней к нему стены
+        float stop = Reach.StopDistance(GlobalPosition, work.Body, Definition.BuildTool.RangePx);
 
-        if (GlobalPosition.DistanceTo(point) > reach)
+        if (GlobalPosition.DistanceTo(point) > stop)
         {
             Detach();
-            Movement.Seek(point, reach);
+            Movement.Seek(point, stop);
             return true;
         }
 
@@ -726,10 +1028,23 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (order.Entity is Unit && !Definition.CanRepairUnits)
             return null;
 
-        float reach = Definition.BuildTool.RangePx;
-        return GlobalPosition.DistanceTo(order.Entity.GlobalPosition) <= reach + 1f
-            ? repairable
-            : null;
+        // САМ СЕБЯ НЕ ЧИНИТ НИКТО. Инструмент чинит то, до чего дотягивается, а не своего
+        // носителя, иначе любой ремонтник превращал бы метал в собственную прочность
+        // сколько угодно долго. Правило живёт здесь, потому что здесь единственное место,
+        // через которое проходят все пути: и свой приказ, и чужой, в котором помогают, —
+        // а помощь ведущему, чинящему как раз этого помощника, ни одним отсевом
+        // при выдаче приказа не ловится.
+        //
+        // Источники приказа отсеивают этот случай и сами (CommandSystem.IssueResolved
+        // и IssueForced, Jobs.NearestDamaged): без этого приказ выдавался бы и висел, ничего
+        // не делая, — а исполнитель считался бы занятым
+        if (ReferenceEquals(order.Entity, this))
+            return null;
+
+        // Запас в пиксель: проверка обязана соглашаться там, где остановка уже разрешена,
+        // а движение встаёт не ровно в заданной точке
+        float reach = Definition.BuildTool.RangePx + 1f;
+        return Reach.Within(GlobalPosition, order.Entity, reach) ? repairable : null;
     }
 
     private void Detach()
@@ -777,9 +1092,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             selected: GizmoGate.IsSelected(this),
             facingOffset: toolLocal);
 
-        DrawHull(radius);
-        DrawMoveMark(radius);
-        DrawToolMark(radius, toolLocal);
+        UnitSilhouette.Draw(this, Definition, radius, toolLocal);
 
         HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
 
@@ -787,188 +1100,5 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (Alive.Is(_attached))
             ShapeDraw.Line(this, Vector2.Zero, ToLocal(_attached.GlobalPosition),
                 DrawTheme.Line(VizKind.WorkBeamBuild));
-    }
-
-    /// <summary>
-    /// Корпус по силуэту из определения. Простые силуэты рисуются одной фигурой, составные
-    /// — набором выпуклых частей из <see cref="HullGeometry"/>.
-    /// </summary>
-    private void DrawHull(float radius)
-    {
-        var fill = ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.4f), 2f,
-            WidthMode.Screen);
-
-        DrawHullShape(radius, fill);
-
-        // Надстройка тира ложится сразу за корпусом, до контуров брони: борта плеч выходят
-        // на те же 1.12 радиуса, где идёт первый контур, и охватывающая линия поверх плеч
-        // читается как броня по всему силуэту, а не как черта, рассёкшая надстройку
-        DrawHullTrim(radius);
-
-        // Дополнительные контуры брони. У составных силуэтов повтор самого силуэта дал бы
-        // обводку по каждой части, то есть ту же сетку по стыкам, ради снятия которой корпус
-        // и рисуется без обводки. Поэтому там броня выражена окружностью, а цвет ей берётся
-        // от корпуса затемнением: чёрная линия поверх крупной машины читается как грязь
-        bool composite = HullGeometry.Composite(Definition.Hull);
-        var armour = composite
-            ? Definition.Color.Darkened(0.45f) with { A = 0.7f }
-            : new Color(0f, 0f, 0f, 0.55f);
-
-        for (int ring = 1; ring <= Definition.ArmorRings; ring++)
-        {
-            float gap = radius * 0.12f * ring;
-            var outline = ShapeStyle.Outline(armour, 1.5f, WidthMode.Screen);
-
-            if (composite)
-                ShapeDraw.Circle(this, Vector2.Zero, radius + gap, outline, 28);
-            else
-                DrawHullShape(radius + gap, outline);
-        }
-
-        // Ближний бой: заливка передней трети поверх корпуса. Признак берётся из
-        // определения, а не выводится из дальности оружия, — см. UnitDefinition.FrontPlate
-        if (Definition.FrontPlate)
-        {
-            float tip = radius * 0.55f;
-            ShapeDraw.Rect(this, new Rect2(radius * 0.15f, -tip * 0.7f, tip, tip * 1.4f),
-                ShapeStyle.Solid(Definition.Color.Lightened(0.15f)));
-        }
-    }
-
-    /// <summary>
-    /// Надстройка тира поверх корпуса: части из <see cref="HullGeometry.Trim"/> заливкой
-    /// светлее корпуса и с тёмной обводкой.
-    ///
-    /// ПОЧЕМУ ОБВОДКА ЕСТЬ, А У СОСТАВНЫХ ЧАСТЕЙ КОРПУСА НЕТ. Там обводка проходила бы по
-    /// стыкам частей одного силуэта; здесь надстройка выступает за край корпуса, и её
-    /// внешняя граница проходит по фону, а не по стыку.
-    /// </summary>
-    private void DrawHullTrim(float radius)
-    {
-        var parts = HullGeometry.Trim(Definition.HullTrim, radius);
-
-        if (parts.Length == 0)
-            return;
-
-        var style = ShapeStyle.Filled(Definition.Color.Lightened(0.2f),
-            new Color(0f, 0f, 0f, 0.45f), 1.5f, WidthMode.Screen);
-
-        foreach (var part in parts)
-            ShapeDraw.Polygon(this, part, style);
-    }
-
-    /// <summary>Один силуэт заданным стилем. Общее место для корпуса и контуров брони.</summary>
-    private void DrawHullShape(float radius, in ShapeStyle style)
-    {
-        if (HullGeometry.Composite(Definition.Hull))
-        {
-            var parts = HullGeometry.Parts(Definition.Hull, radius);
-            var accents = HullGeometry.Accents(Definition.Hull);
-
-            // Обводка снимается: она проходила бы по стыкам частей, а разложение
-            // на выпуклые куски продиктовано заливкой и показывать его незачем.
-            // Части различаются оттенком — см. HullGeometry.Accents
-            var accent = ShapeStyle.Solid(style.Fill.Lightened(0.22f));
-            var plain = ShapeStyle.Solid(style.Fill);
-
-            for (int i = 0; i < parts.Length; i++)
-            {
-                bool lighten = i < accents.Length && accents[i];
-
-                ShapeDraw.Polygon(this, parts[i], lighten ? accent : plain);
-            }
-
-            return;
-        }
-
-        switch (Definition.Hull)
-        {
-            case HullShape.Rect:
-                DrawRectHull(radius, style);
-                break;
-
-            case HullShape.Hex:
-                DrawPolygonHull(radius, 6, style);
-                break;
-
-            default:
-                ShapeDraw.Circle(this, Vector2.Zero, radius, style, 24);
-                break;
-        }
-    }
-
-    private void DrawRectHull(float radius, ShapeStyle style)
-    {
-        float aspect = Mathf.Max(Definition.HullAspect, 0.5f);
-        float length = radius * 2f * Mathf.Sqrt(aspect);
-        float width = radius * 2f / Mathf.Sqrt(aspect);
-        ShapeDraw.Rect(this, new Rect2(-length * 0.5f, -width * 0.5f, length, width), style);
-    }
-
-    private void DrawPolygonHull(float radius, int sides, ShapeStyle style)
-    {
-        var points = new Vector2[sides];
-
-        for (int i = 0; i < sides; i++)
-        {
-            float angle = Mathf.Tau * i / sides;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
-        }
-
-        ShapeDraw.Polygon(this, points, style);
-    }
-
-    /// <summary>
-    /// Треугольник на корпусе: нос совпадает с направлением движения
-    /// (<see cref="Node2D.Rotation"/>), а не с инструментом.
-    /// </summary>
-    private void DrawMoveMark(float radius)
-    {
-        float nose = radius * 0.62f;
-        float back = radius * 0.12f;
-        float half = radius * 0.32f;
-        var tip = new[]
-        {
-            new Vector2(nose, 0f),
-            new Vector2(back, -half),
-            new Vector2(back, half),
-        };
-
-        ShapeDraw.Polygon(this, tip,
-            ShapeStyle.Filled(Definition.Color.Lightened(0.25f), new Color(0f, 0f, 0f, 0.55f), 1.5f,
-                WidthMode.Screen));
-    }
-
-    /// <summary>
-    /// Передняя часть инструмента: ствол или дуга манипулятора. Рисуется в локальных
-    /// координатах со сдвигом на угол инструмента относительно корпуса.
-    /// </summary>
-    private void DrawToolMark(float radius, float toolLocal)
-    {
-        bool hasWeapon = Definition.Weapon != null;
-        bool hasArm = Definition.BuildTool != null;
-
-        if (!hasWeapon && !hasArm)
-            return;
-
-        DrawSetTransform(Vector2.Zero, toolLocal, Vector2.One);
-
-        if (!hasWeapon && hasArm)
-        {
-            ShapeDraw.Arc(this, Vector2.Zero, radius * 1.15f, -0.7f, 0.7f,
-                ShapeStyle.Outline(new Color(0.45f, 0.85f, 1f, 0.85f), 2.5f, WidthMode.Screen));
-        }
-        else
-        {
-            float barrel = radius * 1.2f;
-            if (hasWeapon)
-                barrel = radius + Mathf.Clamp(Definition.Weapon.RangePx * 0.12f, radius * 0.4f,
-                    radius * 2.2f);
-
-            ShapeDraw.Line(this, Vector2.Zero, new Vector2(barrel, 0f),
-                ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.8f), 2.5f, WidthMode.Screen));
-        }
-
-        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
     }
 }

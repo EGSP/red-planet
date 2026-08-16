@@ -54,7 +54,7 @@ public partial class OutcomeMenu : CanvasLayer
         _title.AddThemeColorOverride("font_color", victory ? VictoryColor : DefeatColor);
         _subtitle.Text = victory
             ? "Портал удержан. Основные силы получили проход."
-            : "Коммандер или крепость уничтожены.";
+            : "Коммандер уничтожен.";
         _frame.Visible = true;
     }
 
@@ -97,6 +97,7 @@ public partial class OutcomeMenu : CanvasLayer
 
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 16) });
 
+        AddButton(box, "Отчёт партии", () => this.Sibling<MetricsScreen>()?.Open());
         AddButton(box, "Перезапустить", Restart);
         AddButton(box, "Выйти в главное меню", ExitToMainMenu);
     }

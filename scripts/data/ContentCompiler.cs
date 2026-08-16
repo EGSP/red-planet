@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using Tomlyn;
 using Tomlyn.Model;
 
 /// <summary>Вид инструмента. Определяет, какие ключи у него читаются.</summary>
@@ -56,9 +57,27 @@ public static class ContentCompiler
         int errors = 0;
 
         errors += LoadTags(catalog.Tags);
-        errors += LoadDefinitions(catalog);
+        errors += LoadDefinitions(catalog, overrides: null);
         errors += LoadBuildbars(catalog);
-        errors += LoadWaves(catalog);
+        errors += LoadWaves(catalog, overrides: null);
+        errors += Link(catalog);
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Собрать содержимое, подставив тексты определений и vars поверх файлов на диске.
+    /// Нужен редактору: черновики вкладок участвуют в сборке до записи на диск.
+    /// </summary>
+    public static int CompileWithOverrides(
+        Catalog catalog, IReadOnlyDictionary<string, string> textOverrides)
+    {
+        int errors = 0;
+
+        errors += LoadTags(catalog.Tags);
+        errors += LoadDefinitions(catalog, textOverrides);
+        errors += LoadBuildbars(catalog);
+        errors += LoadWaves(catalog, textOverrides);
         errors += Link(catalog);
 
         return errors;
@@ -88,7 +107,8 @@ public static class ContentCompiler
     /// Один мешок на tools + units + buildings: наследование идёт между соседними
     /// файлами в подпапке юнита, а после Resolve файлы делятся по ключу kind.
     /// </summary>
-    private static int LoadDefinitions(Catalog catalog)
+    private static int LoadDefinitions(
+        Catalog catalog, IReadOnlyDictionary<string, string> overrides)
     {
         var raw = new Dictionary<string, TomlTable>();
         var definitionPaths = new List<string>();
@@ -99,7 +119,7 @@ public static class ContentCompiler
             if (!TomlResolver.IsVars(path))
                 continue;
 
-            var table = TomlDocument.LoadTable(path);
+            var table = LoadTable(path, overrides);
 
             if (table == null)
             {
@@ -113,7 +133,7 @@ public static class ContentCompiler
         foreach (string root in DefinitionRoots)
         foreach (string path in Files(root))
         {
-            var table = TomlDocument.LoadTable(path);
+            var table = LoadTable(path, overrides);
 
             if (table == null)
             {
@@ -242,14 +262,17 @@ public static class ContentCompiler
         string name = document.String("name");
         var kind = document.Enum("kind", ToolKind.Work);
         float range = document.Float("range", 3f);
-
         bool aimWhileMoving = document.Bool("aim_while_moving", true);
+        string sprite = document.String("sprite");
+        float spriteRotation = document.Float("sprite_rotation");
 
         if (kind == ToolKind.Weapon)
             return new WeaponDefinition
             {
                 Id = id,
                 DisplayName = name,
+                Sprite = sprite,
+                SpriteRotationDegrees = spriteRotation,
                 Range = range,
                 AimWhileMoving = aimWhileMoving,
                 Damage = document.Float("damage", 10f),
@@ -265,6 +288,8 @@ public static class ContentCompiler
         {
             Id = id,
             DisplayName = name,
+            Sprite = sprite,
+            SpriteRotationDegrees = spriteRotation,
             Range = range,
             AimWhileMoving = aimWhileMoving,
             Power = document.Float("power", 1f),
@@ -364,6 +389,14 @@ public static class ContentCompiler
             definition.Hull = body.Enum("hull", basis.Hull);
             definition.HullTrim = body.Enum("hull_trim", basis.HullTrim);
             definition.HullAspect = body.Float("hull_aspect", basis.HullAspect);
+            definition.Sprite = body.String("sprite", basis.Sprite);
+            definition.SpriteScale = body.Float("sprite_scale", basis.SpriteScale);
+            definition.SpriteRotationDegrees =
+                body.Float("sprite_rotation", basis.SpriteRotationDegrees);
+            definition.AmbientOcclusionInner =
+                body.Float("ao_inner", basis.AmbientOcclusionInner);
+            definition.AmbientOcclusionOuter =
+                body.Float("ao_outer", basis.AmbientOcclusionOuter);
             definition.ArmorRings = body.Int("armor_rings", basis.ArmorRings);
             definition.FrontPlate = body.Bool("front_plate", basis.FrontPlate);
         }
@@ -514,6 +547,7 @@ public static class ContentCompiler
             case UnitClass.Plant:
                 return set
                     .With(OrderKind.Move)
+                    .With(OrderKind.AttackMove)
                     .With(OrderKind.Follow)
                     .With(OrderKind.Attack);
 
@@ -534,9 +568,37 @@ public static class ContentCompiler
                     .With(OrderKind.Move, definition.IsMobile)
                     .With(OrderKind.Follow, definition.IsMobile)
                     .With(OrderKind.Attack, definition.Weapon != null)
+                    // Идти с боем умеет всякий подвижный: безоружный просто дойдёт, никого
+                    // по дороге не задерживаясь, — отказывать ему значило бы разбивать
+                    // смешанный отряд на тех, кто приказ принял, и тех, кто остался стоять
+                    .With(OrderKind.AttackMove, definition.IsMobile)
                     .With(OrderKind.Build, definition.CanBuild)
                     .With(OrderKind.Repair, definition.CanRepair);
         }
+    }
+
+    /// <summary>
+    /// Род при выделении рамкой. Выводится из тега structure и из снабжения, а не задаётся
+    /// в файле: род есть следствие того, чем сущность является, и расходиться с её тегами
+    /// и инструментами он не должен.
+    ///
+    /// БОЕВОЙ — ЭТО ВООРУЖЁННЫЙ И БЕЗ РАБОЧЕГО ИНСТРУМЕНТА. Второе условие отделяет от армии
+    /// коммандера: он вооружён, но занят застройкой, и выделять его отдельно от фабрикаторов
+    /// значило бы мешать обычной работе на базе. Оно же оставляет среди ботов вооружённого
+    /// ремонтника, если такой появится: приоритет армии заведён ради тех, у кого другого
+    /// занятия нет вовсе.
+    ///
+    /// Проверяется после <c>LinkTools</c> — ствол и рабочий инструмент к этому мигу
+    /// уже разложены по своим полям.
+    /// </summary>
+    private static SelectionGroup SelectionGroupOf(Catalog catalog, UnitDefinition definition)
+    {
+        if (definition.Tags.Has(catalog.Tags.Structure))
+            return SelectionGroup.Structures;
+
+        return definition.Weapon != null && definition.BuildTool == null
+            ? SelectionGroup.Army
+            : SelectionGroup.Bots;
     }
 
     // ── Строительные панели ───────────────────────────────────────────────────────
@@ -617,13 +679,18 @@ public static class ContentCompiler
 
     // ── Волны ─────────────────────────────────────────────────────────────────────
 
-    private static int LoadWaves(Catalog catalog)
+    private static int LoadWaves(
+        Catalog catalog, IReadOnlyDictionary<string, string> overrides)
     {
         int errors = 0;
 
         foreach (string path in Files(WavesDir))
         {
-            var document = TomlDocument.Load(path);
+            // Черновик открытой вкладки волны участвует в сборке наравне с файлом:
+            // иначе карта волн и проверка перед записью показывали бы прежние значения.
+            var document = overrides != null && overrides.TryGetValue(path, out string draft)
+                ? TomlDocument.FromText(draft, path)
+                : TomlDocument.Load(path);
 
             if (document == null)
             {
@@ -767,9 +834,7 @@ public static class ContentCompiler
         {
             errors += LinkTools(catalog, definition);
 
-            definition.SelectionGroup = definition.Tags.Has(catalog.Tags.Structure)
-                ? SelectionGroup.Structures
-                : SelectionGroup.Bots;
+            definition.SelectionGroup = SelectionGroupOf(catalog, definition);
 
             // Тир по умолчанию — t1: иначе каждый файл обязан повторять одно и то же
             if (!definition.Tags.HasAny(catalog.Tags.AnyTier))
@@ -991,6 +1056,25 @@ public static class ContentCompiler
     }
 
     // ── Общее ─────────────────────────────────────────────────────────────────────
+
+    private static TomlTable LoadTable(
+        string path, IReadOnlyDictionary<string, string> overrides)
+    {
+        if (overrides != null && overrides.TryGetValue(path, out string text))
+        {
+            var syntax = Tomlyn.Toml.Parse(text, path);
+            if (syntax.HasErrors)
+            {
+                foreach (var error in syntax.Diagnostics)
+                    GD.PushError($"[Контент] {error}");
+                return null;
+            }
+
+            return syntax.ToModel();
+        }
+
+        return TomlDocument.LoadTable(path);
+    }
 
     /// <summary>
     /// Пути ко всем .toml каталога, включая вложенные. Соседние .md в выборку не попадают.

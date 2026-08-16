@@ -25,9 +25,6 @@ speed      = 2.6
 turn_speed = 40.0
 brake      = 4.0
 
-[battle]
-approach_hold = 0.5
-
 [assembly]
 cost_metal   = 30000.0
 frame_health = 60000.0

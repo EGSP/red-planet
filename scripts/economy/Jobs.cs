@@ -57,20 +57,27 @@ public static class Jobs
     /// и проверять его на каждом элементе каждого обхода незачем. Признак «чинится»
     /// реализуют ровно постройки и юниты, поэтому широкий случай — весь IRepairable.
     /// </summary>
+    /// <param name="except">
+    /// Кого не предлагать. Сюда передают самого искателя: сам себя не чинит никто (правило
+    /// и его обоснование — в <see cref="Unit.Repairing"/>), а повреждённый ремонтник иначе
+    /// нашёл бы себя первым же кандидатом — расстояние до себя нулевое, — и взялся бы
+    /// за приказ, который исполнять нечем.
+    /// </param>
     public static Node2D NearestDamaged(Vector2 from, float maxDistance,
-        bool includeUnits = false)
+        bool includeUnits = false, object except = null)
     {
         var index = GameManager.I.Index;
 
         return includeUnits
-            ? Damaged(index.All<IRepairable>(), from, maxDistance)
-            : Damaged(index.All<Building>(), from, maxDistance);
+            ? Damaged(index.All<IRepairable>(), from, maxDistance, except)
+            : Damaged(index.All<Building>(), from, maxDistance, except);
     }
 
-    private static Node2D Damaged<T>(Slice<T> slice, Vector2 from, float maxDistance)
+    private static Node2D Damaged<T>(Slice<T> slice, Vector2 from, float maxDistance,
+        object except)
         where T : class, IRepairable =>
-        slice.Where(NeedsRepair).Nearest(from, target => target.GlobalPosition, maxDistance)
-            as Node2D;
+        slice.Where(target => !ReferenceEquals(target, except) && NeedsRepair(target))
+            .Nearest(from, target => target.GlobalPosition, maxDistance) as Node2D;
 
     /// <summary>Есть ли что чинить и есть ли чем: без цены постройки курса ремонта нет.</summary>
     private static bool NeedsRepair(IRepairable target) =>

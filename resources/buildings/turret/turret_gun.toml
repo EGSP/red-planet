@@ -5,8 +5,8 @@ base = "/tools/base_weapon.toml"
 name = "Орудие турели"
 
 range             = 6.7
-damage            = 60.0
-fire_interval     = 0.5
+damage            = 65.0
+fire_interval     = 0.35
 projectile_speed  = 33.3
 spread_degrees    = 2.0
 projectile_radius = 0.07

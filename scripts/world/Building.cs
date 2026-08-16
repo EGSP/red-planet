@@ -7,7 +7,7 @@ using Godot;
 /// УГОЛ ПРИНАДЛЕЖИТ ЭКЗЕМПЛЯРУ, А НЕ СПРАВОЧНИКУ. Раньше он брался из определения и был
 /// у всех построек одного рода одинаков, потому что повернуть постройку было нечем.
 /// Теперь его задаёт игрок при постановке, а справочник даёт лишь начальное значение
-/// для тех, кто появляется в мире помимо стройки, — стартовой базы например.
+/// для тех построек, которые появляются в мире помимо стройки.
 ///
 /// Ноду постройка по-прежнему не крутит: в Rotation у турели живёт ось башни, и корпус
 /// от её вращения шевелиться не должен. Поэтому угол корпуса — отдельное число,
@@ -202,21 +202,30 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         // и потому исчезает вместе с ней
         BuildingSkirt.Draw(this, rect);
 
-        ShapeDraw.Rect(this, rect,
-            ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f, WidthMode.Screen));
+        if (!string.IsNullOrEmpty(Definition.Sprite))
+        {
+            // Порядок обязателен: контактная тень падает на площадку и грунт, поэтому идёт
+            // до корпуса, а затемнение по кайме принадлежит самому корпусу и ложится после
+            SpriteOcclusion.DrawContact(this, Definition, rect, BodyFacing);
+            SpriteArt.DrawHull(this, Definition, rect, baseRadians: BodyFacing);
+            SpriteOcclusion.DrawRim(this, Definition, rect, BodyFacing);
+        }
+        else
+        {
+            ShapeDraw.Rect(this, rect,
+                ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f,
+                    WidthMode.Screen));
 
-        // Ось «вперёд» — короткая насечка от центра к краю. Рисуется в координатах корпуса,
-        // поэтому насечка вперёд и есть направление корпуса
-        float span = Mathf.Min(size.X, size.Y);
-        ShapeDraw.Line(this, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
-            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f), 3f, WidthMode.Screen));
+            // Ось «вперёд» — короткая насечка от центра к краю. Рисуется в координатах корпуса,
+            // поэтому насечка вперёд и есть направление корпуса
+            float span = Mathf.Min(size.X, size.Y);
+            ShapeDraw.Line(this, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
+                ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f), 3f, WidthMode.Screen));
+        }
 
-        // Подпись и полоса прочности читаются с экрана, а не с корпуса, поэтому поворот
-        // на них не распространяется
+        // Полоса прочности читается с экрана, а не с корпуса, поэтому поворот
+        // на неё не распространяется
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
-
-        DrawString(ThemeDB.FallbackFont, new Vector2(rect.Position.X + 4f, rect.Position.Y + 16f),
-            Definition.DisplayName, HorizontalAlignment.Left, -1, 12, Colors.Black);
 
         HealthBar.Draw(this, Health, size.X * 0.9f, rect.Position.Y - 8f);
     }

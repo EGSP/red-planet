@@ -18,10 +18,12 @@ using Godot;
 /// <c>vis</c>, <c>gfx</c>, <c>giz</c>, <c>wav</c>, <c>dia</c>), чтобы растущие блоки
 /// не сдвигали чужие секции.
 ///
-/// Панель показывается по F3 и на симуляцию не влияет: она читает состояние и правит
-/// только <see cref="DebugFlags"/>.
+/// Панель показывается по F3 и на симуляцию не влияет: она читает состояние, правит
+/// <see cref="DebugFlags"/> и управляет записью срезов <see cref="PerformanceCapture"/>.
+/// Показ и клавиша достались ей от <see cref="ToolPanel"/>: панель песочницы занимает то же
+/// место экрана, и открытой из них бывает не более одной.
 /// </summary>
-public partial class DebugPanel : CanvasLayer
+public partial class DebugPanel : ToolPanel
 {
     private static readonly Color Heading = new(0.65f, 0.8f, 1f);
     private static readonly Color Numbers = new(0.8f, 0.85f, 0.9f);
@@ -43,7 +45,6 @@ public partial class DebugPanel : CanvasLayer
 
     private const string AlarmInk = "#ff5a4a";
 
-    private Control _frame;
     private Control[] _pages;
     private Label _combat;
     private Label _navigation;
@@ -51,6 +52,10 @@ public partial class DebugPanel : CanvasLayer
     private Label _waves;
     private Label _fog;
     private RichTextLabel _profile;
+    private Label _traceStatus;
+    private Button _traceStart;
+    private Button _traceStop;
+    private OptionButton _traceInterval;
 
     /// <summary>
     /// Поколение замеров, по которому уже собран текст. Сравнение с текущим избавляет
@@ -58,28 +63,17 @@ public partial class DebugPanel : CanvasLayer
     /// </summary>
     private int _profileShown = -1;
 
-    public override void _Ready()
-    {
-        Build();
-        _frame.Visible = false;
-    }
+    protected override string ToggleAction => InputActions.DebugToggle;
 
-    /// <summary>
-    /// F3 ловим до систем: панель обязана открываться и на паузе, когда ветка систем
-    /// обработку не получает вовсе.
-    /// </summary>
-    public override void _UnhandledKeyInput(InputEvent @event)
+    public override void _ExitTree()
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.F3 })
-            return;
-
-        _frame.Visible = !_frame.Visible;
-        GetViewport().SetInputAsHandled();
+        PerformanceCapture.StopIfRecording();
+        base._ExitTree();
     }
 
     public override void _Process(double delta)
     {
-        if (!_frame.Visible)
+        if (!Shown)
             return;
 
         Refresh();
@@ -87,17 +81,14 @@ public partial class DebugPanel : CanvasLayer
 
     // ── разметка ──────────────────────────────────────────────────────────────────
 
-    private void Build()
+    protected override void Build(Control frame)
     {
-        _frame = new UiFrame();
-        AddChild(_frame);
-
         var row = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Begin,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        _frame.AddChild(row);
+        frame.AddChild(row);
         row.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 
         // Прижимаем к верху: нижний левый угол занят панелью выделения, и накрывать её
@@ -343,10 +334,148 @@ public partial class DebugPanel : CanvasLayer
     }
 
     /// <summary>
-    /// Графика мира. Пока здесь одна тень препятствий; вкладка заведена отдельно от зрения
-    /// потому, что туман есть часть правил видимости, а тень не влияет ни на что, кроме вида.
+    /// Графика мира: подсистемы затенения спрайтов и вида стройки из
+    /// <see cref="GraphicsSettings"/>, а следом тень препятствий, которая принадлежит
+    /// местности. Вкладка заведена отдельно от зрения потому, что туман есть часть правил
+    /// видимости, а всё перечисленное не влияет ни на что, кроме вида.
+    ///
+    /// Правки идут прямо в ресурсы подсистем, поэтому действуют на всё сразу и переживают
+    /// закрытие панели; сохранение файла остаётся за инспектором.
     /// </summary>
     private void FillGfx(Node box)
+    {
+        FillOcclusion(box);
+        FillConstruction(box);
+        FillObstacleShade(box);
+    }
+
+    /// <summary>Затенение спрайтов: контактная тень и затемнение по кайме.</summary>
+    private void FillOcclusion(Node box)
+    {
+        Section(box, "Затенение спрайтов",
+            "Два запечённых слоя, выведенных из альфы спрайта постройки. Признаки гасят слой " +
+            "у всех построек сразу и величины в определениях (ao_inner, ao_outer) не трогают; " +
+            "правка остальных полей пересобирает изображения заново.");
+
+        Check(box, "контактная тень",
+            "Размытый силуэт, смещённый по направлению света и нарисованный под корпусом. " +
+            "Отделяет постройку от поверхности: без него спрайт лежит с грунтом в одной " +
+            "плоскости и читается как наклейка. Сила у отдельной постройки — ключ ao_outer.",
+            () => Ao().ContactEnabled, on => Ao().ContactEnabled = on);
+
+        Check(box, "затемнение по кайме",
+            "Полоса потемнения вдоль края внутри силуэта, нарисованная поверх корпуса. " +
+            "Упрощённая имитация ambient occlusion: настоящее вычисление потребовало бы " +
+            "данных о рельефе, которых у плоского изображения нет. Даёт объём самому " +
+            "корпусу. Сила у отдельной постройки — ключ ao_inner.",
+            () => Ao().RimEnabled, on => Ao().RimEnabled = on);
+
+        Colour(box, "цвет затенения",
+            "Общий цвет обоих слоёв. Чистый чёрный на охристом грунте выглядит провалом, " +
+            "поэтому по умолчанию взят слегка холодный тёмный тон.",
+            () => Ao().Shade, value => Ao().Shade = value);
+
+        Slide(box, "плотность тени", 0f, 1f, 0.01f,
+            "Непрозрачность контактной тени вплотную к корпусу.",
+            () => Ao().ContactOpacity, value => Ao().ContactOpacity = value);
+
+        Slide(box, "размытие тени", 0f, 0.3f, 0.005f,
+            "Радиус размытия контактной тени, доля меньшей стороны спрайта. Доля, а не " +
+            "пиксели: спрайты имеют разное разрешение, и постоянная в пикселях дала бы " +
+            "у крупного изображения вдвое более узкую тень.",
+            () => Ao().ContactBlur, value => Ao().ContactBlur = value);
+
+        Slide(box, "отход тени", 0f, 0.3f, 0.005f,
+            "Насколько тень смещена от центра корпуса, доля меньшей стороны спрайта.",
+            () => Ao().ContactOffset, value => Ao().ContactOffset = value);
+
+        Slide(box, "направление света", 0f, 360f, 1f,
+            "Куда уходит тень, градусов от оси вправо по часовой стрелке. Направление " +
+            "мировое: у повёрнутой постройки тень идёт в ту же сторону, что и у неповёрнутой.",
+            () => Ao().ContactAngleDegrees, value => Ao().ContactAngleDegrees = value);
+
+        Slide(box, "плотность каймы", 0f, 1f, 0.01f,
+            "Непрозрачность затемнения на самом краю силуэта.",
+            () => Ao().RimOpacity, value => Ao().RimOpacity = value);
+
+        Slide(box, "ширина каймы", 0f, 0.3f, 0.005f,
+            "Ширина полосы затемнения внутрь от края, доля меньшей стороны спрайта.",
+            () => Ao().RimBlur, value => Ao().RimBlur = value);
+
+        Slide(box, "подробность запекания", 1f, 8f, 1f,
+            "Во сколько раз изображение слоя подробнее спрайта. Слои рисуются тем же узлом, " +
+            "что и корпус, а там стоит ближайший сосед ради резкости пиксельного рисунка; " +
+            "подробность и не даёт размытой тени распасться на ступени. Выше — глаже и дороже " +
+            "по памяти.",
+            () => Ao().Upscale, value => Ao().Upscale = Mathf.RoundToInt(value));
+    }
+
+    /// <summary>Вид каркаса строящейся постройки.</summary>
+    private void FillConstruction(Node box)
+    {
+        Section(box, "Стройка",
+            "Каркас показан спрайтом будущей постройки, разделённым по высоте уровнем " +
+            "готовности: ниже уровня видна полупрозрачная проекция корпуса, выше — сетка " +
+            "одного цвета, а по уровню идёт полоса фронта. Линии проходят через обе части. " +
+            "Каркас, к которому никто не подключён, рисуется тем же шейдером неподвижно.");
+
+        Check(box, "шейдер строительства",
+            "Снятый признак возвращает прежний вид: спрайт, непрозрачность которого растёт " +
+            "вместе с готовностью.",
+            () => Site().Enabled, on => Site().Enabled = on);
+
+        Colour(box, "цвет недостроенного",
+            "Цвет части выше уровня готовности. Альфа задаёт её плотность.",
+            () => Site().Wire, value => Site().Wire = value);
+
+        Colour(box, "цвет фронта",
+            "Цвет полосы на уровне готовности. Альфа задаёт, насколько полоса перекрывает " +
+            "то, что под ней.",
+            () => Site().Edge, value => Site().Edge = value);
+
+        Slide(box, "плотность готового", 0f, 1f, 0.01f,
+            "Непрозрачность уже проявленной части конструкции.",
+            () => Site().BuiltOpacity, value => Site().BuiltOpacity = value);
+
+        Slide(box, "ширина фронта", 0f, 0.3f, 0.005f,
+            "Ширина полосы фронта, доля высоты спрайта.",
+            () => Site().EdgeWidth, value => Site().EdgeWidth = value);
+
+        Slide(box, "полос сетки", 0f, 64f, 1f,
+            "Сколько полос укладывается по высоте спрайта.",
+            () => Site().ScanCount, value => Site().ScanCount = value);
+
+        Slide(box, "глубина сетки", 0f, 1f, 0.01f,
+            "Сила линий на недостроенной и уже проявленной частях.",
+            () => Site().ScanStrength, value => Site().ScanStrength = value);
+
+        Slide(box, "скорость сетки", 0f, 20f, 0.1f,
+            "Скорость бега полос. Действует только при активной работе: у брошенного " +
+            "каркаса сетка стоит.",
+            () => Site().ScanSpeed, value => Site().ScanSpeed = value);
+
+        Slide(box, "размах волнения", 0f, 0.2f, 0.001f,
+            "На сколько колеблется уровень готовности, доля высоты спрайта. Тоже только при " +
+            "активной работе.",
+            () => Site().WaveAmplitude, value => Site().WaveAmplitude = value);
+
+        Slide(box, "частота волнения", 0f, 20f, 0.1f,
+            "Сколько периодов колебания укладывается по ширине спрайта.",
+            () => Site().WaveFrequency, value => Site().WaveFrequency = value);
+
+        Slide(box, "скорость волнения", 0f, 20f, 0.1f,
+            "Как быстро идёт колебание уровня.",
+            () => Site().WaveSpeed, value => Site().WaveSpeed = value);
+
+        Slide(box, "сглаживание работы", 0.01f, 2f, 0.01f,
+            "За сколько секунд признак работы доходит от нуля до единицы и обратно. " +
+            "Строитель подключается мгновенно, и без сглаживания движение обрывалось бы " +
+            "рывком.",
+            () => Site().ActivityFade, value => Site().ActivityFade = value);
+    }
+
+    /// <summary>Тень препятствий. Принадлежит местности, а не своду настроек графики.</summary>
+    private void FillObstacleShade(Node box)
     {
         Section(box, "Тень препятствий",
             "Затенение вокруг всего, что попадает в растр навигации, — построек и каркасов. " +
@@ -476,8 +605,13 @@ public partial class DebugPanel : CanvasLayer
         var hints = new Label
         {
             Text = "ЛКМ — выделить или рамка, ПКМ — приказ по цели\n" +
-                   "Shift — дописать в очередь, WASD и колесо — камера\n" +
-                   "C — очереди всех своих, F3 — эта панель",
+                   "Shift — дописать в очередь\n" +
+                   "Выделено: A атака, M идти, R чинить, F следовать, Del снос\n" +
+                   "В режиме приказа: ПКМ — цель, ЛКМ или Escape — отмена\n" +
+                   "Пусто: A боевые на экране, F строители на экране\n" +
+                   "Камера: край экрана, СКМ — перетаскивание, колесо — зум\n" +
+                   "C — очереди всех своих\n" +
+                   "F3 — эта панель, F2 — песочница",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         hints.AddThemeFontSizeOverride("font_size", 11);
@@ -506,6 +640,112 @@ public partial class DebugPanel : CanvasLayer
             $"красным от {Percent(StepProfiler.AlarmRatio)}. У систем быстрее " +
             $"{StepProfiler.NoiseFloorMs:0.00} мс раскраска не ведётся: там относительный " +
             "разброс говорит только о погрешности измерения.");
+
+        Section(box, "Срез производительности",
+            "Sampling стеков CLR текущего процесса. После остановки рядом с .nettrace " +
+            "пишется .speedscope.json — его открывают на speedscope.app. В Speedscope " +
+            "нужен именно JSON, не .nettrace. Метки Physics/Process видны после " +
+            "dotnet-trace convert --format Chromium на ui.perfetto.dev. В соседний " +
+            ".game.jsonl с выбранным интервалом записываются число сущностей и показатели " +
+            "систем. Оба файла создаются только после нажатия кнопки. Каталог " +
+            $"{DotnetTraceCapture.RelativeDir}/; нужен tool: dotnet tool install -g dotnet-trace.");
+
+        _traceStatus = Readout(box,
+            "Ключ сессии, время, состояние обоих каналов и стоимость последнего игрового снимка.");
+
+        _traceInterval = new OptionButton
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        _traceInterval.AddItem("игровой снимок каждые 0,25 с");
+        _traceInterval.AddItem("игровой снимок каждые 0,5 с");
+        _traceInterval.AddItem("игровой снимок каждую 1 с");
+        _traceInterval.Select(0);
+        _traceInterval.ItemSelected += OnTraceIntervalSelected;
+        Explain(_traceInterval,
+            "Интервал записи состояния мира и систем. Во время записи изменить его нельзя.");
+        box.AddChild(_traceInterval);
+
+        var row = new HBoxContainer();
+        box.AddChild(row);
+
+        _traceStart = new Button
+        {
+            Text = "начать срез",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        _traceStart.AddThemeFontSizeOverride("font_size", 11);
+        _traceStart.Pressed += OnTraceStart;
+        Explain(_traceStart,
+            "Подключить EventPipe к этому процессу и писать sampling в новый файл.");
+        row.AddChild(_traceStart);
+
+        _traceStop = new Button
+        {
+            Text = "остановить",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        _traceStop.AddThemeFontSizeOverride("font_size", 11);
+        _traceStop.Pressed += OnTraceStop;
+        Explain(_traceStop,
+            "Завершить текущую запись и сбросить файл на диск. Без активной записи " +
+            "кнопка не действует.");
+        row.AddChild(_traceStop);
+
+        RefreshTrace();
+    }
+
+    private void OnTraceStart()
+    {
+        if (!PerformanceCapture.TryStart(out string error) && error != null)
+            GD.PushWarning($"[DebugPanel] срез: {error}");
+
+        RefreshTrace();
+    }
+
+    private void OnTraceStop()
+    {
+        if (!PerformanceCapture.RequestStop(out string error) && error != null)
+            GD.PushWarning($"[DebugPanel] срез: {error}");
+
+        RefreshTrace();
+    }
+
+    private static void OnTraceIntervalSelected(long index)
+    {
+        PerformanceCapture.IntervalSeconds = index switch
+        {
+            1 => 0.5,
+            2 => 1.0,
+            _ => 0.25,
+        };
+    }
+
+    private void RefreshTrace()
+    {
+        if (_traceStatus == null)
+            return;
+
+        var elapsed = PerformanceCapture.Elapsed;
+        string time = PerformanceCapture.FormatElapsed(elapsed);
+        bool busy = PerformanceCapture.Busy;
+        bool recording = PerformanceCapture.Recording;
+
+        _traceStatus.Text =
+            $"сессия {PerformanceCapture.Key}\n" +
+            $"время {time}\n" +
+            $"{PerformanceCapture.Status}\n" +
+            $"игровых снимков {PerformanceCapture.Samples}, пропущено " +
+            $"{PerformanceCapture.Dropped}, последний {PerformanceCapture.LastCaptureMs:0.00} мс";
+
+        if (_traceStart != null)
+            _traceStart.Disabled = busy;
+
+        if (_traceStop != null)
+            _traceStop.Disabled = !recording;
+
+        if (_traceInterval != null)
+            _traceInterval.Disabled = busy;
     }
 
     /// <summary>Порог превышения как проценты — так он и назван в подсказке.</summary>
@@ -821,6 +1061,12 @@ public partial class DebugPanel : CanvasLayer
     /// Настройки тумана берутся у системы зрения, а не хранятся снимком: ресурс живёт
     /// столько же, сколько сессия, а панель переживает её пересборку.
     /// </summary>
+    /// <summary>Настройки затенения спрайтов. Правки идут прямо в ресурс подсистемы.</summary>
+    private static SpriteOcclusionSettings Ao() => GraphicsSettings.Shading;
+
+    /// <summary>Настройки вида стройки.</summary>
+    private static ConstructionSettings Site() => GraphicsSettings.Building;
+
     private static FogSettings Fog() => GameManager.I?.System<VisionSystem>()?.Settings;
 
     /// <summary>
@@ -966,6 +1212,7 @@ public partial class DebugPanel : CanvasLayer
         _fog.Text = Vision(gm.System<VisionSystem>());
 
         RefreshProfile(gm);
+        RefreshTrace();
 
         var pathfinding = gm.System<PathfindingSystem>();
         var movement = gm.System<MovementSystem>();

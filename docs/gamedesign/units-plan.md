@@ -19,6 +19,7 @@
 | A1 | Убрать секцию юнитов у коммандера | `buildbars/commander_buildbar.toml` | сделано |
 | A2 | Фабрикатор в очередь T1 завода | `buildbars/bot_factory_buildbar.toml` | сделано |
 | A3 | Тяжёлый фабрикатор: определение, рука, панель | `units/fabricator_t2.toml`, `tools/fabricator_t2_arm.toml`, `buildbars/fabricator_t2_buildbar.toml` | сделано |
+| A3a | Портал только у тяжёлого фабрикатора | `buildbars/fabricator_t2_buildbar.toml`, убрать из `commander_buildbar` / `fabricator_buildbar` | сделано |
 | A4 | T2 завод: определение и панель | `buildings/bot_factory_t2.toml`, `buildbars/bot_factory_t2_buildbar.toml` | — |
 | A5 | Перенести тяжёлый фабрикатор из T1 завода в T2 | `buildbars/bot_factory_buildbar.toml`, `buildbars/bot_factory_t2_buildbar.toml` | — |
 

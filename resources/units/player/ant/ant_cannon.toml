@@ -6,7 +6,7 @@ name = "Пушка Анта"
 
 range             = 6.7
 damage            = 84.0
-fire_interval     = 1.818
+fire_interval = 1.3
 projectile_speed  = 10.0
 spread_degrees    = 2.0
 projectile_radius = 0.08

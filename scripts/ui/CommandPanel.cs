@@ -62,7 +62,8 @@ public partial class CommandPanel : CanvasLayer
 
     public override void _Process(double delta)
     {
-        var selected = GameManager.I?.Command?.Selected;
+        var command = GameManager.I?.Command;
+        var selected = command?.Selected;
 
         if (selected == null || selected.Count == 0)
         {
@@ -72,7 +73,10 @@ public partial class CommandPanel : CanvasLayer
         }
 
         var lines = LinesOf(selected);
-        string key = string.Join('|', lines);
+
+        // Выбранный вид входит в отпечаток: подсветка обязана переключаться, а состав
+        // набора при этом не меняется
+        string key = string.Join('|', lines) + "@" + command.Aimed;
 
         _frame.Visible = lines.Count > 0;
 
@@ -80,7 +84,7 @@ public partial class CommandPanel : CanvasLayer
             return;
 
         _key = key;
-        Rebuild(lines);
+        Rebuild(lines, command.Aimed);
     }
 
     /// <summary>
@@ -113,18 +117,34 @@ public partial class CommandPanel : CanvasLayer
         return lines;
     }
 
-    private void Rebuild(List<(OrderKind Kind, bool Soft)> lines)
+    /// <summary>
+    /// Строка приказа: название, назначенная клавиша справа и пометка выбранного вида.
+    ///
+    /// КЛАВИША ПОКАЗАНА ЗДЕСЬ, А НЕ В ОТДЕЛЬНОЙ СПРАВКЕ: список приказов игрок и так читает
+    /// глазами, выбирая, что отдать, и держать соответствие клавиш вторым списком значило бы
+    /// заставить сверять два места. Берётся она из карты действий, поэтому переназначение
+    /// отражается здесь само.
+    /// </summary>
+    private void Rebuild(List<(OrderKind Kind, bool Soft)> lines, OrderKind? aimed)
     {
         foreach (var child in _list.GetChildren())
             child.QueueFree();
 
         foreach (var (kind, soft) in lines)
         {
-            var line = new Label
+            bool active = aimed == kind;
+
+            var row = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            row.AddThemeConstantOverride("separation", 6);
+
+            var name = new Label
             {
-                Text = soft ? $"{Order.Name(kind)} *" : Order.Name(kind),
+                // Выбранный вид помечается стрелкой, а не только цветом: подсветка одним
+                // оттенком неразличима рядом с мягким приказом, который тоже приглушён
+                Text = (active ? "▸ " : "") + (soft ? $"{Order.Name(kind)} *" : Order.Name(kind)),
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             };
-            line.AddThemeFontSizeOverride("font_size", 14);
+            name.AddThemeFontSizeOverride("font_size", 14);
 
             // Тот же цвет, что у линии приказа на карте: подсказка и очередь читаются вместе.
             // Мягкий приказ чуть бледнее — видно, что к исполнению он не принимается.
@@ -132,8 +152,21 @@ public partial class CommandPanel : CanvasLayer
             if (soft)
                 tint = new Color(tint.R, tint.G, tint.B, 0.55f);
 
-            line.AddThemeColorOverride("font_color", tint);
-            _list.AddChild(line);
+            name.AddThemeColorOverride("font_color", tint);
+            row.AddChild(name);
+
+            string label = InputActions.KeyLabel(InputActions.ActionOf(kind));
+
+            if (label.Length > 0)
+            {
+                var hint = new Label { Text = label };
+                hint.AddThemeFontSizeOverride("font_size", 12);
+                hint.AddThemeColorOverride("font_color",
+                    new Color(tint.R, tint.G, tint.B, soft ? 0.4f : 0.7f));
+                row.AddChild(hint);
+            }
+
+            _list.AddChild(row);
         }
     }
 }

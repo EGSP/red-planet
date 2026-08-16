@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="ConstructionSettings" format=3 uid="uid://dmwexragvlww6"]
+
+[ext_resource type="Script" uid="uid://kyvydt1e1v0y" path="res://scripts/draw/ConstructionSettings.cs" id="1_construction"]
+
+[resource]
+script = ExtResource("1_construction")
+WaveAmplitude = 0.004
+WaveFrequency = 2.1
+WaveSpeed = 9.6

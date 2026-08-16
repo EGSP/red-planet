@@ -1,0 +1,16 @@
+# Тестовая увеличенная копия завода ботов: габарит 6x6 вместо штатных 4x4.
+# Спрайт, как и у штатного завода, вписан в занятое место без выступа.
+
+id   = "bot_factory_6x6"
+base = "/buildings/bot_factory/bot_factory.toml"
+name = "Завод ботов 6×6"
+
+[footprint]
+rows = ["######", "######", "######", "######", "######", "######"]
+
+[body]
+sprite_scale = 1.0
+vision_range = 13
+
+[terror]
+expansion_power = 8.0

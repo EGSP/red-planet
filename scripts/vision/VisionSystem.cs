@@ -1,4 +1,5 @@
 using Godot;
+using System.Text.Json.Nodes;
 
 /// <summary>
 /// Сводит поля зрения стороны игрока в один растр и держит в согласии с ним отрисовку:
@@ -49,6 +50,20 @@ public partial class VisionSystem : GameSystem
         EnsureNodes();
         UpdateField(dt);
         ApplyVisibility();
+    }
+
+    public override void CaptureSnapshot(JsonObject data)
+    {
+        data["hidden"] = Hidden;
+        data["hide_enemies"] = Settings.HideEnemies;
+        data["every_frame"] = Settings.EveryFrame;
+        data["update_hz"] = Settings.UpdateHz;
+        data["cell_px"] = Field.Cell;
+        data["width"] = Field.Width;
+        data["area"] = Field.Area;
+        data["sources"] = Field.Sources;
+        data["revision"] = Field.Revision;
+        data["last_build_ms"] = Field.LastBuildMs;
     }
 
     private void EnsureNodes()

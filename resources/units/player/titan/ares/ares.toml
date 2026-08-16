@@ -12,7 +12,7 @@ rows = ["##", "##"]
 
 [body]
 max_health   = 50000.0
-radius       = 0.9
+radius = 2.5
 vision_range = 14.0
 hull         = "fortress"
 armor_rings  = 1
@@ -21,9 +21,6 @@ armor_rings  = 1
 speed      = 2.0
 turn_speed = 30.0
 brake      = 3.0
-
-[battle]
-approach_hold = 0.85
 
 [assembly]
 cost_metal   = 30000.0

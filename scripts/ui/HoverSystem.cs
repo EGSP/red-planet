@@ -141,7 +141,10 @@ public partial class HoverSystem : GameSystem
         {
             var command = GM.Command;
 
-            if (command != null && (command.Banding || command.Building))
+            // Рамка и постройка заняты той же точкой экрана. А вот при выборе цели
+            // наведение как раз нужно: игрок целится, и подсветка показывает, во что
+            if (command != null && command.State is CommandState.Banding
+                or CommandState.Placing or CommandState.Laying)
                 return true;
 
             return GetViewport()?.GuiGetHoveredControl() != null;

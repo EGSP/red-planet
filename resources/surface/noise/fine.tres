@@ -1,16 +1,10 @@
-[gd_resource type="Resource" script_class="NoiseSettings" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="NoiseSettings" format=3 uid="uid://b8d2soy38nk0n"]
 
-[ext_resource type="Script" path="res://scripts/world/surface/NoiseSettings.cs" id="1_noise"]
+[ext_resource type="Script" uid="uid://bucbf0nyr5cgj" path="res://scripts/world/surface/NoiseSettings.cs" id="1_noise"]
 
 [resource]
 script = ExtResource("1_noise")
-Kind = 0
 Frequency = 0.012
 Contrast = 1.5
 SeedOffset = 101
 Octaves = 1
-Lacunarity = 2.0
-Persistence = 0.5
-CellularDistance = 0
-CellularReturn = 1
-CellularJitter = 1.0

@@ -474,8 +474,7 @@ public partial class BuildingsPreview : Node2D
 
     private void Reload()
     {
-        _catalog = new Catalog();
-        _catalog.LoadAll();
+        _catalog = Content.Reload();
         Invalidate();
     }
 }

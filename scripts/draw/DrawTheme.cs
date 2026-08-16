@@ -20,6 +20,7 @@ public enum VizKind
     OrderAttack,
     OrderRepair,
     OrderFollow,
+    OrderPatrol,
     OrderDelete,
 
     WorkBeamBuild,
@@ -93,6 +94,10 @@ public static class DrawTheme
         VizKind.OrderMove => new(0.88f, 0.92f, 1.00f),
         VizKind.OrderRepair or VizKind.WorkBeamRepair => RepairHue,
         VizKind.OrderFollow => new(0.62f, 0.68f, 0.80f),
+
+        // Патруль — сторожевой обход: цвет между движением и боем, чтобы кольцо маршрута
+        // не путалось ни с обычным ходом, ни с атакой
+        VizKind.OrderPatrol => new(0.35f, 0.85f, 0.75f),
 
         VizKind.PlacementInvalid => AttackHue,
         VizKind.Footprint => new(0.55f, 0.68f, 1.00f),

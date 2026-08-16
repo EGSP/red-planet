@@ -39,6 +39,16 @@ public partial class GameManager : Node
     /// </summary>
     [Export] public NavSettings NavTuning;
 
+    /// <summary>
+    /// Настройки графики: затенение спрайтов и вид каркаса стройки. Действуют через
+    /// <see cref="GraphicsSettings.Active"/>, поскольку их спрашивает и тот код, которому
+    /// менеджер сессии не нужен, — отрисовка постройки и предпросмотр застройки в редакторе.
+    /// Незаполненное поле оставляет свод, загруженный по пути; так предпросмотр получает
+    /// те же настройки без проводки через сцену.
+    /// </summary>
+    [Export] public GraphicsSettings GraphicsTuning;
+
+
     /// <summary>Журнал документов — шина, через которую системы говорят друг с другом.</summary>
     public EventStore Events { get; } = new();
 
@@ -123,6 +133,11 @@ public partial class GameManager : Node
         if (NavTuning != null)
             NavGrid.Settings = NavTuning;
 
+        // Свод графики объявляем до сборки мира: постройка спрашивает затенение при первой
+        // же отрисовке, и подмена свода после этого потребовала бы пересборки запечённых слоёв
+        if (GraphicsTuning != null)
+            GraphicsSettings.Use(GraphicsTuning);
+
         // Площадка — сестринская ветка, и к этому мигу она уже собрана: дерево сцены
         // создаётся целиком до того, как хоть кто-то в нём получит _EnterTree
         Playground ??= GetNodeOrNull<Playground>("../Playground");
@@ -178,24 +193,56 @@ public partial class GameManager : Node
     {
         Nav?.Dispose();
 
-        if (I == this)
-            I = null;
+        if (I != this)
+            return;
+
+        I = null;
+
+        // Свод графики отпускаем той же сверкой: он объявлен этой сессией, и оставить его
+        // после её ухода значило бы держать настройки сцены, которой уже нет
+        if (GraphicsTuning != null && GraphicsSettings.Active == GraphicsTuning)
+            GraphicsSettings.Use(null);
     }
 
     public override void _PhysicsProcess(double dt)
     {
-        Scheduler.RunCycle(UpdateCycle.PhysicsProcess, dt);
+        FrameTraceMarks.BeginPhysics();
 
-        // Состав мира и транзиентные документы меняются только здесь, после физических
-        // систем: рождённое за шаг входит в разрезы разом, погибшее разом выметается.
-        // Графический цикл к симуляции не относится и частоту этого шага не повышает
-        Index.Sweep();
+        try
+        {
+            Scheduler.RunCycle(UpdateCycle.PhysicsProcess, dt);
 
-        Events.ClearTransient();
+            // Состав мира и транзиентные документы меняются только здесь, после физических
+            // систем: рождённое за шаг входит в разрезы разом, погибшее разом выметается.
+            // Графический цикл к симуляции не относится и частоту этого шага не повышает
+            Index.Sweep();
+
+            Events.ClearTransient();
+        }
+        finally
+        {
+            FrameTraceMarks.EndPhysics();
+        }
     }
 
-    public override void _Process(double dt) =>
-        Scheduler.RunCycle(UpdateCycle.Process, dt);
+    public override void _Process(double dt)
+    {
+        FrameTraceMarks.BeginProcess();
+
+        try
+        {
+            Scheduler.RunCycle(UpdateCycle.Process, dt);
+        }
+        finally
+        {
+            FrameTraceMarks.EndProcess();
+        }
+
+        // Снимок идёт после графических систем: состав мира уже согласован физическим
+        // кадром, а VisionSystem успела обновить видимость. Сам сбор отмечается отдельным
+        // отрезком EventPipe и потому не входит в метку Process.
+        PerformanceCapture.Tick(this);
+    }
 
     /// <summary>Ярлык к самой ходовой проекции — общему хранилищу базы.</summary>
     public StockpileProjection Stockpile => Projections.Get<StockpileProjection>();

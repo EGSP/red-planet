@@ -62,6 +62,13 @@ public partial class TerrorSettings : Resource
     // ── Производство ──────────────────────────────────────────────────────────────
 
     [ExportGroup("Производство")]
+
+    /// <summary>
+    /// Участвует ли слагаемое в сумме. Снятый признак обнуляет вклад, не трогая кривую
+    /// и вес: при настройке одно слагаемое выключается, а подобранные числа остаются.
+    /// </summary>
+    [Export] public bool ProductionEnabled = true;
+
     [Export] public Curve ProductionCurve;
 
     /// <summary>Величина входа, которая считается полной. На ней кривая доходит до конца.</summary>
@@ -76,6 +83,13 @@ public partial class TerrorSettings : Resource
     // ── Экспансия ─────────────────────────────────────────────────────────────────
 
     [ExportGroup("Экспансия")]
+
+    /// <summary>
+    /// Участвует ли слагаемое в сумме. Снятый признак обнуляет вклад, не трогая кривую
+    /// и вес: при настройке одно слагаемое выключается, а подобранные числа остаются.
+    /// </summary>
+    [Export] public bool ExpansionEnabled = true;
+
     [Export] public Curve ExpansionCurve;
     [Export] public float ExpansionReference = 150f;
     [Export] public float ExpansionWeight = 45f;
@@ -84,6 +98,13 @@ public partial class TerrorSettings : Resource
     // ── Армия ─────────────────────────────────────────────────────────────────────
 
     [ExportGroup("Армия")]
+
+    /// <summary>
+    /// Участвует ли слагаемое в сумме. Снятый признак обнуляет вклад, не трогая кривую
+    /// и вес: при настройке одно слагаемое выключается, а подобранные числа остаются.
+    /// </summary>
+    [Export] public bool ArmyEnabled = true;
+
     [Export] public Curve ArmyCurve;
     [Export] public float ArmyReference = 60f;
     [Export] public float ArmyWeight = 35f;
@@ -98,6 +119,13 @@ public partial class TerrorSettings : Resource
     // что игрок делает сам, иначе показатель перестанет отвечать на свой вопрос.
 
     [ExportGroup("Время")]
+
+    /// <summary>
+    /// Участвует ли слагаемое в сумме. Снятый признак обнуляет вклад, не трогая кривую
+    /// и вес: при настройке одно слагаемое выключается, а подобранные числа остаются.
+    /// </summary>
+    [Export] public bool TimeEnabled = true;
+
     [Export] public Curve TimeCurve;
 
     /// <summary>Длительность партии, которая считается полной, секунд. Пятнадцать минут.</summary>
@@ -118,16 +146,24 @@ public partial class TerrorSettings : Resource
     [Export] public float FallbackExponent = 0.6f;
 
     public float Production(float raw) =>
-        Shape(ProductionCurve, raw, ProductionReference, ProductionWeight, ProductionTail);
+        ProductionEnabled
+            ? Shape(ProductionCurve, raw, ProductionReference, ProductionWeight, ProductionTail)
+            : 0f;
 
     public float Expansion(float raw) =>
-        Shape(ExpansionCurve, raw, ExpansionReference, ExpansionWeight, ExpansionTail);
+        ExpansionEnabled
+            ? Shape(ExpansionCurve, raw, ExpansionReference, ExpansionWeight, ExpansionTail)
+            : 0f;
 
     public float Army(float raw) =>
-        Shape(ArmyCurve, raw, ArmyReference, ArmyWeight, ArmyTail);
+        ArmyEnabled
+            ? Shape(ArmyCurve, raw, ArmyReference, ArmyWeight, ArmyTail)
+            : 0f;
 
     public float Time(float raw) =>
-        Shape(TimeCurve, raw, TimeReference, TimeWeight, TimeTail);
+        TimeEnabled
+            ? Shape(TimeCurve, raw, TimeReference, TimeWeight, TimeTail)
+            : 0f;
 
     /// <summary>
     /// Сырая величина в очки террора: нормировать опорным значением, провести через кривую,

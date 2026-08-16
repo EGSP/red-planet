@@ -508,8 +508,7 @@ public partial class SessionPreview : Node2D
 
     private void Reload()
     {
-        _catalog = new Catalog();
-        _catalog.LoadAll();
+        _catalog = Content.Reload();
         QueueRedraw();
     }
 }
