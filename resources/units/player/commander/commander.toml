@@ -19,7 +19,6 @@ tools = ["commander_gun", "commander_arm"]
 [body]
 max_health   = 12500.0
 radius       = 0.38
-hull         = "crown"
 vision_range = 11.0
 
 [movement]

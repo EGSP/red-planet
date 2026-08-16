@@ -50,6 +50,12 @@ public sealed class ContentFieldSpec
     public bool RootOnly;
 
     /// <summary>
+    /// Маски файлов для выбора ресурса в поле типа <see cref="ContentFieldType.Path"/>,
+    /// вида <c>"*.tscn ; Scenes"</c>. Пусто — диалог показывает все файлы.
+    /// </summary>
+    public string[] PathFilters;
+
+    /// <summary>
     /// Пояснение к смыслу ключа. Показывается подсказкой у названия поля: соглашения
     /// вроде «-1 означает отсутствие границы» иначе приходится держать в памяти.
     /// </summary>
@@ -109,19 +115,23 @@ public static class ContentSchema
             Body("max_health", "Health", ContentFieldType.Float),
             Body("radius", "Radius", ContentFieldType.Float),
             Body("vision_range", "Vision", ContentFieldType.Float),
-            BodyEnum("hull", "Hull", typeof(HullShape)),
-            BodyEnum("hull_trim", "Hull trim", typeof(HullTrim)),
-            Body("hull_aspect", "Aspect", ContentFieldType.Float),
-            Body("sprite", "Sprite", ContentFieldType.Path),
-            Body("sprite_scale", "Sprite scale", ContentFieldType.Float),
-            Body("sprite_rotation", "Sprite rotation", ContentFieldType.Float),
-            Body("ao_inner", "Hull AO", ContentFieldType.Float),
-            Body("ao_outer", "Contact shadow", ContentFieldType.Float),
-            Body("armor_rings", "Armor rings", ContentFieldType.Int),
-            Body("front_plate", "Front plate", ContentFieldType.Bool),
+            Path("body", "model", "Model scene", SceneFilters),
 
             Section("movement", "speed", "Speed", ContentFieldType.Float),
-            Section("movement", "turn_speed", "Turn speed", ContentFieldType.Float),
+            Hint(Section("movement", "turn_speed", "Body turn speed", ContentFieldType.Float),
+                "Degrees per second the HULL rotates. The tools turn at their own rate — "
+                + "see aim_rate_degrees in the tool file. Together with speed it sets the "
+                + "turning radius: speed divided by turn_speed."),
+            Hint(Section("movement", "turn_free_angle", "Full speed up to",
+                    ContentFieldType.Float),
+                "Degrees. While the course differs from the hull axis by less than this, "
+                + "the unit keeps full speed — bends of the path cost nothing. "
+                + "Works as a pair with turn_stop_angle and must not exceed it."),
+            Hint(Section("movement", "turn_stop_angle", "Stop from", ContentFieldType.Float),
+                "Degrees. From this difference between course and hull axis the unit does "
+                + "not move at all and turns on the spot. Between the two angles the speed "
+                + "falls linearly. 180 disables stopping: such a unit can only change "
+                + "direction along an arc, like a ship."),
             Section("movement", "acceleration", "Acceleration", ContentFieldType.Float),
             Section("movement", "brake", "Brake", ContentFieldType.Float),
 
@@ -169,37 +179,87 @@ public static class ContentSchema
         return fields;
     }
 
-    private static List<ContentFieldSpec> BuildWeaponFields() =>
-    [
-        Root("id", "Id", ContentFieldType.RequiredString),
-        Root("name", "Name", ContentFieldType.String),
-        Root("kind", "Kind", ContentFieldType.String),
-        Root("range", "Range", ContentFieldType.Float),
-        Root("aim_while_moving", "Aim while moving", ContentFieldType.Bool),
-        Root("sprite", "Sprite", ContentFieldType.Path),
-        Root("sprite_rotation", "Sprite rotation", ContentFieldType.Float),
-        Root("damage", "Damage", ContentFieldType.Float),
-        Root("fire_interval", "Fire interval", ContentFieldType.Float),
-        Root("projectile_speed", "Projectile speed", ContentFieldType.Float),
-        Root("spread_degrees", "Spread", ContentFieldType.Float),
-        Root("aim_cone_degrees", "Aim cone", ContentFieldType.Float),
-        Root("projectile_radius", "Projectile radius", ContentFieldType.Float),
-        Root("projectile_color", "Projectile color", ContentFieldType.Color),
-    ];
+    private static List<ContentFieldSpec> BuildWeaponFields()
+    {
+        var fields = new List<ContentFieldSpec>
+        {
+            Root("id", "Id", ContentFieldType.RequiredString),
+            Root("name", "Name", ContentFieldType.String),
+            Root("kind", "Kind", ContentFieldType.String),
+            Root("range", "Range", ContentFieldType.Float),
+        };
 
-    private static List<ContentFieldSpec> BuildWorkToolFields() =>
+        fields.AddRange(AimFields());
+
+        fields.AddRange([
+            Root("damage", "Damage", ContentFieldType.Float),
+            Root("fire_interval", "Fire interval", ContentFieldType.Float),
+            Root("projectile_speed", "Projectile speed", ContentFieldType.Float),
+            Root("spread_degrees", "Spread", ContentFieldType.Float),
+            Hint(Root("fire_arc_degrees", "Fire arc", ContentFieldType.Float),
+                "Degrees to either side of the BARREL axis within which firing is allowed. "
+                + "Do not confuse with aim_arc_degrees: that one says where the barrel may "
+                + "turn and is measured from the hull, this one says how precisely it is "
+                + "already aimed and is measured from the barrel. Usually single digits."),
+            Root("projectile_radius", "Projectile radius", ContentFieldType.Float),
+            Root("projectile_color", "Projectile color", ContentFieldType.Color),
+        ]);
+
+        return fields;
+    }
+
+    private static List<ContentFieldSpec> BuildWorkToolFields()
+    {
+        var fields = new List<ContentFieldSpec>
+        {
+            Root("id", "Id", ContentFieldType.RequiredString),
+            Root("name", "Name", ContentFieldType.String),
+            Root("kind", "Kind", ContentFieldType.String),
+            Root("range", "Range", ContentFieldType.Float),
+        };
+
+        fields.AddRange(AimFields());
+
+        fields.AddRange([
+            Root("power", "Power", ContentFieldType.Float),
+            Root("energy_per_power", "Energy per power", ContentFieldType.Float),
+            Root("works", "Works", ContentFieldType.StringList),
+            Root("repairs_units", "Repairs units", ContentFieldType.Bool),
+        ]);
+
+        return fields;
+    }
+
+    /// <summary>
+    /// Ключи поворота, общие для ствола и рабочей руки: инструмент любого рода сидит
+    /// на поворотной опоре и описывается одними и теми же числами. Список строится заново
+    /// на каждый вызов — описания полей принадлежат своей форме и общими быть не должны.
+    /// </summary>
+    private static List<ContentFieldSpec> AimFields() =>
     [
-        Root("id", "Id", ContentFieldType.RequiredString),
-        Root("name", "Name", ContentFieldType.String),
-        Root("kind", "Kind", ContentFieldType.String),
-        Root("range", "Range", ContentFieldType.Float),
-        Root("aim_while_moving", "Aim while moving", ContentFieldType.Bool),
-        Root("sprite", "Sprite", ContentFieldType.Path),
-        Root("sprite_rotation", "Sprite rotation", ContentFieldType.Float),
-        Root("power", "Power", ContentFieldType.Float),
-        Root("energy_per_power", "Energy per power", ContentFieldType.Float),
-        Root("works", "Works", ContentFieldType.StringList),
-        Root("repairs_units", "Repairs units", ContentFieldType.Bool),
+        Hint(Root("aim_arc_degrees", "Aim arc", ContentFieldType.Float),
+            "Degrees to either side of the HULL axis the tool may turn. 180 is a full "
+            + "circle with no limit; 0 is a rigidly mounted tool that can only be aimed by "
+            + "turning the carrier. Governs body_assist: with a full circle the hull is "
+            + "never asked to turn, with 0 it is always asked."),
+        Hint(Root("aim_rate_degrees", "Aim rate", ContentFieldType.Float),
+            "Degrees per second the tool turns. Independent of the carrier's turn_speed: "
+            + "a turret is usually nimbler than the chassis. Meaningless when "
+            + "aim_arc_degrees is 0 — there is nothing to turn."),
+        Hint(Root("aim_idle_delay", "Idle delay", ContentFieldType.Float),
+            "Seconds the tool holds its last angle after the target is gone, before "
+            + "returning to the hull axis. Guards against jitter when a rapid-fire weapon "
+            + "switches targets. 0 returns immediately."),
+        Hint(RootEnum("body_assist", "Body assist", typeof(BodyAssist)),
+            "Whether the tool asks the hull to turn when the target is outside its "
+            + "aim_arc_degrees. Never — a build arm with a full circle, so the hull stays "
+            + "free for the gun. WhenBlocked — the default. Always — a rigidly mounted "
+            + "weapon, which has no reserve of its own."),
+        Hint(Root("aim_priority", "Aim priority", ContentFieldType.Int),
+            "Whose demand for a hull turn wins when several tools cannot be satisfied at "
+            + "once. Higher wins; equal is decided by order in the unit's tools list. "
+            + "A fallback only: first the carrier looks for a hull angle that puts the "
+            + "target inside every tool's arc at once."),
     ];
 
     private static List<ContentFieldSpec> BuildWaveFields() =>
@@ -260,8 +320,20 @@ public static class ContentSchema
     private static ContentFieldSpec Body(string key, string label, ContentFieldType type) =>
         Section("body", key, label, type);
 
-    private static ContentFieldSpec BodyEnum(string key, string label, Type enumType) =>
-        SectionEnum("body", key, label, enumType);
+    /// <summary>Поле пути с масками для диалога выбора ресурса.</summary>
+    private static ContentFieldSpec Path(
+        string section, string key, string label, params string[] filters)
+    {
+        var spec = section == null
+            ? Root(key, label, ContentFieldType.Path)
+            : Section(section, key, label, ContentFieldType.Path);
+
+        spec.PathFilters = filters;
+        return spec;
+    }
+
+    /// <summary>Маска сцены модели.</summary>
+    private static readonly string[] SceneFilters = { "*.tscn ; Сцены" };
 
     private static ContentFieldSpec Section(
         string section, string key, string label, ContentFieldType type,

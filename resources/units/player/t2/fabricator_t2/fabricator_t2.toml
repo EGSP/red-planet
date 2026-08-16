@@ -19,8 +19,6 @@ rows = ["#"]
 max_health   = 150.0
 radius       = 0.42
 vision_range = 10.0
-hull         = "hex"
-hull_trim    = "shoulders"
 
 [movement]
 speed      = 3.0

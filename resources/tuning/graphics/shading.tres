@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ShadingSettings" format=3]
+
+[ext_resource type="Script" path="res://scripts/draw/ShadingSettings.cs" id="1_shading"]
+
+[resource]
+script = ExtResource("1_shading")
+ContactOpacity = 0.6
+ContactOffset = 0.0
+RimOpacity = 0.2
+RimBlur = 0.045

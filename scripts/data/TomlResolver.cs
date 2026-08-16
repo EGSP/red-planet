@@ -234,7 +234,7 @@ public static class TomlResolver
         if (value is not string text || !TryCanonicalPath(text, out string filePath, out string prop))
             return 0;
 
-        // Обычные строки справочника (hull = "circle", buildbar = "...") путём не являются
+        // Обычные строки справочника (class = "bot", buildbar = "...") путём не являются
         if (!LooksLikePath(text))
             return 0;
 

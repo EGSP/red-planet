@@ -634,14 +634,19 @@ public partial class Plant : Building, IProducer
         base.OnDestroyed();
     }
 
-    public override void _Draw()
+    /// <summary>
+    /// Пометки завода поверх корпуса: стрелки выездов и полоса готовности слота.
+    /// Обе принадлежат тому же слою, что и полоса прочности, иначе модель корпуса
+    /// закрыла бы их собой — см. <see cref="ModelLayer"/>.
+    /// </summary>
+    protected override void PaintMarks(CanvasItem canvas)
     {
-        base._Draw();
+        base.PaintMarks(canvas);
 
         if (Definition == null)
             return;
 
-        DrawExits();
+        DrawExits(canvas);
 
         var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         float ratio = ProgressRatio;
@@ -649,7 +654,7 @@ public partial class Plant : Building, IProducer
         if (ratio > 0.01f)
         {
             var bar = new Rect2(-size.X * 0.4f, size.Y * 0.35f, size.X * 0.8f * ratio, 4f);
-            ShapeDraw.Rect(this, bar, ShapeStyle.Solid(new Color(0.35f, 0.9f, 0.45f)));
+            ShapeDraw.Rect(canvas, bar, ShapeStyle.Solid(new Color(0.35f, 0.9f, 0.45f)));
         }
     }
 
@@ -661,7 +666,7 @@ public partial class Plant : Building, IProducer
     /// «закрыто» приходится принимать на веру, а спорить с ним нечем: стрелка говорит
     /// о направлении, но молчит о том, какой прямоугольник и во что упёрся.
     /// </summary>
-    private void DrawExits()
+    private void DrawExits(CanvasItem canvas)
     {
         float probeRadius = ProbeRadius;
         float extra = probeRadius + Const.Unit * 0.25f;
@@ -693,13 +698,13 @@ public partial class Plant : Building, IProducer
                 : ShapeStyle.Filled(new Color(0.5f, 0.45f, 0.35f, 0.5f),
                     new Color(0f, 0f, 0f, 0.3f), 1.2f, WidthMode.Screen);
 
-            ShapeDraw.Arrow(this, from, to, line, headLength: Const.Unit * 0.35f);
+            ShapeDraw.Arrow(canvas, from, to, line, headLength: Const.Unit * 0.35f);
 
             float mark = primary ? Const.Unit * 0.18f : Const.Unit * 0.12f;
-            ShapeDraw.Circle(this, to, mark, head, 10);
+            ShapeDraw.Circle(canvas, to, mark, head, 10);
 
             if (selected)
-                DrawProbes(worldTip, probeRadius);
+                DrawProbes(canvas, worldTip, probeRadius);
         }
     }
 
@@ -708,17 +713,17 @@ public partial class Plant : Building, IProducer
     /// так сразу видно, которая из них закрыла выход и какой постройкой. Области проверки
     /// продолжения нет, когда rolloff_clearance равен нулю, — рисовать тогда нечего.
     /// </summary>
-    private void DrawProbes(Vector2 worldTip, float radius)
+    private void DrawProbes(CanvasItem canvas, Vector2 worldTip, float radius)
     {
         var (body, step) = ExitProbes(worldTip, radius);
 
-        DrawProbe(body);
+        DrawProbe(canvas, body);
 
         if (step is { } ahead)
-            DrawProbe(ahead);
+            DrawProbe(canvas, ahead);
     }
 
-    private void DrawProbe(in Obb probe)
+    private void DrawProbe(CanvasItem canvas, in Obb probe)
     {
         var obstacles = GameManager.I?.Obstacles;
         bool free = obstacles == null || !obstacles.Overlaps(probe, except: this);
@@ -727,6 +732,6 @@ public partial class Plant : Building, IProducer
             ? ShapeStyle.Outline(new Color(0.4f, 0.9f, 0.5f, 0.5f), 1.5f, WidthMode.Screen)
             : ShapeStyle.Outline(new Color(0.95f, 0.35f, 0.3f, 0.85f), 2f, WidthMode.Screen);
 
-        ShapeDraw.Obb(this, probe, style);
+        ShapeDraw.Obb(canvas, probe, style);
     }
 }

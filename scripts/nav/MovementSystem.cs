@@ -15,6 +15,13 @@ using Godot;
 /// стоящего — это и есть проталкивание сквозь союзников. Физического движка в проекте
 /// нет, поэтому оба ограничения написаны здесь руками.
 ///
+/// КУДА СУЩНОСТЬ ЕДЕТ. Не туда, куда её просят, а туда, куда повёрнут корпус: рулевой
+/// вектор задаёт лишь угол, к которому корпус доворачивается со своей скоростью, а скорость
+/// хода направлена по оси корпуса и урезана оставшимся расхождением
+/// (<see cref="UnitDefinition.SpeedFactorFor"/>). Отсюда берутся дуга на повороте и разворот
+/// на месте перед движением назад; отсюда же следует, что скорость вращения корпуса —
+/// величина игровая, а не украшение.
+///
 /// ПЕРВЫЙ СЛОЙ ОТКЛЮЧАЕМ. Намерение бывает двух видов: строгое идёт по найденному пути,
 /// свободное (<see cref="Movement.Fluid"/>) — прямо на цель, оставляя всё расхождение
 /// локальному слою. Второй и третий слои от этого не меняются, поэтому различие сводится
@@ -195,10 +202,41 @@ public partial class MovementSystem : GameSystem
         var steer = seek * movement.SeekScale + avoid * AvoidWeight + align * AlignWeight;
 
         var desired = steer.LengthSquared() > 0.000001f
-            ? steer.Normalized() * Approach(definition, remaining)
+            ? Drive(mobile, definition, steer, Approach(definition, remaining), dt)
             : Vector2.Zero;
 
         Accelerate(movement, definition, desired, dt);
+    }
+
+    /// <summary>
+    /// Перевести рулевой вектор в скорость с учётом того, что сущность едет ТУДА, КУДА
+    /// ПОВЁРНУТА, а не туда, куда её просят.
+    ///
+    /// ЗАЧЕМ НЕГОЛОНОМНАЯ МОДЕЛЬ. Прежде направление скорости бралось прямо из рулевого
+    /// вектора, а поворот корпуса лишь догонял её для вида; из этого следовало, что юнит
+    /// с медленным разворотом при резкой смене приказа мгновенно ехал боком. Здесь скорость
+    /// направлена строго по оси корпуса, поэтому смена курса выходит дугой, а разворот назад
+    /// требует сперва развернуться, — и радиус дуги задан не подобранным числом,
+    /// а отношением скорости к скорости вращения.
+    ///
+    /// ДВА ДЕЙСТВИЯ, И ПОРЯДОК МЕЖДУ НИМИ ЗНАЧИМ. Сперва корпус доворачивается к рулевому
+    /// вектору, потом от ОСТАВШЕГОСЯ расхождения считается доля хода: иначе сущность
+    /// тормозила бы из-за расхождения, которое в этом же кадре уже устранила.
+    /// </summary>
+    private static Vector2 Drive(IMobile mobile, UnitDefinition definition, Vector2 steer,
+        float speed, double dt)
+    {
+        float wanted = steer.Angle();
+
+        mobile.Rotation = Heading.TurnToward(mobile.Rotation, wanted,
+            definition.TurnSpeed * (float)dt);
+
+        float error = Mathf.Abs(Heading.Delta(mobile.Rotation, wanted));
+        float factor = definition.SpeedFactorFor(error);
+
+        return factor <= 0f
+            ? Vector2.Zero
+            : Heading.Forward(mobile.Rotation) * (speed * factor);
     }
 
     /// <summary>
@@ -232,9 +270,17 @@ public partial class MovementSystem : GameSystem
             return;
         }
 
-        var desired = delta / remaining * definition.SpeedPx;
-        Accelerate(movement, definition, desired, dt);
-        movement.SeekForce = delta / remaining;
+        var direction = delta / remaining;
+
+        // Выезд остаётся ПРЯМЫМ отрезком, а не дугой: неголономная модель заставила бы
+        // юнита, выпущенного носом в стену, наматывать круги внутри корпуса завода, тогда
+        // как весь смысл послабления — вывести его наружу кратчайшим путём. Корпус при этом
+        // всё же доворачивается к направлению выезда, иначе он выезжал бы боком
+        mobile.Rotation = Heading.TurnToward(mobile.Rotation, direction.Angle(),
+            definition.TurnSpeed * (float)dt);
+
+        Accelerate(movement, definition, direction * definition.SpeedPx, dt);
+        movement.SeekForce = direction;
     }
 
     /// <summary>
@@ -514,10 +560,9 @@ public partial class MovementSystem : GameSystem
         var before = mobile.GlobalPosition;
         mobile.GlobalPosition = before + movement.Velocity * (float)dt;
 
-        // Корпус смотрит туда, куда сущность едет, а не туда, куда её послали: на обходе
-        // это разные направления, и разворот к цели выглядел бы боком вперёд
-        Turn(mobile, movement.Velocity, dt);
-
+        // Поворота корпуса здесь нет намеренно: он назначается в Drive, ДО того как
+        // из него выведена скорость. Доворачивать корпус по уже посчитанной скорости
+        // значило бы замкнуть круг — скорость выводится из угла, а угол из скорости
         float expected = movement.Velocity.Length() * (float)dt;
         float actual = before.DistanceTo(mobile.GlobalPosition);
 
@@ -525,13 +570,6 @@ public partial class MovementSystem : GameSystem
             Stall(mobile, movement, dt);
         else
             movement.StuckFor = 0f;
-    }
-
-    private static void Turn(IMobile mobile, Vector2 direction, double dt)
-    {
-        float desired = direction.Angle();
-        float step = mobile.Definition.TurnSpeed * (float)dt;
-        mobile.Rotation = Heading.TurnToward(mobile.Rotation, desired, step);
     }
 
     /// <summary>

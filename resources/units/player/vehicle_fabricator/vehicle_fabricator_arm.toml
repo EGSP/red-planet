@@ -3,8 +3,6 @@
 id   = "vehicle_fabricator_arm"
 name = "Строительная рука машины"
 kind = "work"
-sprite          = "res://assets/sprites/units/unit_vehicle-fabricator_tool.png"
-sprite_rotation = 90.0
 
 range            = 2.0
 power            = 11.0

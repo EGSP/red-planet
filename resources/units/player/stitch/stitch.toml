@@ -13,7 +13,6 @@ rows = ["#"]
 [body]
 max_health = 50.0
 radius     = 0.3
-hull       = "sickle"
 
 [movement]
 speed      = 2.4

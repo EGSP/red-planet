@@ -345,70 +345,8 @@ public partial class SessionPreview : Node2D
                 var (position, _) = WaveFormation.Slot(wave.Shape, angle, index++);
                 var definition = wave.Ordered[i];
 
-                DrawUnitSilhouette(position, definition);
+                UnitVisual.Draw(this, definition, definition.RadiusPx, position);
             }
-        }
-    }
-
-    private void DrawUnitSilhouette(Vector2 position, UnitDefinition definition)
-    {
-        float radius = definition.RadiusPx;
-        var style = ShapeStyle.Solid(definition.Color);
-
-        switch (definition.Hull)
-        {
-            case HullShape.Rect:
-            {
-                float aspect = Mathf.Max(definition.HullAspect, 0.5f);
-                float length = radius * 2f * Mathf.Sqrt(aspect);
-                float width = radius * 2f / Mathf.Sqrt(aspect);
-                ShapeDraw.Rect(this, new Rect2(position.X - length * 0.5f,
-                    position.Y - width * 0.5f, length, width), style);
-                break;
-            }
-
-            case HullShape.Hex:
-            {
-                var points = new Vector2[6];
-                for (int i = 0; i < 6; i++)
-                {
-                    float a = Mathf.Tau * i / 6f;
-                    points[i] = position + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius;
-                }
-
-                ShapeDraw.Polygon(this, points, style);
-                break;
-            }
-
-            default:
-                ShapeDraw.Circle(this, position, radius, style);
-                break;
-        }
-
-        DrawTrimSilhouette(position, definition, radius);
-    }
-
-    /// <summary>
-    /// Надстройка тира поверх силуэта. В предпросмотре она нужна затем же, зачем в игре:
-    /// состав волны читается по тиру, а не только по числу машин.
-    /// </summary>
-    private void DrawTrimSilhouette(Vector2 position, UnitDefinition definition, float radius)
-    {
-        var parts = HullGeometry.Trim(definition.HullTrim, radius);
-
-        if (parts.Length == 0)
-            return;
-
-        var style = ShapeStyle.Solid(definition.Color.Lightened(0.2f));
-
-        foreach (var part in parts)
-        {
-            var moved = new Vector2[part.Length];
-
-            for (int i = 0; i < part.Length; i++)
-                moved[i] = position + part[i];
-
-            ShapeDraw.Polygon(this, moved, style);
         }
     }
 

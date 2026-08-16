@@ -33,8 +33,6 @@ public partial class Assembler : Building, IWorker
 
     public bool Working => Alive.Is(_attached) || Alive.Is(_repairTarget);
 
-    public override void _Process(double delta) => QueueRedraw();
-
     /// <summary>Башня стоит на месте, поэтому её якорь внимания — она сама.</summary>
     public Vector2 Anchor => GlobalPosition;
 
@@ -172,9 +170,13 @@ public partial class Assembler : Building, IWorker
 
     public override void _ExitTree() => Detach();
 
-    public override void _Draw()
+    /// <summary>
+    /// Луч работы и манипулятор башни. Рисуются вместе с полосой прочности поверх корпуса,
+    /// иначе модель закрыла бы их собой — см. <see cref="ModelLayer"/>.
+    /// </summary>
+    protected override void PaintMarks(CanvasItem canvas)
     {
-        base._Draw();
+        base.PaintMarks(canvas);
 
         if (Definition == null)
             return;
@@ -185,7 +187,7 @@ public partial class Assembler : Building, IWorker
         var target = Alive.Is(_attached) ? (Node2D)_attached : _repairTarget;
 
         if (Alive.Is(target))
-            ShapeDraw.Line(this, Vector2.Zero, ToLocal(target.GlobalPosition),
+            ShapeDraw.Line(canvas, Vector2.Zero, ToLocal(target.GlobalPosition),
                 DrawTheme.Line(VizKind.WorkBeamRepair));
 
         // Манипулятор: три коротких луча из центра — знак того, что башня рабочая
@@ -197,9 +199,9 @@ public partial class Assembler : Building, IWorker
         for (int i = 0; i < 3; i++)
         {
             float angle = Mathf.Tau * i / 3f - Mathf.Pi * 0.5f;
-            ShapeDraw.Line(this, Vector2.Zero, Heading.Forward(angle) * half * 0.7f, armLine);
+            ShapeDraw.Line(canvas, Vector2.Zero, Heading.Forward(angle) * half * 0.7f, armLine);
         }
 
-        ShapeDraw.Circle(this, Vector2.Zero, half * 0.22f, ShapeStyle.Solid(arm));
+        ShapeDraw.Circle(canvas, Vector2.Zero, half * 0.22f, ShapeStyle.Solid(arm));
     }
 }

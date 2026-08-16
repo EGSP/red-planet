@@ -1,0 +1,32 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/models/UnitModel.cs" id="1_model"]
+[ext_resource type="Texture2D" path="res://resources/buildings/generator/generator_body.png" id="2_body"]
+[ext_resource type="Shader" path="res://resources/shaders/team_color.gdshader" id="3_team"]
+[ext_resource type="Script" path="res://scripts/models/ModelShade.cs" id="4_shade"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
+shader = ExtResource("3_team")
+shader_parameter/team_color = Color(1, 1, 1, 1)
+shader_parameter/strength = 0.0
+shader_parameter/lift = 0.0
+
+[node name="GeneratorModel" type="Node2D" node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Contact" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+script = ExtResource("4_shade")
+Source = NodePath("../Body")
+Kind = 1
+
+[node name="Body" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_body")
+texture_filter = 1
+scale = Vector2(0.65, 0.65)
+texture = ExtResource("2_body")
+
+[node name="Rim" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+script = ExtResource("4_shade")
+Source = NodePath("../Body")
+Kind = 2

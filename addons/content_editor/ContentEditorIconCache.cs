@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Кэш иконок каталога и таблицы баланса. Силуэт тот же, что у <see cref="UnitIcon"/>:
-/// <see cref="UnitSilhouette"/> вписывается в квадрат. Текстура печётся через
-/// однокадровый SubViewport, чтобы Tree и ItemList могли поставить SetIcon.
+/// Кэш иконок каталога и таблицы баланса. Изображение то же, что у <see cref="UnitIcon"/>:
+/// экземпляр сцены модели, вписанный в квадрат. Текстура печётся через однокадровый
+/// SubViewport, чтобы Tree и ItemList могли поставить SetIcon.
 /// </summary>
 [Tool]
 public partial class ContentEditorIconCache : Control
@@ -41,19 +41,16 @@ public partial class ContentEditorIconCache : Control
         return _baked[def.Id];
     }
 
-    public Texture2D GetSprite(string path)
+    /// <summary>
+    /// Забыть все запечённые иконки. Нужно после правки сцены модели: определение при этом
+    /// не менялось, и по идентификатору кэш отдал бы прежнее изображение.
+    /// </summary>
+    public void Clear()
     {
-        if (string.IsNullOrEmpty(path))
-            return null;
-
-        string key = "sprite:" + path;
-        if (_baked.TryGetValue(key, out var texture))
-            return texture;
-
-        var loaded = ResourceLoader.Load<Texture2D>(path);
-        if (loaded != null)
-            _baked[key] = loaded;
-        return loaded;
+        _baked.Clear();
+        _queue.Clear();
+        _queued.Clear();
+        _capturingId = null;
     }
 
     public override void _Ready()
@@ -90,7 +87,11 @@ public partial class ContentEditorIconCache : Control
         _icon.QueueRedraw();
         _viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         _capturingId = def.Id;
-        _captureWait = 1;
+
+        // Двух кадров ждём затем, что экземпляр сцены модели входит в дерево не мгновенно:
+        // на первом кадре узлы получают _Ready, и слой затенения только собирает своё
+        // изображение. Снимок, взятый кадром раньше, вышел бы без теней
+        _captureWait = 2;
     }
 
     private void Enqueue(UnitDefinition def)

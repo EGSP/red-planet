@@ -13,8 +13,7 @@ rows = ["#"]
 [body]
 max_health  = 250.0
 radius      = 0.38
-hull        = "rect"
-hull_aspect = 1.5
+model = "res://resources/units/player/ant/ant.tscn"
 
 [movement]
 speed      = 2.0

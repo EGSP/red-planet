@@ -95,7 +95,7 @@ public sealed class ContentGraphBuilder
                 AddBase(nodeKey, sectionBase, $"section [{pair.Key}]", graph, visited);
         }
 
-        AddVarsReferences(nodeKey, null, table, graph);
+        AddValueReferences(nodeKey, null, table, graph);
     }
 
     private void AddBase(
@@ -114,10 +114,17 @@ public sealed class ContentGraphBuilder
     }
 
     /// <summary>
-    /// Ссылки на файлы переменных ищутся во всех значениях, включая вложенные секции:
-    /// ключ вида <c>max_health = "res://…/hull.vars.toml:heavy"</c> может стоять где угодно.
+    /// Ссылки из значений ищутся во всех ключах, включая вложенные секции: и ссылка на файл
+    /// переменных вида <c>max_health = "res://…/hull.vars.toml:heavy"</c>, и ссылка на ресурс
+    /// движка вида <c>model = "res://…/dox.tscn"</c> может стоять где угодно.
+    ///
+    /// РЕСУРСЫ ПОКАЗЫВАЮТСЯ НАРАВНЕ С ФАЙЛАМИ СОДЕРЖИМОГО. Граф отвечает на вопрос, из чего
+    /// собрана сущность, и спрайт с моделью входят в ответ не меньше, чем предок по
+    /// <c>base</c>: без них по графу не видно, чем сущность вообще нарисована. Отсюда же
+    /// следует, что отсутствующий файл ресурса узел не отменяет, а помечает, — иначе опечатка
+    /// в пути выглядела бы как отсутствие ссылки.
     /// </summary>
-    private void AddVarsReferences(
+    private void AddValueReferences(
         string from, string section, TomlTable table, ContentGraphData graph)
     {
         foreach (var pair in table)
@@ -127,23 +134,49 @@ public sealed class ContentGraphBuilder
                 string nestedSection = string.IsNullOrEmpty(section)
                     ? pair.Key
                     : $"{section}.{pair.Key}";
-                AddVarsReferences(from, nestedSection, nested, graph);
+                AddValueReferences(from, nestedSection, nested, graph);
                 continue;
             }
 
-            if (pair.Value is not string value
-                || !TomlResolver.TryCanonicalPath(value, out string target, out string property)
-                || !TomlResolver.IsVars(target)
-                || !_texts.ContainsKey(target))
-            {
+            if (pair.Value is not string value)
                 continue;
-            }
 
-            AddNodeForPath(graph, target);
             string field = string.IsNullOrEmpty(section) ? pair.Key : $"{section}.{pair.Key}";
-            AddEdge(graph, from, target,
-                string.IsNullOrEmpty(property) ? field : $"{field} → {property}");
+
+            if (TomlResolver.TryCanonicalPath(value, out string target, out string property)
+                && TomlResolver.IsVars(target)
+                && _texts.ContainsKey(target))
+            {
+                AddNodeForPath(graph, target);
+                AddEdge(graph, from, target,
+                    string.IsNullOrEmpty(property) ? field : $"{field} → {property}");
+                continue;
+            }
+
+            AddAssetReference(from, field, value, graph);
         }
+    }
+
+    /// <summary>
+    /// Ресурс движка, на который ссылается ключ: спрайт, сцена модели, шейдер. Признаком
+    /// служит приставка <c>res://</c>; файлы содержимого исключены, поскольку они уже разобраны
+    /// выше как предки и переменные.
+    /// </summary>
+    private void AddAssetReference(
+        string from, string field, string value, ContentGraphData graph)
+    {
+        if (!value.StartsWith("res://", StringComparison.Ordinal)
+            || value.EndsWith(".toml", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        bool exists = Godot.FileAccess.FileExists(value);
+        string extension = System.IO.Path.GetExtension(value).TrimStart('.');
+
+        AddNode(graph, value, exists ? extension : "нет файла", null,
+            ContentGraphNodeKind.Asset);
+        AddEdge(graph, from, value, field);
     }
 
     private void AddNodeForPath(ContentGraphData graph, string path)

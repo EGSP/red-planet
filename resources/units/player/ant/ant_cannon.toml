@@ -2,7 +2,7 @@
 
 id   = "ant_cannon"
 base = "/tools/base_weapon.toml"
-name = "Пушка Анта"
+name = "ant_cannon"
 
 range             = 6.7
 damage            = 84.0
@@ -11,3 +11,4 @@ projectile_speed  = 10.0
 spread_degrees    = 2.0
 projectile_radius = 0.08
 projectile_color  = [0.68, 0.83, 1]
+aim_arc_degrees = 125

@@ -1,12 +1,16 @@
 using Godot;
 
 /// <summary>
-/// Отрисовка корпуса постройки без игровой сессии.
+/// Отрисовка постройки без игровой сессии.
 ///
-/// ПОРЯДОК СЛОЁВ совпадает с Building._Draw: площадка, контактная тень, спрайт или
-/// процедурный прямоугольник, кайма. Вынесено из Building, чтобы редактор контента
-/// и игра не держали две копии одной последовательности. HealthBar и UnitGizmos
-/// сюда не входят — в редакторе прочности нет, а круги дальности рисует Preview сам.
+/// ПОРЯДОК СЛОЁВ совпадает с Building._Draw: границы места, площадка, запасной
+/// прямоугольник. Вынесено из Building, чтобы редактор контента и игра не держали две копии
+/// одной последовательности. HealthBar и UnitGizmos сюда не входят — в редакторе прочности
+/// нет, а круги дальности рисует Preview сам.
+///
+/// Корпус здесь не рисуется вовсе: изображением распоряжается сцена модели, добавленная
+/// отдельным узлом. Прямоугольник остаётся запасным видом для тех определений, у которых
+/// модели ещё нет.
 /// </summary>
 public static class BuildingVisual
 {
@@ -43,24 +47,24 @@ public static class BuildingVisual
 
         BuildingSkirt.Draw(canvas, rect);
 
-        if (!string.IsNullOrEmpty(def.Sprite))
+        // Корпус со сценой модели рисует не этот код, а сам экземпляр сцены: он
+        // добавлен отдельным узлом и лежит поверх площадки. Здесь остаются только
+        // границы места — они принадлежат постройке, а не её изображению
+        if (def.HasModel)
         {
-            SpriteOcclusion.DrawContact(canvas, def, rect, bodyFacing, origin);
-            SpriteArt.DrawHull(canvas, def, rect, baseRadians: bodyFacing, baseOrigin: origin);
-            SpriteOcclusion.DrawRim(canvas, def, rect, bodyFacing, origin);
+            canvas.DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+            return;
         }
-        else
-        {
-            var color = def.Color;
-            color.A *= alpha;
-            ShapeDraw.Rect(canvas, rect,
-                ShapeStyle.Filled(color, new Color(0f, 0f, 0f, 0.35f * alpha), 2f,
-                    WidthMode.Screen));
 
-            float span = Mathf.Min(size.X, size.Y);
-            ShapeDraw.Line(canvas, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
-                ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f * alpha), 3f, WidthMode.Screen));
-        }
+        var color = def.Color;
+        color.A *= alpha;
+        ShapeDraw.Rect(canvas, rect,
+            ShapeStyle.Filled(color, new Color(0f, 0f, 0f, 0.35f * alpha), 2f,
+                WidthMode.Screen));
+
+        float span = Mathf.Min(size.X, size.Y);
+        ShapeDraw.Line(canvas, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
+            ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f * alpha), 3f, WidthMode.Screen));
 
         canvas.DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
     }

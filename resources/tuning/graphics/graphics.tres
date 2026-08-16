@@ -1,10 +1,10 @@
 [gd_resource type="Resource" script_class="GraphicsSettings" format=3 uid="uid://dut65crdd0675"]
 
 [ext_resource type="Script" uid="uid://bmvn8jctk5cfy" path="res://scripts/draw/GraphicsSettings.cs" id="1_graphics"]
-[ext_resource type="Resource" uid="uid://2kafaguoabxl" path="res://resources/tuning/graphics/occlusion.tres" id="2_occlusion"]
+[ext_resource type="Resource" path="res://resources/tuning/graphics/shading.tres" id="2_shading"]
 [ext_resource type="Resource" uid="uid://dmwexragvlww6" path="res://resources/tuning/graphics/construction.tres" id="3_construction"]
 
 [resource]
 script = ExtResource("1_graphics")
-Occlusion = ExtResource("2_occlusion")
+Shading = ExtResource("2_shading")
 Construction = ExtResource("3_construction")

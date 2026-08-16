@@ -588,6 +588,11 @@ public partial class ContentEditorMain : Control
         if (!EnsureOperational())
             return;
 
+        // Ресурсы движка перечитываются безусловно: Store следит только за .toml, и правка
+        // сцены модели или текстуры не даёт никакого отчёта, хотя изображение уже другое
+        foreach (var mode in _modes)
+            mode.ReloadResources();
+
         var report = _store.CheckExternalChanges();
         if (!report.Any)
             return;

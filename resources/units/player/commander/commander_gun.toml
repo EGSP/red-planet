@@ -9,6 +9,6 @@ damage            = 80.0
 fire_interval     = 0.5
 projectile_speed  = 8.3
 spread_degrees    = 3.0
-aim_cone_degrees  = 10.0
+fire_arc_degrees  = 10.0
 projectile_radius = 0.09
 projectile_color  = [0.76, 0.9, 1]

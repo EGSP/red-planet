@@ -38,6 +38,17 @@ public partial class ContentEditorPreview : Control
     private bool _showVision;
     private bool _showAttack;
     private bool _showWork;
+    private bool _showAxis = true;
+
+    /// <summary>
+    /// Секторы наведения инструментов. Отдельным переключателем от «Attack» и «Work»:
+    /// те показывают дальность, а этот — куда инструмент способен повернуться, и смотрят
+    /// на них в разное время.
+    /// </summary>
+    private bool _showAim;
+
+    /// <summary>Слой осей поверх экземпляров моделей — см. <see cref="PaintAxes"/>.</summary>
+    private ModelLayer _axes;
 
     private PanelContainer _toolbarPanel;
     private HFlowContainer _toolbar;
@@ -58,6 +69,17 @@ public partial class ContentEditorPreview : Control
     /// Обновить изображение после изменения Store. Первый открытый объект и изменение
     /// числа вкладок автоматически вписываются, но правка поля не меняет камеру.
     /// </summary>
+    /// <summary>
+    /// Экземпляры сцен изображения по идентификатору вкладки. Поле рисуется в <c>_Draw</c>,
+    /// а модель — самостоятельный узел, поэтому её нельзя нарисовать в общем ряду команд:
+    /// она добавляется потомком поля и получает положение и масштаб перед отрисовкой.
+    ///
+    /// СОСТАВ ПЕРЕСМАТРИВАЕТСЯ НЕ В <c>_Draw</c>. Добавление и освобождение узлов посреди
+    /// отрисовки родителя Godot не допускает, поэтому состав правится в
+    /// <see cref="SyncModels"/> по изменению Store, а отрисовка только расставляет готовое.
+    /// </summary>
+    private readonly System.Collections.Generic.Dictionary<string, UnitModel> _models = new();
+
     public void RefreshFromStore()
     {
         int count = _store?.SessionsIn(ContentEditorScope.Entities).Count() ?? 0;
@@ -70,8 +92,198 @@ public partial class ContentEditorPreview : Control
             FitAll();
         }
 
+        SyncModels();
         UpdateToolbarState();
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// Освободить все экземпляры моделей, чтобы <see cref="SyncModels"/> поднял их заново.
+    ///
+    /// ЗАЧЕМ ЭТО ОТДЕЛЬНОЕ ДЕЙСТВИЕ. Состав экземпляров сверяется с открытыми вкладками
+    /// по пути к сцене, а правка самой сцены путь не меняет: без этого вызова поле держало бы
+    /// изображение, разобранное до правки, до самого закрытия вкладки. Вызывается по сигналу
+    /// файловой системы редактора — см. <c>ContentEditorMain.CheckExternalChanges</c>.
+    /// </summary>
+    public void ReloadModels()
+    {
+        foreach (var model in _models.Values)
+            if (Alive.Is(model))
+                model.QueueFree();
+
+        _models.Clear();
+        SyncModels();
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// Привести набор экземпляров моделей в соответствие с открытыми вкладками. Экземпляр
+    /// пересоздаётся, когда в определении сменился путь к сцене; вкладка без модели своего
+    /// экземпляра не держит вовсе.
+    /// </summary>
+    private void SyncModels()
+    {
+        var wanted = new System.Collections.Generic.Dictionary<string, string>();
+
+        if (_store != null)
+            foreach (var session in _store.SessionsIn(ContentEditorScope.Entities))
+            {
+                var def = _store.PreviewUnit(session.Id);
+
+                if (def is { HasModel: true })
+                    wanted[session.Id] = def.Model;
+            }
+
+        foreach (string id in _models.Keys.ToArray())
+        {
+            var model = _models[id];
+
+            if (Alive.Is(model) && wanted.TryGetValue(id, out string path)
+                                && model.SceneFilePath == path)
+                continue;
+
+            if (Alive.Is(model))
+                model.QueueFree();
+
+            _models.Remove(id);
+        }
+
+        foreach (var (id, path) in wanted)
+        {
+            if (_models.ContainsKey(id))
+                continue;
+
+            var model = ModelLibrary.Instantiate(path);
+
+            if (model == null)
+                continue;
+
+            // Собственные подсказки модели на поле выключены: направление показывает
+            // общая ось поля, одинаковая у сущностей с моделью и без неё, а точка вылета
+            // рассматривается в самой сцене модели
+            model.ShowGizmo = false;
+
+            foreach (var tool in model.Tools)
+                tool.ShowGizmo = false;
+
+            AddChild(model);
+            _models[id] = model;
+        }
+    }
+
+    /// <summary>
+    /// Поставить экземпляр модели туда, где рисуется вкладка. Постройка получает угол
+    /// из справочника, подвижная сущность — нулевой: поле показывает вид в покое,
+    /// а не в движении.
+    /// </summary>
+    private void PlaceModel(OpenEntitySession session, UnitDefinition def, Vector2 origin,
+        float alpha)
+    {
+        if (!_models.TryGetValue(session.Id, out var model) || !Alive.Is(model))
+            return;
+
+        model.Position = origin;
+        model.Scale = Vector2.One * _zoom;
+        model.Rotation = def.IsStructure ? Mathf.DegToRad(def.FacingDegrees) : 0f;
+        model.Modulate = new Color(1f, 1f, 1f, alpha);
+        model.SetToolFacing(0f);
+        model.ApplyTeamColor(TeamPalette.Player);
+        model.Visible = true;
+    }
+
+    /// <summary>
+    /// Секторы наведения инструментов сущности — каждый от СВОЕЙ точки крепления.
+    ///
+    /// ПОЧЕМУ ТОЧКА БЕРЁТСЯ У МОДЕЛИ. Сектор отсчитывается от оси вращения инструмента,
+    /// а она у вынесенного ствола не совпадает с центром сущности. Рисовать все секторы
+    /// из центра значило бы показывать не то, что будет в игре, и настраивать по такой
+    /// картинке было бы нельзя. Части связываются со списком <c>tools</c> тем же
+    /// <see cref="UnitModel.Bind"/>, каким это делает носитель, поэтому расхождение
+    /// между редактором и игрой исключено.
+    ///
+    /// Модели нет либо части для инструмента в ней не нашлось — сектор рисуется из центра:
+    /// именно так поведёт себя и носитель, у которого изображения инструмента нет.
+    /// </summary>
+    private void DrawAimArcs(OpenEntitySession session, UnitDefinition def, Vector2 origin)
+    {
+        var tools = def.Tools;
+
+        if (!_showAim || tools == null || tools.Length == 0)
+            return;
+
+        _models.TryGetValue(session.Id, out var model);
+        bool hasModel = Alive.Is(model);
+        var parts = hasModel ? model.Bind(tools) : null;
+
+        float body = def.IsStructure ? Mathf.DegToRad(def.FacingDegrees) : 0f;
+
+        for (int i = 0; i < tools.Length; i++)
+        {
+            var at = Vector2.Zero;
+
+            if (parts?[i] is { } part && Alive.Is(part))
+                at = model.ToLocal(part.GlobalPosition);
+
+            // Масштаб в трансформ НЕ передаётся, а вносится в радиус: иначе он умножал бы
+            // и толщину линий, и при отдалении поля границы сектора истончались бы
+            // до невидимости — ровно тогда, когда сектор и нужен целиком
+            DrawSetTransform(origin + at.Rotated(body) * _zoom, body, Vector2.One);
+            AimArcGizmo.Draw(this, tools[i], tools[i].RangePx * _zoom, i);
+        }
+
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+    }
+
+    /// <summary>Спрятать все модели перед обходом вкладок: показаны будут только видимые.</summary>
+    private void HideModels()
+    {
+        foreach (var model in _models.Values)
+            if (Alive.Is(model))
+                model.Visible = false;
+    }
+
+    /// <summary>
+    /// Ось «вперёд» каждой показанной сущности: откуда у неё нос и куда она поедет.
+    ///
+    /// РИСУЕТСЯ ОТДЕЛЬНЫМ СЛОЕМ. Экземпляры моделей добавлены потомками поля, а собственные
+    /// команды узла Godot выполняет ДО потомков, поэтому ось, нарисованная в <c>_Draw</c>,
+    /// оказалась бы под спрайтом корпуса. Слой стоит выше по <c>ZIndex</c> и потому виден
+    /// поверх любого изображения.
+    ///
+    /// Длина оси считается от размера сущности, а не задана числом: у завода в четыре
+    /// клетки и у бота в треть клетки одна и та же стрелка означала бы для первого
+    /// незаметную чёрточку, а для второго — линию во весь силуэт.
+    /// </summary>
+    private void PaintAxes(Node2D canvas)
+    {
+        if (!_showAxis || _store == null)
+            return;
+
+        foreach (var session in _store.SessionsIn(ContentEditorScope.Entities))
+        {
+            if (!session.ShowOnField
+                || session.Kind is ContentEntityKind.Weapon or ContentEntityKind.WorkTool)
+            {
+                continue;
+            }
+
+            var def = _store.PreviewUnit(session.Id);
+            if (def == null)
+                continue;
+
+            var origin = WorldToScreen(session.FieldPosition);
+            float facing = def.IsStructure ? Mathf.DegToRad(def.FacingDegrees) : 0f;
+            float reach = def.IsStructure
+                ? Mathf.Max(def.Width, def.Height) * Const.Unit * 0.5f
+                : def.RadiusPx;
+            float length = Mathf.Max(reach * _zoom * 1.15f, 16f);
+
+            var color = new Color(0.55f, 1f, 0.6f,
+                _store.ActiveSession == session ? 0.95f : 0.5f);
+
+            ModelGizmo.Cross(canvas, origin, 5f, color);
+            ModelGizmo.Arrow(canvas, origin, facing, length, color);
+        }
     }
 
     public override void _Ready()
@@ -79,6 +291,7 @@ public partial class ContentEditorPreview : Control
         ClipContents = true;
         MouseFilter = MouseFilterEnum.Stop;
         EnsureToolbar();
+        _axes = ModelLayer.Attach(this, PaintAxes, "Axes", ModelLayer.TopZ);
     }
 
     public override void _Notification(int what)
@@ -174,6 +387,8 @@ public partial class ContentEditorPreview : Control
 
         DrawRulers();
 
+        HideModels();
+
         if (_store == null)
             return;
 
@@ -189,6 +404,9 @@ public partial class ContentEditorPreview : Control
         DrawScaleBar();
         DrawMeasure();
         DrawActiveSizes();
+
+        // Слой осей рисуется отдельно и сам о правке поля не узнаёт
+        _axes?.QueueRedraw();
     }
 
     private void EnsureToolbar()
@@ -220,6 +438,8 @@ public partial class ContentEditorPreview : Control
         AddToggle("Vision", _showVision, v => _showVision = v);
         AddToggle("Attack", _showAttack, v => _showAttack = v);
         AddToggle("Work", _showWork, v => _showWork = v);
+        AddToggle("Aim", _showAim, v => _showAim = v);
+        AddToggle("Axis", _showAxis, v => _showAxis = v);
 
         var measure = new Button
         {
@@ -323,36 +543,34 @@ public partial class ContentEditorPreview : Control
         {
             var tool = _store.PreviewTool(session.Id);
             float extent = 10f * _zoom;
-            if (tool != null && !string.IsNullOrEmpty(tool.Sprite))
-            {
-                SpriteArt.DrawNative(
-                    this,
-                    tool.Sprite,
-                    Vector2.Zero,
-                    tool.SpriteRotationDegrees,
-                    baseOrigin: origin,
-                    presentationScale: _zoom,
-                    modulate: new Color(1f, 1f, 1f, alpha));
-                extent = Mathf.Max(SpriteArt.NativeExtent(tool.Sprite) * _zoom, extent);
-                if (active)
-                {
-                    DrawArc(origin, extent + 5f, 0f, Mathf.Tau, 40,
-                        new Color(1f, 0.9f, 0.3f, 0.8f), 2f, true);
-                }
-            }
-            else
-            {
-                Color fallback = tool is WeaponDefinition
-                    ? new Color(1f, 0.38f, 0.32f, alpha)
-                    : new Color(0.38f, 0.85f, 0.55f, alpha);
-                DrawCircle(origin, extent, fallback);
-            }
+
+            // Изображения у инструмента нет: ствол и манипулятор рисуются частью модели
+            // носителя, а сам по себе инструмент есть набор чисел. Кружок показывает его
+            // на поле затем, чтобы рядом с ним читались круги дальности
+            Color mark = tool is WeaponDefinition
+                ? new Color(1f, 0.38f, 0.32f, alpha)
+                : new Color(0.38f, 0.85f, 0.55f, alpha);
+            DrawCircle(origin, extent, mark);
+
+            if (active)
+                DrawArc(origin, extent + 5f, 0f, Mathf.Tau, 40,
+                    new Color(1f, 0.9f, 0.3f, 0.8f), 2f, true);
 
             DrawEntityLabel(origin + new Vector2(extent + 8f, 5f), session, active);
+
             if (tool is WeaponDefinition weapon && _showAttack)
             {
                 DrawSetTransform(origin, 0f, Vector2.One * _zoom);
                 WeaponGizmo.Draw(this, weapon);
+                DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+            }
+
+            // Носителя у вкладки инструмента нет, поэтому ось корпуса берётся нулевой:
+            // сектор показан таким, каким он будет у юнита, смотрящего вправо
+            if (tool != null && _showAim)
+            {
+                DrawSetTransform(origin, 0f, Vector2.One);
+                AimArcGizmo.Draw(this, tool, tool.RangePx * _zoom);
                 DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
             }
 
@@ -375,6 +593,9 @@ public partial class ContentEditorPreview : Control
             WorkGizmo.Draw(this, def.WorkRangePx);
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
+        PlaceModel(session, def, origin, alpha);
+        DrawAimArcs(session, def, origin);
+
         if (def.IsStructure)
         {
             BuildingVisual.Draw(this, def, origin,
@@ -386,13 +607,11 @@ public partial class ContentEditorPreview : Control
         }
         else
         {
-            UnitSilhouette.Draw(
-                this,
-                def,
-                def.RadiusPx * _zoom,
-                toolLocal: 0f,
-                origin: origin,
-                presentationScale: _zoom);
+            // Запасной круг рисуется только без модели: изображение со сценой собирает
+            // сам её экземпляр, добавленный отдельным узлом
+            if (!def.HasModel)
+                UnitVisual.Draw(this, def, def.RadiusPx * _zoom, origin);
+
             if (active)
                 DrawArc(origin, def.RadiusPx * _zoom + 6f, 0f, Mathf.Tau, 48,
                     new Color(1f, 0.9f, 0.3f, 0.8f), 2f, true);
@@ -540,14 +759,20 @@ public partial class ContentEditorPreview : Control
                 lines.Add($"attack {def.Weapon.Range:0.###} cells");
             if (def.BuildTool != null)
                 lines.Add($"work {def.BuildTool.Range:0.###} cells");
-            if (!string.IsNullOrEmpty(def.Sprite))
-                lines.Add($"sprite ×{def.SpriteScale:0.##}");
+            if (!def.HasModel)
+                lines.Add("no model scene");
+
+            DescribeTools(session, def, lines);
         }
         else
         {
             var tool = _store.PreviewTool(session.Id);
             if (tool != null)
+            {
                 lines.Add($"range {tool.Range:0.###} cells");
+                lines.Add($"aim arc ±{tool.AimArcDegrees:0.#}° at {tool.AimRateDegrees:0.#}°/s");
+                lines.Add($"body assist {tool.BodyAssist}");
+            }
         }
 
         const float panelWidth = 238f;
@@ -571,6 +796,54 @@ public partial class ContentEditorPreview : Control
             y += 16f;
         }
     }
+
+    /// <summary>
+    /// Строки о снаряжении: у каждого инструмента сектор наведения и то, нашлась ли для него
+    /// часть в сцене модели.
+    ///
+    /// ЗАЧЕМ СВЕРКА СО СЦЕНОЙ. Инструмент объявлен в .toml, а изображён узлом
+    /// <see cref="ModelTool"/> в сцене, и эти два перечня расходятся молча: у юнита с двумя
+    /// стволами художник заводит вторую часть и забывает проставить ей
+    /// <see cref="ModelTool.ToolId"/>, после чего связь определяется порядком узлов в дереве.
+    /// Обратный случай тот же: часть с идентификатором, которому в справочнике ничего
+    /// не отвечает, не поворачивается вовсе. Оба несоответствия видны здесь.
+    /// </summary>
+    private void DescribeTools(OpenEntitySession session, UnitDefinition def,
+        System.Collections.Generic.List<string> lines)
+    {
+        var tools = def.Tools;
+
+        if (tools == null || tools.Length == 0)
+            return;
+
+        _models.TryGetValue(session.Id, out var model);
+        bool hasModel = Alive.Is(model);
+        var parts = hasModel ? model.Bind(tools) : null;
+
+        for (int i = 0; i < tools.Length; i++)
+        {
+            var tool = tools[i];
+            string arc = tool.Fixed ? "fixed"
+                : tool.FullCircle ? "full circle"
+                : $"±{tool.AimArcDegrees:0.#}°";
+
+            lines.Add($"{tool.Id}: {arc}");
+
+            if (hasModel && parts[i] == null)
+                lines.Add("  no model part");
+        }
+
+        if (!hasModel)
+            return;
+
+        foreach (var part in model.Tools)
+            if (!System.Array.Exists(parts, bound => bound == part))
+                lines.Add($"  part {PartName(part)} unbound");
+    }
+
+    /// <summary>Как назвать часть модели в сводке: по идентификатору, иначе по имени узла.</summary>
+    private static string PartName(ModelTool part) =>
+        string.IsNullOrEmpty(part.ToolId) ? part.Name : part.ToolId;
 
     private void FitAll()
     {

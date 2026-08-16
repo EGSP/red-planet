@@ -9,9 +9,6 @@ tools = ["maul_cannon"]
 [body]
 max_health  = 400.0
 radius      = 0.48
-hull        = "rect"
-hull_aspect = 1.15
-front_plate = true
 
 [movement]
 speed      = 2.0

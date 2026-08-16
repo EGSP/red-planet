@@ -11,8 +11,6 @@ tools = ["thor_siege"]
 max_health   = 95000.0
 radius = 2.6
 vision_range = 13.0
-hull         = "crescent"
-armor_rings  = 2
 
 [movement]
 speed      = 2.6

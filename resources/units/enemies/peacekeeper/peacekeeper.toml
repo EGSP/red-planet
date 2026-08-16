@@ -9,6 +9,7 @@ tools = ["peacekeeper_smg"]
 [body]
 max_health = 170.0
 radius     = 0.32
+model = "res://resources/units/enemies/peacekeeper/peacekeeper.tscn"
 
 [movement]
 speed      = 3.6

@@ -79,6 +79,25 @@ public partial class ContentEditorEntitiesMode : HSplitContainer, IContentEditor
         RefreshTabs();
     }
 
+    /// <summary>
+    /// Перечитать ресурсы движка. Экземпляры моделей на поле поднимаются заново, а иконки
+    /// каталога сбрасываются: и то, и другое выведено из сцены модели, путь к которой правка
+    /// самой сцены не меняет.
+    /// </summary>
+    public void ReloadResources()
+    {
+        if (!_built)
+            return;
+
+        if (IsInstanceValid(_preview))
+            _preview.ReloadModels();
+
+        if (IsInstanceValid(_icons))
+            _icons.Clear();
+
+        RefreshCatalog();
+    }
+
     /// <summary>Перечень записей каталога: только он зависит от отбора и от иконок.</summary>
     private void RefreshCatalog()
     {
@@ -541,9 +560,17 @@ public partial class ContentEditorEntitiesMode : HSplitContainer, IContentEditor
             return;
 
         if (TomlResolver.IsVars(path))
+        {
             OpenVarsPanel(path);
-        else
-            _store.OpenPath(path);
+            return;
+        }
+
+        if (_store.OpenPath(path))
+            return;
+
+        // Путь не принадлежит содержимому — значит, это ресурс движка со своим редактором.
+        // Правится он не формой, поэтому щелчок по узлу передаёт его редактору Godot
+        EditorResourceLink.Open(path);
     }
 
     /// <summary>
@@ -622,11 +649,9 @@ public partial class ContentEditorEntitiesMode : HSplitContainer, IContentEditor
         if (!IsInstanceValid(_icons) || _store == null || entry == null)
             return null;
 
-        if (_store.PreviewUnit(entry.Id) is { } unit)
-            return _icons.GetUnit(unit);
-
-        var tool = _store.PreviewTool(entry.Id);
-        return tool == null ? null : _icons.GetSprite(tool.Sprite);
+        // Иконка есть только у сущности: изображение инструмента принадлежит модели носителя,
+        // а сам по себе инструмент есть набор чисел и рисовать в ячейке ему нечего
+        return _store.PreviewUnit(entry.Id) is { } unit ? _icons.GetUnit(unit) : null;
     }
 
     /// <summary>Соответствие вкладки каталога виду записи.</summary>

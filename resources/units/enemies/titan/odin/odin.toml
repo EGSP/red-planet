@@ -11,8 +11,6 @@ tools = ["odin_lance"]
 max_health   = 50000.0
 radius       = 0.9
 vision_range = 11.0
-hull         = "arrow"
-armor_rings  = 1
 
 [movement]
 speed      = 2.0

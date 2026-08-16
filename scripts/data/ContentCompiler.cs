@@ -262,41 +262,53 @@ public static class ContentCompiler
         string name = document.String("name");
         var kind = document.Enum("kind", ToolKind.Work);
         float range = document.Float("range", 3f);
-        bool aimWhileMoving = document.Bool("aim_while_moving", true);
-        string sprite = document.String("sprite");
-        float spriteRotation = document.Float("sprite_rotation");
 
-        if (kind == ToolKind.Weapon)
-            return new WeaponDefinition
+        var tool = kind == ToolKind.Weapon
+            ? new WeaponDefinition
             {
-                Id = id,
-                DisplayName = name,
-                Sprite = sprite,
-                SpriteRotationDegrees = spriteRotation,
-                Range = range,
-                AimWhileMoving = aimWhileMoving,
                 Damage = document.Float("damage", 10f),
                 FireInterval = document.Float("fire_interval", 1f),
                 ProjectileSpeed = document.Float("projectile_speed", 14f),
                 SpreadDegrees = document.Float("spread_degrees", 1.5f),
-                AimConeDegrees = document.Float("aim_cone_degrees", 8f),
+                FireArcDegrees = document.Float("fire_arc_degrees", 8f),
                 ProjectileRadius = document.Float("projectile_radius", 0.08f),
                 ProjectileColor = document.Color("projectile_color", new Color(1f, 0.85f, 0.4f)),
+            }
+            : (ToolDefinition)new WorkToolDefinition
+            {
+                Power = document.Float("power", 1f),
+                EnergyPerPower = document.Float("energy_per_power", 5f),
+                Kinds = ReadWorkKinds(document),
+                RepairsUnits = document.Bool("repairs_units"),
             };
 
-        return new WorkToolDefinition
-        {
-            Id = id,
-            DisplayName = name,
-            Sprite = sprite,
-            SpriteRotationDegrees = spriteRotation,
-            Range = range,
-            AimWhileMoving = aimWhileMoving,
-            Power = document.Float("power", 1f),
-            EnergyPerPower = document.Float("energy_per_power", 5f),
-            Kinds = ReadWorkKinds(document),
-            RepairsUnits = document.Bool("repairs_units"),
-        };
+        tool.Id = id;
+        tool.DisplayName = name;
+        tool.Range = range;
+
+        ReadAim(document, tool);
+        return tool;
+    }
+
+    /// <summary>
+    /// Ключи наведения, общие для ствола и рабочей руки. Вынесены в отдельную строку,
+    /// потому что поворот есть свойство крепления, а не рода занятия: манипулятор сидит
+    /// на той же поворотной опоре, что и орудие, и описывается теми же четырьмя числами.
+    /// </summary>
+    private static void ReadAim(TomlDocument document, ToolDefinition tool)
+    {
+        // Запасные значения берутся у самого инструмента: поля ещё не тронуты чтением
+        // и потому хранят умолчания, объявленные в ToolDefinition
+        tool.AimArcDegrees = document.Float("aim_arc_degrees", tool.AimArcDegrees);
+        tool.AimRateDegrees = document.Float("aim_rate_degrees", tool.AimRateDegrees);
+        tool.AimIdleDelay = document.Float("aim_idle_delay", tool.AimIdleDelay);
+        tool.AimPriority = document.Int("aim_priority", tool.AimPriority);
+
+        // Умолчание зависит от сектора: жёстко закреплённому инструменту без доворота
+        // корпуса не прицелиться ни во что, и требовать этого от каждого файла отдельно
+        // значило бы позволить их рассогласовать
+        var assist = tool.Fixed ? BodyAssist.Always : BodyAssist.WhenBlocked;
+        tool.BodyAssist = document.Enum("body_assist", assist);
     }
 
     private static WorkKinds ReadWorkKinds(TomlDocument document)
@@ -364,10 +376,7 @@ public static class ContentCompiler
             ExpansionPowerWeight = basis.ExpansionPowerWeight,
             ArmyPowerWeight = basis.ArmyPowerWeight,
             IgnoreTerrorModifiers = basis.IgnoreTerrorModifiers,
-            Hull = basis.Hull,
-            HullAspect = basis.HullAspect,
-            ArmorRings = basis.ArmorRings,
-            FrontPlate = basis.FrontPlate,
+            Model = basis.Model,
             Plant = basis.Plant,
         };
 
@@ -386,27 +395,25 @@ public static class ContentCompiler
             definition.MaxHealth = body.Float("max_health", basis.MaxHealth);
             definition.Radius = body.Float("radius", basis.Radius);
             definition.VisionRange = body.Float("vision_range", basis.VisionRange);
-            definition.Hull = body.Enum("hull", basis.Hull);
-            definition.HullTrim = body.Enum("hull_trim", basis.HullTrim);
-            definition.HullAspect = body.Float("hull_aspect", basis.HullAspect);
-            definition.Sprite = body.String("sprite", basis.Sprite);
-            definition.SpriteScale = body.Float("sprite_scale", basis.SpriteScale);
-            definition.SpriteRotationDegrees =
-                body.Float("sprite_rotation", basis.SpriteRotationDegrees);
-            definition.AmbientOcclusionInner =
-                body.Float("ao_inner", basis.AmbientOcclusionInner);
-            definition.AmbientOcclusionOuter =
-                body.Float("ao_outer", basis.AmbientOcclusionOuter);
-            definition.ArmorRings = body.Int("armor_rings", basis.ArmorRings);
-            definition.FrontPlate = body.Bool("front_plate", basis.FrontPlate);
+            definition.Model = body.String("model", basis.Model);
         }
 
         if (document.Section("movement") is { } movement)
         {
             definition.Speed = movement.Float("speed", basis.Speed);
             definition.TurnSpeedDegrees = movement.Float("turn_speed", basis.TurnSpeedDegrees);
+            definition.TurnFreeAngleDegrees =
+                movement.Float("turn_free_angle", basis.TurnFreeAngleDegrees);
+            definition.TurnStopAngleDegrees =
+                movement.Float("turn_stop_angle", basis.TurnStopAngleDegrees);
             definition.Acceleration = movement.Float("acceleration", basis.Acceleration);
             definition.Brake = movement.Float("brake", basis.Brake);
+
+            if (definition.TurnFreeAngleDegrees > definition.TurnStopAngleDegrees)
+                movement.Error(
+                    $"turn_free_angle ({definition.TurnFreeAngleDegrees:0.#}) больше " +
+                    $"turn_stop_angle ({definition.TurnStopAngleDegrees:0.#}): " +
+                    "полный ход не может держаться дальше, чем начинается остановка");
         }
 
         if (document.Section("footprint") is { } footprint)
@@ -1030,17 +1037,16 @@ public static class ContentCompiler
 
         definition.Tools = resolved.ToArray();
 
+        // Стволов может быть несколько: у каждого своя перезарядка, свой сектор и своя
+        // часть модели, и ведает ими AimRig носителя. Главным считается первый по порядку —
+        // по нему решаются вопросы, у которых ответ один на всю сущность
+        var weapons = new List<WeaponDefinition>();
+
         foreach (var tool in definition.Tools)
             switch (tool)
             {
-                case WeaponDefinition weapon when definition.Weapon == null:
-                    definition.Weapon = weapon;
-                    break;
-
-                case WeaponDefinition:
-                    GD.PushError($"[Контент] «{definition.Id}»: второй ствол «{tool.Id}». " +
-                                 "Носить можно один — система стрельбы знает про одну перезарядку");
-                    errors++;
+                case WeaponDefinition weapon:
+                    weapons.Add(weapon);
                     break;
 
                 // Рука годится и строителю, и ремонтнику: перечислять оба умения незачем,
@@ -1050,6 +1056,37 @@ public static class ContentCompiler
                         definition.BuildTool ??= work;
 
                     break;
+            }
+
+        definition.Weapons = weapons.ToArray();
+        definition.Weapon = weapons.Count > 0 ? weapons[0] : null;
+
+        errors += CheckToolIds(definition);
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Повторов идентификаторов среди инструментов быть не должно: части модели связываются
+    /// со справочником именно по идентификатору (см. <see cref="ModelTool.ToolId"/>),
+    /// и два одинаковых ключа не дали бы отличить, какую башню поворачивать.
+    ///
+    /// Один и тот же инструмент, выданный дважды, — тот же случай: две пушки одного вида
+    /// на одном носителе требуют двух записей в справочнике, отличающихся хотя бы
+    /// идентификатором, поскольку сидят они в разных местах корпуса.
+    /// </summary>
+    private static int CheckToolIds(UnitDefinition definition)
+    {
+        int errors = 0;
+        var seen = new HashSet<string>();
+
+        foreach (var tool in definition.Tools)
+            if (!seen.Add(tool.Id))
+            {
+                GD.PushError($"[Контент] «{definition.Id}»: инструмент «{tool.Id}» указан " +
+                             "дважды. Части модели связываются по идентификатору, и повтор " +
+                             "не даёт различить их — заведите второй файл инструмента");
+                errors++;
             }
 
         return errors;

@@ -8,8 +8,7 @@ tools = ["shank_cannon"]
 
 [body]
 max_health  = 300.0
-hull        = "rect"
-hull_aspect = 1.55
+model = "res://resources/units/enemies/shank/shank.tscn"
 
 [movement]
 speed      = 2.0

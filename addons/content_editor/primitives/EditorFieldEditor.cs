@@ -78,6 +78,38 @@ public static class EditorFieldEditor
                 return picker;
             }
 
+            case ContentFieldType.Path:
+            {
+                var box = new HBoxContainer
+                {
+                    SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                };
+
+                var edit = TextField(Format(value), editable);
+                Commit(edit, editable, text => commit(text));
+                box.AddChild(edit);
+
+                // Выбор диалогом нужен затем, что путь ресурса набирается вручную с трудом
+                // и ошибка в нём обнаруживается только по пустому изображению
+                var pick = IconButton("Folder", "…", "Выбрать ресурс");
+                pick.Disabled = !editable;
+                pick.Pressed += () => EditorResourceLink.Pick(edit.Text, field.PathFilters,
+                    path =>
+                    {
+                        edit.Text = path;
+                        commit(path);
+                    });
+                box.AddChild(pick);
+
+                // Переход доступен и в нередактируемом поле: посмотреть унаследованный
+                // ресурс осмысленно там же, где видно унаследованный путь
+                var open = IconButton("ExternalLink", "→", "Открыть ресурс в редакторе");
+                open.Pressed += () => EditorResourceLink.Open(edit.Text);
+                box.AddChild(open);
+
+                return box;
+            }
+
             case ContentFieldType.StringList:
             {
                 var edit = TextField(Format(value), editable);
@@ -198,6 +230,23 @@ public static class EditorFieldEditor
         }
 
         return vectors;
+    }
+
+    /// <summary>
+    /// Кнопка с иконкой темы редактора и запасной подписью. Состав EditorIcons меняется
+    /// между версиями Godot, поэтому подпись остаётся при отсутствующей иконке —
+    /// см. <see cref="ContentEditorTheme.Icon"/>.
+    /// </summary>
+    private static Button IconButton(string icon, string fallback, string tooltip)
+    {
+        Texture2D texture = ContentEditorTheme.Icon(icon);
+
+        return new Button
+        {
+            Icon = texture,
+            Text = texture == null ? fallback : "",
+            TooltipText = tooltip,
+        };
     }
 
     private static LineEdit TextField(string text, bool editable) => new()

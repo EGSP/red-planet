@@ -11,3 +11,7 @@ projectile_speed  = 33.3
 spread_degrees    = 2.0
 projectile_radius = 0.07
 projectile_color  = [0.64, 0.8, 1]
+
+# Скорость вращения башни. Прежде она бралась из [movement] turn_speed самой турели,
+# что было неверно: turn_speed описывает шасси, а у вкопанной постройки шасси нет.
+aim_rate_degrees  = 120.0

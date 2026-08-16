@@ -9,7 +9,8 @@ damage            = 8000.0
 fire_interval     = 5.0
 projectile_speed  = 11.0
 spread_degrees    = 9.0
-aim_cone_degrees  = 24.0
+fire_arc_degrees  = 24.0
 projectile_radius = 0.2
 projectile_color  = [0.4, 0.68, 1]
-aim_while_moving  = false
+# Молоты закреплены на раме: доворачиваются вместе с корпусом, своего сектора нет
+aim_arc_degrees   = 0.0

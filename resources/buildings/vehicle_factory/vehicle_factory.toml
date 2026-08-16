@@ -19,9 +19,8 @@ facing_degrees = -90.0
 [body]
 max_health      = 6000.0
 vision_range    = 8.0
-sprite          = "res://assets/sprites/buildings/tank_factory.png"
-sprite_scale    = 1.0
-sprite_rotation = 90.0
+# Изображение целиком собирает сцена модели
+model           = "res://resources/buildings/vehicle_factory/vehicle_factory.tscn"
 
 [plant]
 factory_cooldown    = 1.5

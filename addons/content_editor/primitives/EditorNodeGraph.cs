@@ -353,6 +353,9 @@ public partial class EditorNodeGraph : Control
         ContentGraphNodeKind.Vars => new Color(0.78f, 0.42f, 1f),
         ContentGraphNodeKind.Weapon => new Color(1f, 0.34f, 0.36f),
         ContentGraphNodeKind.WorkTool => new Color(0.35f, 0.86f, 0.55f),
+        // Ресурс движка приглушён намеренно: он не участвует в наследовании и стоит
+        // на графе краем, поэтому не должен спорить по яркости с документами содержимого
+        ContentGraphNodeKind.Asset => new Color(0.55f, 0.75f, 0.8f),
         _ => Colors.White,
     };
 }

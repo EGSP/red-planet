@@ -12,10 +12,6 @@ using Godot;
 /// </summary>
 public partial class Turret : Building, IArmed
 {
-    public WeaponState GunState { get; } = new();
-
-    WeaponState IArmed.Gun => GunState;
-
     /// <summary>
     /// Ствол турели — такой же инструмент, как строительная рука фабрикатора, и лежит
     /// в том же списке. Раньше он был отдельным полем сцены, из-за чего турель настраивалась
@@ -23,11 +19,12 @@ public partial class Turret : Building, IArmed
     /// </summary>
     public WeaponDefinition Weapon => Definition?.Weapon;
 
-    /// <summary>Скорость вращения башни в градусах в секунду.</summary>
-    public float TurnSpeedDegrees => Definition?.TurnSpeedDegrees ?? 90f;
-
-    /// <summary>Башня крутится — ось берём у самой ноды, а не из справочника.</summary>
-    public override float Facing => Rotation;
+    /// <summary>
+    /// Ось башни. Складывается из угла постановки и доворота ствола в его секторе,
+    /// поэтому турель с <c>aim_arc_degrees</c> меньше 180 держит сектор обстрела,
+    /// отсчитанный от того угла, под которым её поставили.
+    /// </summary>
+    public override float Facing => Aim.PrimaryWeapon?.World(BodyFacing) ?? BodyFacing;
 
     public bool CanFire => true;
 
@@ -68,33 +65,43 @@ public partial class Turret : Building, IArmed
     private IDamageable AreaTarget(Order order) =>
         Targeting.Nearest(order.Pos, Faction.Opposite(), order.Radius);
 
-    public float TurnSpeed => Mathf.DegToRad(TurnSpeedDegrees);
-
     public override void Init(int id, UnitDefinition def, Vector2 center, float facing)
     {
-        base.Init(id, def, center, facing);
-
-        // Башня начинает с угла, под которым турель поставили: игрок, разворачивая её
-        // при постановке, показывает, откуда ждёт противника.
+        // Угол корпуса башни: игрок, разворачивая турель при постановке, показывает,
+        // откуда ждёт противника. Он же — середина сектора обстрела, если сектор ограничен.
         //
         // Угол из справочника означает, что игрок его не задавал — постановка была щелчком
         // без протаскивания. Тогда остаётся прежнее правило: смотреть наружу от базы,
         // чтобы первый разворот не тратился на полкруга
         bool own = Mathf.IsEqualApprox(facing, Mathf.DegToRad(def.FacingDegrees));
+        bool outward = own && !center.IsZeroApprox();
 
-        Rotation = own && !Position.IsZeroApprox() ? Position.Angle() : facing;
+        base.Init(id, def, center, outward ? center.Angle() : facing);
+
+        Rotation = BodyFacing;
     }
 
-    public override void _Process(double delta) => QueueRedraw();
+    /// <summary>
+    /// Ось башни живёт в <see cref="Node2D.Rotation"/>: по ней рисуются запасной силуэт
+    /// и полоса прочности, а корпус модели снимает поворот ноды обратно — см.
+    /// <see cref="Building.SyncModel"/>.
+    /// </summary>
+    protected override void AfterAim() => Rotation = Facing;
 
-    public void AimAt(Vector2 point, double dt)
-    {
-        if (GlobalPosition.IsEqualApprox(point))
-            return;
+    /// <summary>
+    /// Точка вылета из модели, если турель ею снабжена. Правило то же, что у подвижных:
+    /// решение стрелять принимается от центра, а срез ствола задаёт лишь место рождения
+    /// снаряда — см. <see cref="IArmed.MuzzlePosition"/>.
+    /// </summary>
+    public Vector2 MuzzlePosition =>
+        Aim.PrimaryWeapon?.Muzzle(GlobalPosition) ?? GlobalPosition;
 
-        float desired = Heading.AngleTo(GlobalPosition, point);
-        Rotation = Heading.TurnToward(Rotation, desired, TurnSpeed * (float)dt);
-    }
+    /// <summary>
+    /// Довернуть стволы. Требование к развороту корпуса стенд накапливает, но турель его
+    /// не исполняет: основание вкопано, и цель за пределами сектора для неё недостижима.
+    /// </summary>
+    public void AimAt(Vector2 point, double dt) =>
+        Aim.AimWeapons(BodyFacing, GlobalPosition, point, dt);
 
     public override void _Draw()
     {
@@ -106,6 +113,12 @@ public partial class Turret : Building, IArmed
         UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
             selected: GizmoGate.IsSelected(this),
             armedStructure: true);
+
+        // Модель рисует и основание, и башню сама: доворот ствола ей задаёт SyncModel,
+        // а поворот ноды до неё не доходит — корпус модели снимает его обратно.
+        // Полосу прочности рисует слой пометок, идущий после модели
+        if (Model != null)
+            return;
 
         // Основание стоит под углом постановки и вслед за башней не крутится — снимаем
         // поворот ноды и ставим вместо него угол корпуса. Рисуем до башни: непрозрачный
@@ -131,6 +144,17 @@ public partial class Turret : Building, IArmed
         ShapeDraw.Polygon(this, body,
             ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.45f), 2f, WidthMode.Screen));
 
-        HealthBar.Draw(this, Health, Const.Unit * 0.9f, -half - 10f, Rotation);
+        PaintMarks(this);
+    }
+
+    /// <summary>
+    /// Полоса прочности башни. Она разворачивается вместе с осью башни, поэтому
+    /// <see cref="Building.PaintMarks"/> здесь заменяется целиком: место турели — всегда
+    /// одна клетка, а поворот полосы задан явно.
+    /// </summary>
+    protected override void PaintMarks(CanvasItem canvas)
+    {
+        float half = Const.Unit * 0.5f;
+        HealthBar.Draw(canvas, Health, Const.Unit * 0.9f, -half - 10f, Rotation);
     }
 }

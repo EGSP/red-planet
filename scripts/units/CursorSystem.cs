@@ -250,7 +250,7 @@ public partial class CursorSystem : GameSystem
             return (null, Vector2.Zero);
         }
 
-        image = SpriteArt.TrimUsed(image);
+        image = TrimUsed(image);
 
         int side = Mathf.Max(image.GetWidth(), image.GetHeight());
         int target = kind == CursorKind.Arrow ? ArrowSide : CommandSide;
@@ -270,6 +270,21 @@ public partial class CursorSystem : GameSystem
             : new Vector2(image.GetWidth() / 2, image.GetHeight() / 2);
 
         return (ImageTexture.CreateFromImage(image), hotspot);
+    }
+
+    /// <summary>
+    /// Обрезать прозрачные поля. Если непрозрачных пикселей нет, изображение возвращается
+    /// как есть: обрезать по пустому прямоугольнику значило бы получить картинку нулевого
+    /// размера.
+    /// </summary>
+    private static Image TrimUsed(Image image)
+    {
+        if (image.IsCompressed())
+            image.Decompress();
+
+        var used = image.GetUsedRect();
+
+        return used.Size.X > 0 && used.Size.Y > 0 ? image.GetRegion(used) : image;
     }
 
     /// <summary>

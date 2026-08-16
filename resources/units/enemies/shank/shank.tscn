@@ -1,0 +1,49 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/models/UnitModel.cs" id="1_model"]
+[ext_resource type="Script" path="res://scripts/models/ModelTool.cs" id="2_tool"]
+[ext_resource type="Script" path="res://scripts/models/ModelShade.cs" id="3_shade"]
+[ext_resource type="Texture2D" path="res://resources/units/enemies/shank/shank_body.png" id="4_body"]
+[ext_resource type="Texture2D" path="res://resources/units/enemies/shank/shank_gun.png" id="5_gun"]
+[ext_resource type="Shader" path="res://resources/shaders/team_color.gdshader" id="6_team"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
+shader = ExtResource("6_team")
+shader_parameter/team_color = Color(1, 1, 1, 1)
+shader_parameter/strength = 1.0
+shader_parameter/lift = 0.0
+
+[node name="ShankModel" type="Node2D" node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Cast" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+script = ExtResource("3_shade")
+Source = NodePath("../Body")
+Kind = 0
+
+[node name="Contact" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+script = ExtResource("3_shade")
+Source = NodePath("../Body")
+Kind = 1
+
+[node name="Body" type="Sprite2D" parent="."]
+texture_filter = 1
+material = SubResource("ShaderMaterial_body")
+rotation = 1.5707963
+texture = ExtResource("4_body")
+
+[node name="Gun" type="Node2D" parent="." node_paths=PackedStringArray("Muzzle")]
+z_index = 1
+script = ExtResource("2_tool")
+ToolId = "shank_cannon"
+Muzzle = NodePath("Muzzle")
+
+[node name="Sprite" type="Sprite2D" parent="Gun"]
+texture_filter = 1
+material = SubResource("ShaderMaterial_body")
+rotation = 1.5707963
+texture = ExtResource("5_gun")
+
+[node name="Muzzle" type="Marker2D" parent="Gun"]
+position = Vector2(20, 0)

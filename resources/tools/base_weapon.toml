@@ -11,7 +11,18 @@ damage            = 10.0
 fire_interval     = 1.0
 projectile_speed  = 14.0
 spread_degrees    = 1.5
-aim_cone_degrees  = 8.0
 projectile_radius = 0.08
 projectile_color  = [1.0, 0.85, 0.4]
-aim_while_moving  = true
+
+# Поворот. aim_arc_degrees — половина сектора, в котором ствол доворачивается относительно
+# корпуса: 180 — круговая башня, 0 — жёстко закреплённое орудие, которое наводят разворотом
+# носителя. aim_rate_degrees — скорость этого доворота, своя, не общая с корпусом.
+# aim_idle_delay — сколько держать последний угол, потеряв цель.
+# body_assist по умолчанию выводится из сектора и потому здесь не задан.
+aim_arc_degrees   = 180.0
+aim_rate_degrees  = 180.0
+aim_idle_delay    = 2.0
+
+# Стрельба. Не путать с сектором наведения: fire_arc_degrees отсчитывается от оси САМОГО
+# ствола и означает точность прицеливания, а не крепление.
+fire_arc_degrees  = 8.0

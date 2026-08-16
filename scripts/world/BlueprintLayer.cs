@@ -1,15 +1,14 @@
 using Godot;
 
 /// <summary>
-/// Слой отрисовки каркаса. Спрайт каркаса вынесен на собственный узел потому, что вещество
-/// с шейдером есть свойство узла и действует на все его команды кадра: оставь спрайт в общей
+/// Слой отрисовки каркаса. Модель каркаса вынесена на собственный узел потому, что вещество
+/// с шейдером есть свойство узла и действует на всё его поддерево: оставь модель в общей
 /// отрисовке — и шейдер строительства исказил бы заодно контур габарита, подпись и полосу
 /// прочности.
 ///
 /// ПОЧЕМУ СЛОЯ ДВА. Дочерний узел рисуется после родителя целиком, поэтому пометки — контур,
-/// подпись, полоса — обязаны переехать на второй узел, идущий следом за спрайтом. Иначе они
-/// оказались бы под ним: спрайт при <c>sprite_scale</c> больше единицы выходит за габарит и
-/// закрыл бы контур.
+/// подпись, полоса — обязаны переехать на второй узел, идущий следом за моделью. Иначе они
+/// оказались бы под ней: корпус нередко выходит за габарит и закрыл бы контур.
 ///
 /// Порядок задан положением в дереве, а не ZIndex: индексы вывели бы узел из порядка
 /// <see cref="WorldLayer"/>, где все слои мира стоят на нуле, и спрятали бы его под саму
@@ -51,6 +50,29 @@ public partial class BlueprintLayer : Node2D
 
         owner.AddChild(layer);
         return layer;
+    }
+
+    /// <summary>
+    /// Поднять сцену изображения под шейдер строительства. Модель становится потомком слоя
+    /// и переключается на его вещество: шейдер строительства обязан действовать на весь
+    /// корпус целиком, а вещество в Godot есть свойство узла и на потомков само
+    /// не распространяется — см. <see cref="UnitModel.ShareParentMaterial"/>.
+    ///
+    /// Угол корпуса слой уже держит, поэтому модель поворота не получает: каркас стоит так же,
+    /// как встанет постройка.
+    /// </summary>
+    public void AttachModel(UnitDefinition def)
+    {
+        if (_slot != Slot.Hull || def is not { HasModel: true })
+            return;
+
+        var model = ModelLibrary.Instantiate(def.Model);
+
+        if (model == null)
+            return;
+
+        model.ShareParentMaterial(true);
+        AddChild(model);
     }
 
     /// <summary>
@@ -126,30 +148,14 @@ public partial class BlueprintLayer : Node2D
     public override void _Draw()
     {
         var def = _owner?.Definition;
-        if (def == null)
+
+        // Слой корпуса собственных команд отрисовки не имеет вовсе: изображение целиком
+        // принадлежит экземпляру сцены модели, подвешенному к этому слою и подчинённому
+        // его веществу — см. AttachModel. Узел нужен ради вещества и порядка, а не рисунка
+        if (def == null || _slot == Slot.Hull)
             return;
 
         var size = new Vector2(def.Size.X, def.Size.Y) * Const.Unit;
-        var rect = new Rect2(-size * 0.5f, size);
-
-        if (_slot == Slot.Hull)
-            DrawHull(def, rect);
-        else
-            _owner.DrawMarks(this, rect, size);
-    }
-
-    private void DrawHull(UnitDefinition def, Rect2 rect)
-    {
-        if (string.IsNullOrEmpty(def.Sprite))
-            return;
-
-        // При включённом шейдере спрайт подаётся без правки цвета: разделение по готовности
-        // и плотность частей целиком на шейдере. При выключенном остаётся прежний приём —
-        // непрозрачность растёт вместе с готовностью
-        var modulate = GraphicsSettings.Building.Enabled
-            ? Colors.White
-            : new Color(1f, 1f, 1f, 0.2f + 0.65f * _owner.Ratio);
-
-        SpriteArt.DrawHull(this, def, rect, modulate);
+        _owner.DrawMarks(this, new Rect2(-size * 0.5f, size), size);
     }
 }

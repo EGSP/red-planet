@@ -23,6 +23,13 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     public float BodyFacing { get; private set; }
 
     /// <summary>
+    /// Инструменты постройки с их углами и перезарядками. Есть у любой постройки, а не
+    /// только у турели: манипулятор сборщика сидит на такой же поворотной опоре, что
+    /// и орудие, и описывается теми же числами.
+    /// </summary>
+    public AimRig Aim { get; } = new();
+
+    /// <summary>
     /// Занимаемое место. Считается от позиции, формы и угла корпуса, а НЕ от поворота ноды:
     /// у турели в Rotation живёт ось башни, и корпус от её вращения шевелиться не должен.
     /// </summary>
@@ -31,6 +38,18 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         : Placement.Footprint(Definition, GlobalPosition, BodyFacing);
 
     public Health Health { get; private set; }
+
+    /// <summary>
+    /// Экземпляр сцены изображения, если вид ею снабжён. Постройка ноду не крутит, поэтому
+    /// угол корпуса модели выставляется вручную — см. <see cref="SyncModel"/>.
+    /// </summary>
+    protected UnitModel Model { get; private set; }
+
+    /// <summary>
+    /// Слой пометок поверх модели. Есть только у постройки с моделью: без неё корпус
+    /// рисуется в общем ряду команд, и пометкам достаточно идти после него.
+    /// </summary>
+    private ModelLayer _marks;
 
     public OrderQueue Orders { get; }
 
@@ -107,8 +126,82 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         BodyFacing = facing;
         Health = new Health(def.MaxHealth);
 
+        AttachModel();
+
+        // Стенд собирается после модели: части изображения связываются с инструментами
+        // по идентификатору, и без поднятой сцены связывать было бы не с чем
+        Aim.Bind(def, Model);
+        Aim.Snap();
+        Aim.Apply();
+
         QueueRedraw();
         SetProcess(true);
+    }
+
+    /// <summary>
+    /// Поднять сцену изображения, если вид ею снабжён. Постройки принадлежат стороне игрока,
+    /// поэтому окраска назначается сразу и в дальнейшем не пересматривается.
+    /// </summary>
+    private void AttachModel()
+    {
+        Model = ModelLibrary.Instantiate(Definition?.Model);
+
+        if (Model == null)
+            return;
+
+        AddChild(Model);
+        Model.ApplyTeamColor(TeamPalette.Of(Faction));
+
+        // Слой пометок добавляется ПОСЛЕ модели: полоса прочности, прогресс завода и
+        // стрелки выездов обязаны лежать поверх корпуса, а собственные команды узла
+        // выполняются до потомков — см. ModelLayer
+        _marks = ModelLayer.Attach(this, PaintMarks, "Marks");
+
+        SyncModel();
+    }
+
+    /// <summary>
+    /// Пометки поверх корпуса: полоса прочности и всё, что добавляют наследники.
+    /// Без модели рисуются самой постройкой в конце <see cref="_Draw"/>, с моделью —
+    /// слоем <see cref="_marks"/>, который идёт следом за ней.
+    ///
+    /// Базис слоя не повёрнут на угол корпуса: пометки читаются с экрана, и в
+    /// <see cref="_Draw"/> перед ними поворот тоже снимается.
+    /// </summary>
+    protected virtual void PaintMarks(CanvasItem canvas)
+    {
+        if (Definition == null)
+            return;
+
+        var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
+        HealthBar.Draw(canvas, Health, size.X * 0.9f, -size.Y * 0.5f - 8f);
+    }
+
+    /// <summary>
+    /// Согласовать углы модели с постройкой. Корпус модели ставится на угол постановки
+    /// за вычетом поворота ноды: у турели в <see cref="Node2D.Rotation"/> живёт ось башни,
+    /// и корпус от её вращения шевелиться не должен. Инструменты, наоборот, получают
+    /// разницу между осью наведения и углом корпуса.
+    /// </summary>
+    protected void SyncModel()
+    {
+        if (Model == null)
+            return;
+
+        Model.Rotation = BodyFacing - Rotation;
+
+        // Каждая часть получает свой угол: у постройки с двумя стволами они наводятся
+        // врозь, и один угол на все части такого не выразил бы
+        Aim.Apply();
+    }
+
+    /// <summary>
+    /// Что сделать после того, как стенд свёл требования инструментов, но до согласования
+    /// углов модели. Обычной постройке делать нечего — основание неподвижно; турель
+    /// переносит сюда ось башни в поворот ноды.
+    /// </summary>
+    protected virtual void AfterAim()
+    {
     }
 
     /// <summary>
@@ -116,7 +209,18 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     /// поэтому постройка обязана перерисовываться, иначе круг появится только при
     /// следующей смене состояния.
     /// </summary>
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        // Желаемый угол корпуса постройке безразличен: основание вкопано и развернуться
+        // не может. Стенд всё равно закрывают каждый кадр — иначе инструменты не вернутся
+        // в походное положение, а требования копились бы от кадра к кадру
+        Aim.Advance(BodyFacing, delta);
+
+        AfterAim();
+        SyncModel();
+        QueueRedraw();
+        _marks?.QueueRedraw();
+    }
 
     /// <summary>
     /// Генератор заявляет выработку. Постройка с <see cref="ConversionDefinition"/> —
@@ -202,22 +306,16 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         // и потому исчезает вместе с ней
         BuildingSkirt.Draw(this, rect);
 
-        if (!string.IsNullOrEmpty(Definition.Sprite))
-        {
-            // Порядок обязателен: контактная тень падает на площадку и грунт, поэтому идёт
-            // до корпуса, а затемнение по кайме принадлежит самому корпусу и ложится после
-            SpriteOcclusion.DrawContact(this, Definition, rect, BodyFacing);
-            SpriteArt.DrawHull(this, Definition, rect, baseRadians: BodyFacing);
-            SpriteOcclusion.DrawRim(this, Definition, rect, BodyFacing);
-        }
-        else
+        // Модель рисует себя сама дочерним узлом: запасной прямоугольник поверх неё не нужен.
+        // Площадка выше остаётся при любом изображении — она принадлежит месту, а не корпусу
+        if (Model == null)
         {
             ShapeDraw.Rect(this, rect,
                 ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f,
                     WidthMode.Screen));
 
-            // Ось «вперёд» — короткая насечка от центра к краю. Рисуется в координатах корпуса,
-            // поэтому насечка вперёд и есть направление корпуса
+            // Ось «вперёд» — короткая насечка от центра к краю. Рисуется в координатах
+            // корпуса, поэтому насечка вперёд и есть направление корпуса
             float span = Mathf.Min(size.X, size.Y);
             ShapeDraw.Line(this, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
                 ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f), 3f, WidthMode.Screen));
@@ -227,6 +325,9 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         // на неё не распространяется
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
-        HealthBar.Draw(this, Health, size.X * 0.9f, rect.Position.Y - 8f);
+        // С моделью пометки рисует слой, идущий после неё; его перерисовку ведёт
+        // _Process, поскольку наследники переопределяют _Draw целиком
+        if (_marks == null)
+            PaintMarks(this);
     }
 }

@@ -734,7 +734,7 @@ public sealed class ContentEditorStore
 
         return def.IsStructure
             ? Mathf.Max(def.Width, 1) * Const.Unit * 0.5f
-            : Mathf.Max(UnitSilhouette.Extent(def, def.RadiusPx), def.RadiusPx);
+            : def.RadiusPx;
     }
 
     // ── Сборка ────────────────────────────────────────────────────────────────────

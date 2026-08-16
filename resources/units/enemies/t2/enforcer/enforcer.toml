@@ -10,9 +10,6 @@ tools = ["enforcer_guns"]
 [body]
 max_health  = 450.0
 radius      = 0.42
-hull        = "circle"
-hull_trim   = "shoulders"
-armor_rings = 1
 
 [movement]
 speed      = 2.4

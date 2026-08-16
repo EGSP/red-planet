@@ -18,8 +18,6 @@ public partial class Factory : Building
 
     public bool Working { get; private set; }
 
-    public override void _Process(double delta) => QueueRedraw();
-
     public override void Declare(EconomyLedger ledger)
     {
         base.Declare(ledger);
@@ -44,9 +42,13 @@ public partial class Factory : Building
         });
     }
 
-    public override void _Draw()
+    /// <summary>
+    /// Огонёк работы в углу корпуса. Рисуется вместе с полосой прочности поверх корпуса,
+    /// иначе модель закрыла бы его собой — см. <see cref="ModelLayer"/>.
+    /// </summary>
+    protected override void PaintMarks(CanvasItem canvas)
     {
-        base._Draw();
+        base.PaintMarks(canvas);
 
         if (Definition == null)
             return;
@@ -55,7 +57,7 @@ public partial class Factory : Building
         var rect = new Rect2(-size * 0.5f, size);
 
         var color = Working ? new Color(0.4f, 1f, 0.5f) : new Color(0.5f, 0.5f, 0.5f);
-        ShapeDraw.Circle(this, new Vector2(rect.End.X - 10f, rect.Position.Y + 10f), 5f,
+        ShapeDraw.Circle(canvas, new Vector2(rect.End.X - 10f, rect.Position.Y + 10f), 5f,
             ShapeStyle.Solid(color));
     }
 }

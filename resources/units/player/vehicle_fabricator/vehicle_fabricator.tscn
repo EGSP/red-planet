@@ -1,0 +1,45 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/models/UnitModel.cs" id="1_model"]
+[ext_resource type="Script" path="res://scripts/models/ModelTool.cs" id="2_tool"]
+[ext_resource type="Texture2D" path="res://resources/units/player/vehicle_fabricator/vehicle_fabricator_body.png" id="3_body"]
+[ext_resource type="Texture2D" path="res://resources/units/player/vehicle_fabricator/vehicle_fabricator_arm.png" id="4_arm"]
+[ext_resource type="Shader" path="res://resources/shaders/team_color.gdshader" id="5_team"]
+[ext_resource type="Script" path="res://scripts/models/ModelShade.cs" id="6_shade"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
+shader = ExtResource("5_team")
+shader_parameter/team_color = Color(1, 1, 1, 1)
+shader_parameter/strength = 0.0
+shader_parameter/lift = 0.0
+
+[node name="VehicleFabricatorModel" type="Node2D" node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Cast" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+script = ExtResource("6_shade")
+Source = NodePath("../Body")
+Kind = 0
+
+[node name="Body" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_body")
+texture_filter = 1
+rotation = 1.5707963
+texture = ExtResource("3_body")
+
+[node name="Arm" type="Node2D" parent="." node_paths=PackedStringArray("Muzzle")]
+z_index = 1
+script = ExtResource("2_tool")
+Role = 1
+ToolId = "vehicle_fabricator_arm"
+Muzzle = NodePath("Muzzle")
+FollowsAim = true
+
+[node name="Sprite" type="Sprite2D" parent="Arm"]
+texture_filter = 1
+rotation = 1.5707963
+texture = ExtResource("4_arm")
+
+[node name="Muzzle" type="Marker2D" parent="Arm"]
+position = Vector2(26, 0)

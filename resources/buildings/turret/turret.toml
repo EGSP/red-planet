@@ -17,8 +17,8 @@ pattern_step = "margin"
 [body]
 max_health = 700.0
 
-[movement]
-turn_speed = 120.0
+# Секции [movement] нет намеренно: турель вкопана, шасси у неё отсутствует, а скорость
+# вращения башни принадлежит орудию — см. aim_rate_degrees в turret_gun.toml.
 
 [terror]
 expansion_power = 8.0

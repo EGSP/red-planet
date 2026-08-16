@@ -1,12 +1,18 @@
 using Godot;
 
 /// <summary>
-/// Огонь всех, у кого есть ствол: врагов и коммандера.
+/// Огонь всех, у кого есть ствол: врагов, турелей и коммандера.
 ///
-/// Порядок один на всех: остыл ли ствол → есть ли цель → в радиусе ли она →
-/// довернуть ось прицеливания → цель в конусе → выстрел. Довернуть, но не выстрелить —
-/// нормальный исход кадра: неповоротливый носитель из-за этого мажет по бегающей цели,
-/// а вертлявый переводит огонь почти мгновенно. У подвижного ось — инструмент, а не корпус.
+/// Порядок один на всех: остыли ли стволы → есть ли цель → в радиусе ли она →
+/// довернуть стволы → у каждого проверить сектор стрельбы → выстрел. Довернуть,
+/// но не выстрелить — нормальный исход кадра: неповоротливый носитель из-за этого мажет
+/// по бегающей цели, а вертлявый переводит огонь почти мгновенно.
+///
+/// СТВОЛОВ МОЖЕТ БЫТЬ НЕСКОЛЬКО, И РЕШЕНИЯ У НИХ РАЗНЫЕ. Цель выбирается на носителя одна:
+/// разводить огонь по разным жертвам значило бы заводить у сущности несколько намерений
+/// сразу, а приказ у неё один. Дальше каждый ствол решает сам — доворот у него свой,
+/// перезарядка своя, сектор свой, — и потому бортовое орудие молчит, пока цель на другом
+/// борту, а башенное стреляет.
 /// </summary>
 public partial class WeaponSystem : GameSystem
 {
@@ -22,7 +28,7 @@ public partial class WeaponSystem : GameSystem
 
         foreach (var armed in GM.Index.All<IArmed>())
         {
-            armed.Gun.Tick(dt);
+            armed.Aim.TickGuns(dt);
 
             // Содержимое корпуса завода не стреляет и не должно получать огонь в ответ
             if (armed is IMobile { Movement.Leaving: true })
@@ -39,19 +45,42 @@ public partial class WeaponSystem : GameSystem
             var from = armed.GlobalPosition;
             var to = target.GlobalPosition;
 
+            // Сближение и выбор цели меряются главным стволом: у сущности одна дистанция
+            // боя, и выводить её из самого дальнобойного ствола значило бы, что носитель
+            // встаёт там, откуда достаёт лишь половина его снаряжения
             if (!Targeting.InFiringRange(weapon, from, target))
                 continue;
 
             armed.AimAt(to, dt);
 
-            if (!Heading.InCone(armed.Facing, from, to, weapon.AimCone))
-                continue;
-
-            if (!armed.Gun.TryFire(weapon.FireInterval))
-                continue;
-
-            Fire(armed, weapon, from, to);
+            foreach (var mount in armed.Aim.Mounts)
+                TryShoot(armed, mount, from, to);
         }
+    }
+
+    /// <summary>
+    /// Выстрел одного ствола. Три условия, и каждое своё: ствол должен быть стволом,
+    /// цель — лежать в его собственной дальности, а сам он — быть довёрнут в пределах
+    /// сектора стрельбы от своей нынешней оси.
+    ///
+    /// Сектор считается от оси ИМЕННО ЭТОГО ствола, а не от корпуса и не от главного ствола:
+    /// иначе бортовое орудие, упёршееся в край своего сектора наведения, стреляло бы вслед
+    /// за башней в сторону, куда оно не смотрит.
+    /// </summary>
+    private void TryShoot(IArmed armed, ToolMount mount, Vector2 from, Vector2 to)
+    {
+        var weapon = mount.Weapon;
+
+        if (weapon == null || from.DistanceTo(to) > weapon.RangePx)
+            return;
+
+        if (!Heading.InCone(mount.World(armed.BodyFacing), from, to, weapon.FireArc))
+            return;
+
+        if (!mount.Gun.TryFire(weapon.FireInterval))
+            return;
+
+        Fire(armed, mount, to);
     }
 
     /// <summary>
@@ -86,13 +115,22 @@ public partial class WeaponSystem : GameSystem
     private static float SightRange(IArmed armed) =>
         armed is IVision vision ? vision.VisionRadius : float.MaxValue;
 
-    private void Fire(IArmed armed, WeaponDefinition weapon, Vector2 from, Vector2 to)
+    private void Fire(IArmed armed, ToolMount mount, Vector2 to)
     {
+        var weapon = mount.Weapon;
+
+        // Снаряд рождается на срезе ЭТОГО ствола, если носитель снабжён сценой изображения.
+        // Решение стрелять принято выше и от центра носителя, поэтому вынос точки вылета
+        // ни дальности, ни сектора не меняет — см. IArmed.MuzzlePosition
+        var muzzle = mount.Muzzle(armed.GlobalPosition);
+
         // Целимся в цель, а разброс уводит ствол: конус решает, стрелять ли вообще,
-        // а разброс — насколько кучно ложится очередь
-        float angle = Heading.AngleTo(from, to)
+        // а разброс — насколько кучно ложится очередь. Угол считается от среза ствола,
+        // а не от центра: иначе вынесенный ствол давал бы очередь, идущую мимо цели
+        // параллельно линии прицеливания
+        float angle = Heading.AngleTo(muzzle, to)
                       + _rng.RandfRange(-weapon.Spread, weapon.Spread);
 
-        GM.Spawn.SpawnProjectile(weapon, armed, from, angle);
+        GM.Spawn.SpawnProjectile(weapon, armed, muzzle, angle);
     }
 }

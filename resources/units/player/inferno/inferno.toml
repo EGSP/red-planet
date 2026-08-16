@@ -14,10 +14,7 @@ rows = ["#"]
 max_health   = 1000.0
 radius       = 0.48
 vision_range = 8.0
-hull         = "rect"
-hull_aspect  = 1.1
-armor_rings  = 1
-front_plate  = true
+model = "res://resources/units/player/inferno/inferno.tscn"
 
 [movement]
 speed      = 2.0

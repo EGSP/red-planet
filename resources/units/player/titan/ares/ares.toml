@@ -14,8 +14,6 @@ rows = ["##", "##"]
 max_health   = 50000.0
 radius = 2.5
 vision_range = 14.0
-hull         = "fortress"
-armor_rings  = 1
 
 [movement]
 speed      = 2.0

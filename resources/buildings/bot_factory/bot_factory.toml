@@ -18,9 +18,9 @@ facing_degrees = -90.0
 [body]
 max_health       = 6000.0
 vision_range     = 8.0
-sprite           = "res://assets/sprites/buildings/bot_factory.png"
-sprite_scale     = 1.0
-sprite_rotation  = 90.0
+# Изображение целиком собирает сцена модели: и в мире, и в иконке панели, и в поле
+# редактора контента
+model            = "res://resources/buildings/bot_factory/bot_factory.tscn"
 
 [plant]
 factory_cooldown    = 1.0

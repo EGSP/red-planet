@@ -1,5 +1,5 @@
 # Машинный фабрикатор: PA fabrication_vehicle — HP 150, cost 200, metal 11 / energy 700.
-# Силуэт — прямоугольник, как у прочих машин. Строит то же, что ботовый фабрикатор.
+# Строит то же, что ботовый фабрикатор.
 
 id       = "vehicle_fabricator"
 base     = "/units/base_unit.toml"
@@ -16,10 +16,9 @@ rows = ["#"]
 [body]
 max_health      = 150.0
 radius          = 0.36
-hull            = "rect"
-hull_aspect     = 1.4
-sprite          = "res://assets/sprites/units/unit_vehicle-fabricator.png"
-sprite_rotation = 90.0
+# Корпус и манипулятор разнесены по частям сцены модели: рука поворачивается отдельно
+# и задаёт точку, откуда тянется луч работы
+model           = "res://resources/units/player/vehicle_fabricator/vehicle_fabricator.tscn"
 
 [movement]
 speed      = 2.4

@@ -13,8 +13,7 @@ requires_metal_spot = true
 
 [body]
 max_health   = 1000.0
-sprite       = "res://assets/sprites/buildings/extractor.png"
-sprite_scale = 1.3
+model        = "res://resources/buildings/extractor/extractor.tscn"
 
 [production]
 metal = 7.0

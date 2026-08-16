@@ -9,7 +9,8 @@ damage            = 100.0
 fire_interval     = 0.25
 projectile_speed  = 10.0
 spread_degrees    = 12.0
-aim_cone_degrees  = 28.0
+fire_arc_degrees  = 28.0
 projectile_radius = 0.12
 projectile_color  = [0.68, 0.83, 1]
-aim_while_moving  = false
+# Огнемёт закреплён на раме: доворачивается вместе с корпусом, своего сектора нет
+aim_arc_degrees   = 0.0

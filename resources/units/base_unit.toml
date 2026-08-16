@@ -15,16 +15,21 @@ tags     = ["mobile"]
 max_health   = 100.0
 radius       = 0.35
 vision_range = "/content/units.vars.toml/vision_range"
-hull         = "circle"
-hull_aspect  = 1.5
-armor_rings  = 0
-front_plate  = false
+# Изображение задаётся ключом model — путём к сцене. Вид без него рисуется кругом.
 
 [movement]
 # speed задаёт потомок: без скорости сущность неподвижна
 turn_speed   = 180.0
 acceleration = 0.0
 brake        = -1.0
+
+# Связь поворота корпуса со скоростью. Юнит едет туда, куда повёрнут, а не туда, куда его
+# послали: пока расхождение курса с осью корпуса меньше turn_free_angle, ход полный, дальше
+# скорость падает линейно и к turn_stop_angle обращается в ноль — юнит разворачивается
+# на месте. Значение 180 у второго ключа отменяет остановку: такая сущность меняет
+# направление только по дуге.
+turn_free_angle = 60.0
+turn_stop_angle = 150.0
 
 [battle]
 approach_hold = "/content/units.vars.toml/approach_hold"

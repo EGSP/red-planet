@@ -128,6 +128,10 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         Position = center;
         BodyFacing = facing;
         Health = new Health(def.FrameHealth * Const.BlueprintHealthFactor);
+
+        // Сцена изображения поднимается под шейдер строительства: каркас показывает ту же
+        // модель, что и готовая постройка, а не отдельный вид
+        _hull.AttachModel(def);
     }
 
     public override void _Ready() => Health ??= new Health(100f * Const.BlueprintHealthFactor);
@@ -404,7 +408,9 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
         // Площадка принадлежит каркасу так же, как готовой постройке: исчезает вместе с ним
         BuildingSkirt.Draw(this, rect);
 
-        if (string.IsNullOrEmpty(Definition.Sprite))
+        // Процедурное заполнение — запасной вид для определений без модели: изображение
+        // рисует слой корпуса под шейдером строительства
+        if (!Definition.HasModel)
         {
             ShapeDraw.Rect(this, rect, ShapeStyle.Solid(new Color(Definition.Color, 0.15f)));
 
@@ -419,8 +425,8 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
     /// <summary>
     /// Пометки поверх каркаса: контур занимаемого места, подписи и полоса прочности.
-    /// Рисуются слоем <see cref="BlueprintLayer.Slot.Marks"/>, который идёт после спрайта,
-    /// поэтому контур не закрывается корпусом при <c>sprite_scale</c> больше единицы.
+    /// Рисуются слоем <see cref="BlueprintLayer.Slot.Marks"/>, который идёт после модели,
+    /// поэтому контур не закрывается корпусом, выходящим за габарит.
     ///
     /// Слой уже повёрнут на угол корпуса, поэтому контур идёт по занятому месту, а подписи
     /// поворот снимают: читаются они с экрана, а не с корпуса.

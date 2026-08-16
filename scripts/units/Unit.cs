@@ -78,16 +78,24 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     private Order _assisted;
 
     /// <summary>
-    /// Направление инструмента в мировых радианах: ствол или манипулятор.
-    /// Корпус при этом смотрит по <see cref="Node2D.Rotation"/> — туда, куда едет.
+    /// Инструменты юнита с их углами и перезарядками. Корпус при этом смотрит
+    /// по <see cref="Node2D.Rotation"/> — туда, куда едет.
     /// </summary>
-    private float _toolFacing;
+    public AimRig Aim { get; } = new();
 
     /// <summary>
-    /// В этом физическом кадре инструмент уже доворачивали к цели. Без признака
-    /// графический шаг снова тянул бы его к корпусу и гасил наведение.
+    /// Экземпляр сцены изображения, если вид ею снабжён. Дочерний узел, поэтому поворот
+    /// корпуса достаётся ему от <see cref="Node2D.Rotation"/> самого юнита; коду остаётся
+    /// доворачивать инструменты.
     /// </summary>
-    private bool _toolAimed;
+    private UnitModel _model;
+
+    /// <summary>
+    /// Слой пометок поверх модели: полоса прочности и луч работы. Есть только у юнита
+    /// с моделью — собственные команды узла выполняются до потомков, и без слоя пометки
+    /// ушли бы под корпус (см. <see cref="ModelLayer"/>).
+    /// </summary>
+    private ModelLayer _marks;
 
     public Unit() => Orders = new OrderQueue(this);
 
@@ -130,8 +138,6 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public Health Health { get; protected set; }
 
-    public WeaponState Gun { get; } = new();
-
     public int EntityId => Id;
 
     public string DefinitionId => Definition?.Id ?? "";
@@ -169,22 +175,37 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public SelectionGroup SelectionGroup => Definition?.SelectionGroup ?? SelectionGroup.Bots;
 
-    /// <summary>
-    /// Ось прицеливания: независимый инструмент, если умение это допускает,
-    /// иначе направление корпуса.
-    /// </summary>
-    public float Facing => AimsIndependently ? _toolFacing : Rotation;
-
-    /// <summary>Куда смотрит ствол или манипулятор прямо сейчас.</summary>
-    public float ToolFacing => AimsIndependently ? _toolFacing : Rotation;
+    /// <summary>Ось корпуса: куда юнит повёрнут целиком. От неё отсчитываются секторы.</summary>
+    public float BodyFacing => Rotation;
 
     /// <summary>
-    /// Инструмент наводится отдельно от корпуса на ходу. Берётся из умения:
-    /// ствол с <c>aim_while_moving</c> или рабочая рука с тем же признаком.
+    /// Ось главного ствола. У безоружного и у того, чей ствол закреплён жёстко,
+    /// совпадает с осью корпуса.
     /// </summary>
-    private bool AimsIndependently =>
-        Definition?.Weapon is { AimWhileMoving: true }
-        || Definition?.BuildTool is { AimWhileMoving: true };
+    public float Facing => Aim.PrimaryWeapon?.World(Rotation) ?? Rotation;
+
+    /// <summary>
+    /// Куда смотрит изображение инструмента прямо сейчас. Ствол в приоритете перед рукой:
+    /// подсказки и отладочная отрисовка спрашивают именно про него.
+    /// </summary>
+    public float ToolFacing =>
+        (Aim.PrimaryWeapon ?? Aim.PrimaryWork)?.World(Rotation) ?? Rotation;
+
+    /// <summary>
+    /// Откуда вылетает снаряд. Модель отвечает на этот вопрос точкой
+    /// <see cref="ModelTool.Muzzle"/>; без модели снаряд рождается в центре сущности,
+    /// как было до её появления.
+    ///
+    /// РАСЧЁТ ЭТИМ НЕ МЕНЯЕТСЯ. Дальность, конус и выбор цели считаются от центра
+    /// (<see cref="WeaponSystem"/>), поэтому вынос точки вылета сдвигает только то место,
+    /// откуда показан уже состоявшийся выстрел.
+    /// </summary>
+    public Vector2 MuzzlePosition =>
+        Aim.PrimaryWeapon?.Muzzle(GlobalPosition) ?? GlobalPosition;
+
+    /// <summary>Откуда тянется луч работы. Без модели — от центра сущности.</summary>
+    private Vector2 WorkBeamOrigin =>
+        Aim.PrimaryWork?.Muzzle(GlobalPosition) ?? GlobalPosition;
 
     public float HitRadius => Definition?.RadiusPx ?? Const.Unit * 0.35f;
 
@@ -232,9 +253,54 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // Якорь ставится сразу: юнит, которому ещё ничего не приказывали, обязан
         // держаться места своего появления, а не расползаться за целями от него
         _anchor = GlobalPosition;
-        _toolFacing = Rotation;
+
+        AttachModel();
+
+        // Стенд собирается после модели: части изображения связываются с инструментами
+        // по идентификатору, и без поднятой сцены связывать было бы не с чем
+        Aim.Bind(Definition, _model);
+        Aim.Snap();
+        Aim.Apply();
 
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// Поднять сцену изображения, если вид ею снабжён. Сторона к этому моменту уже
+    /// выставлена Spawner-ом, поэтому окраска назначается сразу и больше не меняется:
+    /// перейти на другую сторону сущность не может.
+    /// </summary>
+    private void AttachModel()
+    {
+        _model = ModelLibrary.Instantiate(Definition?.Model);
+
+        if (_model == null)
+            return;
+
+        AddChild(_model);
+        _model.ApplyTeamColor(TeamPalette.Of(Faction));
+
+        // Слой добавляется ПОСЛЕ модели: порядок отрисовки задан порядком в дереве
+        _marks = ModelLayer.Attach(this, PaintMarks, "Marks");
+    }
+
+    /// <summary>
+    /// Пометки поверх корпуса: полоса прочности и луч к узлу работы. Без модели их рисует
+    /// сам юнит в конце <see cref="_Draw"/>, с моделью — слой, идущий следом за ней.
+    /// </summary>
+    private void PaintMarks(CanvasItem canvas)
+    {
+        if (Definition == null)
+            return;
+
+        float radius = Definition.RadiusPx;
+
+        HealthBar.Draw(canvas, Health, radius * 2.4f, -radius - 10f, Rotation);
+
+        // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей
+        if (Alive.Is(_attached))
+            ShapeDraw.Line(canvas, ToLocal(WorkBeamOrigin), ToLocal(_attached.GlobalPosition),
+                DrawTheme.Line(VizKind.WorkBeamBuild));
     }
 
     /// <summary>
@@ -243,8 +309,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     public void SnapToolToBody()
     {
-        _toolFacing = Rotation;
-        _toolAimed = false;
+        Aim.Snap();
+        Aim.Apply();
     }
 
     /// <summary>
@@ -293,53 +359,64 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             Repair.Run(target, arm.Power, arm.EnergyPerPower, dt, rates);
     }
 
-    public void AimAt(Vector2 point, double dt)
-    {
-        if (GlobalPosition.IsEqualApprox(point))
-            return;
-
-        float desired = Heading.AngleTo(GlobalPosition, point);
-        float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
-
-        if (AimsIndependently)
-        {
-            _toolFacing = Heading.TurnToward(_toolFacing, desired, step);
-            _toolAimed = true;
-            return;
-        }
-
-        // Корпусный инструмент: на ходу корпус крутит движение, стоя — наведение
-        if (Movement.Velocity.LengthSquared() > 0.0001f)
-            return;
-
-        Rotation = Heading.TurnToward(Rotation, desired, step);
-        _toolFacing = Rotation;
-        _toolAimed = true;
-    }
+    public void AimAt(Vector2 point, double dt) =>
+        Aim.AimWeapons(Rotation, GlobalPosition, point, dt);
 
     public override void _Process(double delta)
     {
-        if (!_toolAimed)
-            AlignTool(delta);
+        AimWork(delta);
 
-        _toolAimed = false;
+        // Стенд закрывает шаг: ненаведённые инструменты возвращаются к оси корпуса,
+        // а накопленные требования сводятся в один желаемый угол корпуса
+        float request = Aim.Advance(Rotation, delta);
+
+        TurnBody(request, delta);
+
+        // Инструменты модели ведутся здесь, а не в _Draw: узел модели рисует себя сам,
+        // и к моменту его отрисовки поворот обязан быть уже выставлен
+        Aim.Apply();
+
         QueueRedraw();
+        _marks?.QueueRedraw();
     }
 
     /// <summary>
-    /// Без цели инструмент возвращается к направлению корпуса. У корпусного оружия
-    /// ось всегда совпадает с корпусом.
+    /// Навести рабочую руку на то, над чем юнит трудится. Отдельно от стрельбы, потому что
+    /// цель у работы своя: система стрельбы про узел работы не знает и наводить на него
+    /// не станет.
+    ///
+    /// Отсюда же берётся поведение коммандера, ради которого рабочей руке и дан круговой
+    /// сектор: рука сама тянется к каркасу, требования к корпусу не оставляет, и корпус
+    /// остаётся свободен для доворота ствола.
     /// </summary>
-    private void AlignTool(double dt)
+    private void AimWork(double dt)
     {
-        if (!AimsIndependently)
-        {
-            _toolFacing = Rotation;
+        var mount = Aim.PrimaryWork;
+
+        if (mount == null)
             return;
-        }
+
+        var target = Alive.Is(_attached)
+            ? _attached.GlobalPosition
+            : (RepairTarget as Node2D)?.GlobalPosition;
+
+        if (target is { } point)
+            Aim.Aim(mount, Rotation, GlobalPosition, point, dt);
+    }
+
+    /// <summary>
+    /// Довернуть корпус ради инструментов. Только СТОЯ: на ходу корпус принадлежит системе
+    /// движения, и разворот к цели поперёк курса означал бы, что юнит едет боком.
+    ///
+    /// NaN означает «требований нет либо они уже удовлетворены» — см. <see cref="AimRig.Advance"/>.
+    /// </summary>
+    private void TurnBody(float request, double dt)
+    {
+        if (float.IsNaN(request) || Movement.Velocity.LengthSquared() > 0.0001f)
+            return;
 
         float step = (Definition?.TurnSpeed ?? Mathf.Pi) * (float)dt;
-        _toolFacing = Heading.TurnToward(_toolFacing, Rotation, step);
+        Rotation = Heading.TurnToward(Rotation, request, step);
     }
 
     /// <summary>Приказов нет — отпускаем узел работы и стоим.</summary>
@@ -1092,13 +1169,13 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             selected: GizmoGate.IsSelected(this),
             facingOffset: toolLocal);
 
-        UnitSilhouette.Draw(this, Definition, radius, toolLocal);
+        // Модель рисует себя сама дочерним узлом, поэтому запасной круг при ней не нужен:
+        // два изображения одного корпуса наложились бы друг на друга.
+        // Пометки при модели рисует слой, идущий после неё
+        if (_model != null)
+            return;
 
-        HealthBar.Draw(this, Health, radius * 2.4f, -radius - 10f, Rotation);
-
-        // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей
-        if (Alive.Is(_attached))
-            ShapeDraw.Line(this, Vector2.Zero, ToLocal(_attached.GlobalPosition),
-                DrawTheme.Line(VizKind.WorkBeamBuild));
+        UnitVisual.Draw(this, Definition, radius);
+        PaintMarks(this);
     }
 }

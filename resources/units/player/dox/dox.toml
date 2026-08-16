@@ -11,7 +11,8 @@ rows = ["#"]
 
 [body]
 max_health = 65.0
-radius     = 0.28
+radius = 0.3
+model = "res://resources/units/player/dox/dox.tscn"
 
 [movement]
 speed      = 4.0
