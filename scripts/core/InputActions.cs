@@ -39,18 +39,36 @@ public enum InputScope
 
     /// <summary>Читается, когда выделения нет: отбор по признаку.</summary>
     WithoutSelection,
+
+    /// <summary>
+    /// Ведёт камеру в режиме <see cref="CameraPanMode.Keys"/> и только при отпущенном Alt.
+    ///
+    /// СПОРА С ПРОЧИМИ ДЕЙСТВИЯМИ У НЕГО НЕТ, И ЭТО ЗАМЫСЕЛ, А НЕ ПОСЛАБЛЕНИЕ. Клавиши
+    /// панорамирования по умолчанию — W, A, S, D, и A занята приказом атаки. Камера
+    /// в режиме клавиш забирает нажатие себе целиком: <c>CameraRig</c> помечает событие
+    /// обработанным, и до приказа оно не доходит. Alt же камерой не читается вовсе, поэтому
+    /// A с Alt означает атаку и в этом режиме. Отсюда следует, что одно нажатие никогда
+    /// не застаёт оба действия разом, и отбирать клавишу друг у друга им незачем.
+    ///
+    /// Между собой действия панорамирования спорят как обычно: две стороны света на одной
+    /// клавише означали бы, что одна из них не сработает никогда.
+    /// </summary>
+    CameraPan,
 }
 
 /// <summary>
 /// Одно действие карты: имя, под которым его знает <see cref="InputMap"/>, раздел
-/// настроек, название для игрока, клавиша по умолчанию и положение, в котором действие
+/// настроек, название для игрока, привязка по умолчанию и положение, в котором действие
 /// читается.
+///
+/// Умолчанием служит <see cref="InputBinding"/>, а не клавиша: часть действий назначена
+/// на кнопку мыши (перетаскивание камеры), и клавиша обращается в привязку сама собой.
 /// </summary>
 public readonly record struct InputAction(
     string Name,
     InputSection Section,
     string Title,
-    Key Default,
+    InputBinding Default,
     InputScope Scope = InputScope.Always);
 
 /// <summary>
@@ -119,6 +137,46 @@ public static class InputActions
     public const string CameraZoomIn = "camera_zoom_in";
 
     public const string CameraZoomOut = "camera_zoom_out";
+
+    /// <summary>
+    /// Удержание, при котором движение мыши тянет камеру. Прежде это была средняя кнопка,
+    /// записанная в <c>CameraRig</c> литералом; теперь она умолчание переназначаемого
+    /// действия, поскольку игроки держат перетаскивание и на боковых кнопках мыши,
+    /// и на клавише под левой рукой.
+    ///
+    /// Действие читается удержанием, а не нажатием: <c>CameraRig</c> включает
+    /// перетаскивание по <c>IsPressed</c> события и выключает по отпусканию. Отсюда
+    /// следует, что назначать сюда прокрутку колеса нельзя — см.
+    /// <see cref="InputBinding.CanBind"/>.
+    /// </summary>
+    public const string CameraDrag = "camera_drag";
+
+    /// <summary>
+    /// Ход камеры клавишами. Читаются только в режиме <see cref="CameraPanMode.Keys"/>,
+    /// поэтому умолчания W, A, S, D не отнимают клавиши у приказов, пока игрок этот режим
+    /// не выбрал.
+    ///
+    /// Порядок в <see cref="CameraPanActions"/> — стороны света по часовой стрелке от
+    /// верха: он же порядок строк в настройках, и совпадение избавляет от второго перечня.
+    /// </summary>
+    public const string CameraPanUp = "camera_pan_up";
+
+    public const string CameraPanRight = "camera_pan_right";
+    public const string CameraPanDown = "camera_pan_down";
+    public const string CameraPanLeft = "camera_pan_left";
+
+    /// <summary>
+    /// Действия хода камеры и отвечающие им направления в экранных координатах. Один
+    /// перечень служит и разбору нажатий, и сложению направления, поэтому добавление
+    /// стороны света не требует править две согласованные таблицы.
+    /// </summary>
+    public static readonly (string Action, Vector2 Direction)[] CameraPanActions =
+    {
+        (CameraPanUp, Vector2.Up),
+        (CameraPanRight, Vector2.Right),
+        (CameraPanDown, Vector2.Down),
+        (CameraPanLeft, Vector2.Left),
+    };
 
     // ── отображение, игра, отладка ─────────────────────────────────────────────
 
@@ -194,6 +252,13 @@ public static class InputActions
 
         list.Add(new(CameraZoomIn, InputSection.Camera, "Приблизить", Key.Z));
         list.Add(new(CameraZoomOut, InputSection.Camera, "Отдалить", Key.X));
+        list.Add(new(CameraDrag, InputSection.Camera, "Перетаскивать камеру",
+            InputBinding.Of(MouseButton.Middle)));
+
+        list.Add(new(CameraPanUp, InputSection.Camera, "Вверх", Key.W, InputScope.CameraPan));
+        list.Add(new(CameraPanLeft, InputSection.Camera, "Влево", Key.A, InputScope.CameraPan));
+        list.Add(new(CameraPanDown, InputSection.Camera, "Вниз", Key.S, InputScope.CameraPan));
+        list.Add(new(CameraPanRight, InputSection.Camera, "Вправо", Key.D, InputScope.CameraPan));
 
         list.Add(new(ViewOrdersAll, InputSection.View, "Очереди всех своих", Key.C));
         list.Add(new(GameCancel, InputSection.Game, "Отмена, меню паузы", Key.Escape));
@@ -245,37 +310,30 @@ public static class InputActions
     }
 
     /// <summary>
-    /// Клавиша, назначенная действию прямо сейчас, либо <see cref="Key.None"/>.
+    /// Привязка, назначенная действию прямо сейчас, либо <see cref="InputBinding.None"/>.
     ///
-    /// Берётся физический код, а не раскладочный: на клавиатуре выгравирована латиница,
-    /// и показанное игроку обязано совпадать с тем, что у него под пальцами, а не с буквой
-    /// включённой раскладки.
+    /// У клавиши берётся физический код, а не раскладочный: на клавиатуре выгравирована
+    /// латиница, и показанное игроку обязано совпадать с тем, что у него под пальцами,
+    /// а не с буквой включённой раскладки.
     /// </summary>
-    public static Key BoundKey(string action)
+    public static InputBinding Bound(string action)
     {
         if (action == null || !InputMap.HasAction(action))
-            return Key.None;
+            return InputBinding.None;
 
         foreach (var bound in InputMap.ActionGetEvents(action))
         {
-            if (bound is not InputEventKey key)
-                continue;
+            var binding = InputBinding.Of(bound);
 
-            var code = key.PhysicalKeycode != Key.None ? key.PhysicalKeycode : key.Keycode;
-
-            if (code != Key.None)
-                return code;
+            if (!binding.IsEmpty)
+                return binding;
         }
 
-        return Key.None;
+        return InputBinding.None;
     }
 
-    /// <summary>Подпись назначенной клавиши для показа игроку, либо пустая строка.</summary>
-    public static string KeyLabel(string action)
-    {
-        var key = BoundKey(action);
-        return key == Key.None ? "" : OS.GetKeycodeString(key);
-    }
+    /// <summary>Подпись назначенной привязки для показа игроку, либо пустая строка.</summary>
+    public static string KeyLabel(string action) => Bound(action).Label();
 
     /// <summary>
     /// Занести действия в <see cref="InputMap"/> и применить поверх сохранённые
@@ -299,21 +357,21 @@ public static class InputActions
     }
 
     /// <summary>
-    /// Назначить действию единственную клавишу. Прежние события снимаются: у действия
-    /// в этой игре ровно одна привязка, и вторая означала бы, что показанная в настройках
-    /// клавиша — не вся правда.
+    /// Назначить действию единственную привязку. Прежние события снимаются: у действия
+    /// в этой игре ровно одна привязка, и вторая означала бы, что показанное в настройках
+    /// назначение — не вся правда.
     /// </summary>
-    public static void Bind(string action, Key key)
+    public static void Bind(string action, InputBinding binding)
     {
         if (!InputMap.HasAction(action))
             return;
 
         InputMap.ActionEraseEvents(action);
 
-        // Действие без клавиши — законное состояние: игрок мог отдать её другому,
+        // Действие без привязки — законное состояние: игрок мог отдать клавишу другому,
         // и лучше показать пустую строку в настройках, чем молча оставить двух владельцев
-        if (key != Key.None)
-            InputMap.ActionAddEvent(action, new InputEventKey { PhysicalKeycode = key });
+        if (binding.ToEvent() is { } bound)
+            InputMap.ActionAddEvent(action, bound);
     }
 
     /// <summary>Описание действия по имени либо null.</summary>
@@ -333,9 +391,21 @@ public static class InputActions
     /// одно читается при непустом выделении, другое при пустом, и вместе их застать нельзя.
     /// Отсюда следует, что одна клавиша на приказ атаки и на отбор боевых машин — это
     /// не оплошность настройки, а замысел, и запрещать её нельзя.
+    ///
+    /// Ход камеры клавишами разобран отдельно и первым: он не спорит ни с чем, кроме
+    /// самого себя, поскольку в своём режиме забирает нажатие целиком, а под Alt
+    /// не читается вовсе (см. <see cref="InputScope.CameraPan"/>). Разбирать его общим
+    /// правилом было нельзя: <see cref="InputScope.Always"/> спорит с чем угодно,
+    /// и назначение хода на W отобрало бы клавишу у действия, которое ту же клавишу
+    /// разделяет с камерой намеренно.
     /// </summary>
-    public static bool Collide(InputScope a, InputScope b) =>
-        a == InputScope.Always || b == InputScope.Always || a == b;
+    public static bool Collide(InputScope a, InputScope b)
+    {
+        if (a == InputScope.CameraPan || b == InputScope.CameraPan)
+            return a == b;
+
+        return a == InputScope.Always || b == InputScope.Always || a == b;
+    }
 
     /// <summary>Название раздела настроек.</summary>
     public static string Title(InputSection section) => section switch

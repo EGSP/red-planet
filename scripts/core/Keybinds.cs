@@ -38,16 +38,16 @@ public static class Keybinds
             if (InputActions.Find(name) == null)
                 continue;
 
-            // Пустая клавиша тоже применяется: она означает, что игрок отдал её другому
-            // действию, и вернуть её обратно значило бы получить двух владельцев
-            InputActions.Bind(name, (Key)(int)file.GetValue(Section, name, (int)Key.None));
+            // Пустая привязка тоже применяется: она означает, что игрок отдал клавишу
+            // другому действию, и вернуть её обратно значило бы получить двух владельцев
+            InputActions.Bind(name, InputBinding.Parse(file.GetValue(Section, name, "")));
         }
     }
 
-    /// <summary>Назначить действию клавишу и записать это на диск.</summary>
-    public static void Rebind(string action, Key key)
+    /// <summary>Назначить действию привязку и записать это на диск.</summary>
+    public static void Rebind(string action, InputBinding binding)
     {
-        Apply(action, key);
+        Apply(action, binding);
         Save();
     }
 
@@ -73,19 +73,19 @@ public static class Keybinds
     ///
     /// Прежний владелец остаётся без клавиши, и в настройках это видно пустой строкой.
     /// </summary>
-    private static void Apply(string action, Key key)
+    private static void Apply(string action, InputBinding binding)
     {
         if (InputActions.Find(action) is not { } target)
             return;
 
-        if (key != Key.None)
+        if (!binding.IsEmpty)
             foreach (var other in InputActions.All)
                 if (other.Name != action
-                    && InputActions.BoundKey(other.Name) == key
+                    && InputActions.Bound(other.Name) == binding
                     && InputActions.Collide(target.Scope, other.Scope))
-                    InputActions.Bind(other.Name, Key.None);
+                    InputActions.Bind(other.Name, InputBinding.None);
 
-        InputActions.Bind(action, key);
+        InputActions.Bind(action, binding);
     }
 
     /// <summary>
@@ -98,10 +98,10 @@ public static class Keybinds
 
         foreach (var action in InputActions.All)
         {
-            var key = InputActions.BoundKey(action.Name);
+            var binding = InputActions.Bound(action.Name);
 
-            if (key != Key.None && key != action.Default)
-                file.SetValue(Section, action.Name, (int)key);
+            if (!binding.IsEmpty && binding != action.Default)
+                file.SetValue(Section, action.Name, binding.Store());
         }
 
         file.Save(Path);

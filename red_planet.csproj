@@ -12,4 +12,14 @@
     <Compile Remove="tools\**\*.cs" />
     <None Include="tools\**\*" />
   </ItemGroup>
+  <!--
+    Плагин редактора контента и его модель данных ссылаются на EditorInterface /
+    EditorFileSystem. Эти типы есть только в Debug (конфигурация редактора, с TOOLS).
+    ExportDebug и ExportRelease собираются без сборок редактора, поэтому исходники
+    плагина из них исключаются.
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'ExportDebug' Or '$(Configuration)' == 'ExportRelease'">
+    <Compile Remove="addons\content_editor\**\*.cs" />
+    <Compile Remove="scripts\data\editor\**\*.cs" />
+  </ItemGroup>
 </Project>

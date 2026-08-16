@@ -55,8 +55,8 @@
 [ext_resource type="Script" uid="uid://b8bkh2kwhs8h" path="res://scripts/ui/EventBar.cs" id="48_eventbar"]
 [ext_resource type="Resource" uid="uid://lo25rs6paxsf" path="res://resources/tuning/orders.tres" id="49_ordersettings"]
 [ext_resource type="Resource" uid="uid://dut65crdd0675" path="res://resources/tuning/graphics/graphics.tres" id="50_graphicssettings"]
-[ext_resource type="Script" path="res://scripts/metrics/MetricsSystem.cs" id="51_metrics"]
-[ext_resource type="Script" path="res://scripts/ui/MetricsScreen.cs" id="52_metricsscreen"]
+[ext_resource type="Script" uid="uid://bbx3jv2sarmqs" path="res://scripts/metrics/MetricsSystem.cs" id="51_metrics"]
+[ext_resource type="Script" uid="uid://bbeajmwg6ryta" path="res://scripts/ui/MetricsScreen.cs" id="52_metricsscreen"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
@@ -259,5 +259,5 @@ script = ExtResource("33_outcomemenu")
 [node name="MetricsScreen" type="CanvasLayer" parent="View" unique_id=2055515652]
 script = ExtResource("52_metricsscreen")
 
-[connection signal="ZoomFactorChanged" from="View/Camera" to="Playground/Clouds/Sky" method="DriveBodyByZoomInverted"]
 [connection signal="ZoomFactorChanged" from="View/Camera" to="Playground/Clouds/Sky" method="DriveShadeByZoom"]
+[connection signal="ZoomFactorChanged" from="View/Camera" to="Playground/Clouds/Sky" method="DriveBodyByZoomInverted"]

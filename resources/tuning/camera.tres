@@ -1,9 +1,12 @@
 [gd_resource type="Resource" script_class="CameraSettings" format=3 uid="uid://5bo3xkxq5bvu"]
 
 [ext_resource type="Script" uid="uid://bhrtegskj5mvq" path="res://scripts/world/CameraSettings.cs" id="1_camera"]
+[ext_resource type="Curve" uid="uid://dypuks4od6xo6" path="res://resources/tuning/camera_edge_sense.tres" id="2_edge_sense"]
 
 [resource]
 script = ExtResource("1_camera")
+EdgeSensePercent = 7.0
+EdgeSenseCurve = ExtResource("2_edge_sense")
 ZoomFar = 0.15
 ZoomNear = 0.8
 ZoomSteps = PackedFloat32Array(0.3, 0.5, 1)

@@ -11,13 +11,12 @@ name = "Рой ботов"
 tags = ["swarm"]
 
 # После толпы уместен кулак: игрок только что развернул оборону против множества слабых
-prefer_next = ["heavy_group"]
 
 terror_range = [-1, -1]
 
 army_power_budget     = 1.0
 # Основной бюджет волны идет с общего террора. (120%)
-army_power_per_terror = 1
+army_power_per_terror = 1.3
 
 chill_interval_multiplier = 0.6
 
@@ -32,6 +31,6 @@ near_arc_degrees        = 12.0
 far_arc_degrees         = 35.0
 radius_depth_multiplier = 0.1
 spacing_cells           = 0.9
-groups=2
+groups = 3
 group_delay_seconds=5.0
 groups_arc_degrees = 80

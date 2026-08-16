@@ -29,6 +29,7 @@ ExpansionEnabled = false
 ExpansionCurve = SubResource("Curve_7psm6")
 ExpansionTail = 0.15
 ArmyCurve = SubResource("Curve_lsvjd")
+ArmyWeight = 60.0
 ArmyTail = 0.15
 TimeCurve = SubResource("Curve_din1r")
 TimeTail = 0.15

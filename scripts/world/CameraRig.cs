@@ -1,17 +1,29 @@
 using Godot;
 
 /// <summary>
-/// Камера: сдвиг по границам экрана, перетаскивание средней кнопкой, зум колесом
+/// Камера: сдвиг по границам экрана, перетаскивание по назначенной привязке, зум колесом
 /// и по ступеням с клавиш.
 ///
-/// ПАНОРАМИРОВАНИЕ КЛАВИАТУРУ НЕ ЧИТАЕТ. Прежде камера двигалась по WASD, и это занимало
-/// три клавиши из тех, на которые просятся приказы. Причём занимало намертво: направление
-/// бралось опросом состояния клавиши в <see cref="_Process"/>, а не из события, поэтому
-/// <c>SetInputAsHandled</c> камеру не остановил бы — какая бы система ни приняла событие,
-/// камера всё равно сместилась бы. Сдвиг по границам экрана заодно избавляет от чтения
-/// ввода вовсе: он выводится из положения курсора. Ступени зума этому не противоречат:
-/// они разбираются событием в <see cref="_UnhandledInput"/> и потому останавливаются
-/// тем, кто пометил событие обработанным.
+/// ПАНОРАМИРОВАНИЕ ВЕДЁТСЯ ОДНИМ ИЗ ДВУХ СПОСОБОВ НА ВЫБОР ИГРОКА
+/// (<see cref="CameraControls.PanMode"/>): курсором у края окна либо клавишами. Сдвиг
+/// по границам вовсе не читает ввода — он выводится из положения курсора; ход клавишами
+/// читает события в <see cref="_Input"/> и помечает их обработанными.
+///
+/// ОПРОСОМ КЛАВИАТУРЫ КАМЕРА НЕ ПОЛЬЗУЕТСЯ. Прежде она двигалась по WASD, и направление
+/// бралось опросом состояния клавиши в <see cref="_Process"/>, а не из события; отсюда
+/// следовало, что <c>SetInputAsHandled</c> камеру не остановит — какая бы система
+/// ни приняла событие, камера всё равно сместилась бы. Ход клавишами вернулся уже
+/// на событиях: удержание набирается из нажатий и отпусканий, а само нажатие камера
+/// забирает себе, поэтому W, A, S, D в этом режиме не означают разом и ход, и приказ.
+/// Возвращает им обычный смысл зажатый Alt — под ним камера событие не берёт.
+///
+/// Ступени зума и перетаскивание разбираются событиями в <see cref="_UnhandledInput"/>
+/// и потому останавливаются тем, кто пометил событие обработанным.
+///
+/// ПЕРЕТАСКИВАНИЕ НАЗНАЧАЕТСЯ ИГРОКОМ (<see cref="InputActions.CameraDrag"/>, умолчание —
+/// средняя кнопка мыши). Кнопка перестала быть записанной здесь литералом, поскольку
+/// удержание для перетаскивания держат и на боковых кнопках мыши, и на клавише
+/// под левой рукой.
 ///
 /// В РЕДАКТОРЕ рисуются две рамки — видимая область при дальнем и ближнем упоре зума из
 /// <see cref="CameraSettings"/>. По ним видно, что попадёт в кадр. В запущенной игре рамки
@@ -45,6 +57,17 @@ public partial class CameraRig : Camera2D
     private bool _dragging;
 
     /// <summary>
+    /// Какие стороны света сейчас удерживаются. Порядок тот же, что в
+    /// <see cref="InputActions.CameraPanActions"/>.
+    ///
+    /// СОСТОЯНИЕ НАБИРАЕТСЯ ИЗ СОБЫТИЙ, А НЕ ОПРОСОМ КЛАВИАТУРЫ. Опрос был отвергнут ещё
+    /// при первом отказе камеры от WASD: он не даёт никому остановить камеру, поскольку
+    /// не знает, принял ли событие кто-то другой. Здесь же камера сама помечает событие
+    /// обработанным, и тем самым нажатие достаётся ей, а не приказу.
+    /// </summary>
+    private readonly bool[] _panning = new bool[InputActions.CameraPanActions.Length];
+
+    /// <summary>
     /// Зум, к которому камера идёт. Пока сглаживание не догнало его, он расходится
     /// с <see cref="Camera2D.Zoom"/>, и соседняя ступень отсчитывается именно от него:
     /// иначе второе нажатие посреди перехода возвращало бы туда, откуда камера ещё
@@ -63,6 +86,8 @@ public partial class CameraRig : Camera2D
 
     private float PanSpeed => Settings != null ? Settings.PanSpeed : 700f;
     private float EdgePanMargin => Settings != null ? Settings.EdgePanMarginPx : 24f;
+    private float EdgeSensePercent => Settings != null ? Settings.EdgeSensePercent : 5f;
+    private Curve EdgeSenseCurve => Settings?.EdgeSenseCurve;
     private float ZoomStep => Settings != null ? Settings.ZoomStep : 1.12f;
     private float ZoomLerpSpeed => Settings != null ? Settings.ZoomLerpSpeed : 16f;
     private float[] ZoomSteps => Settings?.ZoomSteps;
@@ -110,10 +135,27 @@ public partial class CameraRig : Camera2D
 
         FollowZoomTarget(dt);
 
-        var dir = EdgeDirection();
+        // Пока открыты настройки, камера стоит: сдвиг за перекрывшим экраном игрок
+        // не видит и не правит, а удержание сбрасывается потому, что отпускание клавиши
+        // до камеры уже не дойдёт — его перехватит назначение
+        if (SettingsMenu.AnyOpen)
+        {
+            StopPanning();
+            return;
+        }
 
-        if (dir != Vector2.Zero)
-            Position += dir.Normalized() * PanSpeed * (float)dt / Zoom.X;
+        var push = CameraControls.KeysMode ? KeyPush() : EdgePush();
+
+        if (push == Vector2.Zero)
+            return;
+
+        // Направление берётся знаками, а быстрота — наибольшим из двух множителей.
+        // Складывать множители нельзя: в углу камера пошла бы по диагонали быстрее,
+        // чем вдоль края, тогда как игрок в обоих случаях ведёт курсор к границе одинаково
+        float strength = Mathf.Max(Mathf.Abs(push.X), Mathf.Abs(push.Y));
+        var dir = new Vector2(Mathf.Sign(push.X), Mathf.Sign(push.Y)).Normalized();
+
+        Position += dir * PanSpeed * strength * (float)dt / Zoom.X;
     }
 
     /// <summary>
@@ -188,9 +230,19 @@ public partial class CameraRig : Camera2D
     }
 
     /// <summary>
-    /// Направление сдвига по границам окна. Курсор, попавший в полосу шириной
-    /// <see cref="EdgePanMargin"/> от края, толкает камеру в сторону этого края; в углу
-    /// складываются обе оси, и движение идёт по диагонали.
+    /// Толчок камеры от границ окна: знак каждой составляющей задаёт сторону, а её величина —
+    /// множитель <see cref="PanSpeed"/>. Курсор, попавший в приграничную полосу, толкает
+    /// камеру в сторону ближнего края; в углу набираются обе оси, и движение идёт
+    /// по диагонали.
+    ///
+    /// ШИРИНА ПОЛОСЫ — БОЛЬШЕЕ ИЗ ДВУХ ЗНАЧЕНИЙ, пиксельного и процентного
+    /// (<see cref="CameraSettings.EdgeSensePercent"/>), и считается по каждой оси отдельно:
+    /// окно бывает вытянутым, и полоса, отмеренная от одной стороны, у другой оказалась бы
+    /// либо чрезмерной, либо неразличимой.
+    ///
+    /// ВЕЛИЧИНА ТОЛЧКА БЕРЁТСЯ У КРИВОЙ <see cref="CameraSettings.EdgeSenseCurve"/>
+    /// по глубине захода в полосу. Кривая не назначена — величина равна единице, то есть
+    /// полоса действует ступенькой, как до появления настройки.
     ///
     /// СДВИГ МОЛЧИТ, ПОКА ОКНО НЕ В ФОКУСЕ ИЛИ КУРСОР ВНЕ ЕГО. Иначе камера ехала бы
     /// всё время, что игрок работает в другом окне: указатель, оставленный у края,
@@ -198,15 +250,11 @@ public partial class CameraRig : Camera2D
     /// за границей вьюпорта.
     ///
     /// Полоса шире половины окна сама себя гасит: обе противоположные проверки срабатывают
-    /// разом и дают ноль по этой оси. Отдельной проверки на такую настройку поэтому нет.
+    /// разом, и толчки по этой оси взаимно уничтожаются. Отдельной проверки на такую
+    /// настройку поэтому нет.
     /// </summary>
-    private Vector2 EdgeDirection()
+    private Vector2 EdgePush()
     {
-        float margin = EdgePanMargin;
-
-        if (margin <= 0f)
-            return Vector2.Zero;
-
         var window = GetWindow();
 
         if (window == null || !window.HasFocus())
@@ -223,14 +271,138 @@ public partial class CameraRig : Camera2D
         if (!rect.HasPoint(mouse))
             return Vector2.Zero;
 
-        var dir = Vector2.Zero;
+        float share = Mathf.Max(EdgeSensePercent, 0f) * 0.01f;
+        float marginX = Mathf.Max(EdgePanMargin, rect.Size.X * share);
+        float marginY = Mathf.Max(EdgePanMargin, rect.Size.Y * share);
 
-        if (mouse.X - rect.Position.X <= margin) dir.X -= 1f;
-        if (rect.End.X - mouse.X <= margin) dir.X += 1f;
-        if (mouse.Y - rect.Position.Y <= margin) dir.Y -= 1f;
-        if (rect.End.Y - mouse.Y <= margin) dir.Y += 1f;
+        var push = Vector2.Zero;
 
-        return dir;
+        push.X -= Strength(mouse.X - rect.Position.X, marginX);
+        push.X += Strength(rect.End.X - mouse.X, marginX);
+        push.Y -= Strength(mouse.Y - rect.Position.Y, marginY);
+        push.Y += Strength(rect.End.Y - mouse.Y, marginY);
+
+        return push;
+    }
+
+    /// <summary>
+    /// Множитель скорости по расстоянию <paramref name="distance"/> от края до курсора
+    /// и ширине полосы <paramref name="margin"/>. Вне полосы — ноль.
+    ///
+    /// Глубина захода считается от внутренней границы полосы к краю окна, поэтому аргумент
+    /// кривой растёт по мере приближения курсора к краю и настройка читается так же, как
+    /// выглядит: левый конец кривой отвечает началу движения, правый — движению у самого
+    /// края.
+    /// </summary>
+    private float Strength(float distance, float margin)
+    {
+        if (margin <= 0f || distance > margin)
+            return 0f;
+
+        var curve = EdgeSenseCurve;
+
+        if (curve == null)
+            return 1f;
+
+        float depth = Mathf.Clamp(1f - distance / margin, 0f, 1f);
+
+        return Mathf.Max(curve.Sample(depth), 0f);
+    }
+
+    /// <summary>
+    /// Толчок камеры удерживаемыми клавишами: составляющие набираются по сторонам света,
+    /// противоположные взаимно уничтожаются. Величина здесь всегда единичная — приграничная
+    /// полоса с её кривой к клавишам отношения не имеет, поскольку у нажатия нет глубины.
+    ///
+    /// ALT ОСТАНАВЛИВАЕТ ХОД, А НЕ СБРАСЫВАЕТ УДЕРЖАНИЕ. Игрок мог зажать Alt посреди
+    /// движения, чтобы отдать приказ; отпустив Alt, он вправе ожидать, что камера пойдёт
+    /// дальше, раз клавиша всё это время оставалась под пальцем.
+    /// </summary>
+    private Vector2 KeyPush()
+    {
+        if (AltHeld())
+            return Vector2.Zero;
+
+        var push = Vector2.Zero;
+
+        for (int i = 0; i < _panning.Length; i++)
+            if (_panning[i])
+                push += InputActions.CameraPanActions[i].Direction;
+
+        return push;
+    }
+
+    /// <summary>
+    /// Зажат ли Alt. Читается опросом, а не из события: остановить ход камеры Alt обязан
+    /// и тогда, когда его нажали посреди удержания, — то есть без всякого события
+    /// от клавиши направления.
+    ///
+    /// Обе клавиши Alt равнозначны, поскольку и прочие места игры (раскладка построек,
+    /// кратность заказа) читают их одним и тем же опросом.
+    /// </summary>
+    private static bool AltHeld() => Input.IsKeyPressed(Key.Alt);
+
+    /// <summary>
+    /// Ход камеры клавишами. Разбирается в <see cref="Node._Input"/>, до интерфейса
+    /// и до всех прочих читателей, и помечается обработанным: в режиме клавиш нажатие
+    /// принадлежит камере целиком, иначе W, A, S, D означали бы разом и ход, и приказ.
+    /// Под зажатым Alt камера событие не берёт вовсе, и оно уходит дальше по цепочке —
+    /// на этом и стоит правило «Alt возвращает клавишам обычный смысл».
+    ///
+    /// ОТПУСКАНИЕ ПРИНИМАЕТСЯ ТОЛЬКО ЗА СВОИМ НАЖАТИЕМ. Иначе отпускание клавиши, нажатой
+    /// под Alt или до включения режима, камера пометила бы обработанным и отняла бы
+    /// у того, кто ждал именно его.
+    ///
+    /// ПОКА ОТКРЫТЫ НАСТРОЙКИ, КАМЕРА КЛАВИШ НЕ ЧИТАЕТ: там идёт назначение, и клавиша,
+    /// перехваченная здесь, не досталась бы экрану настроек, то есть переназначить ход
+    /// камеры было бы нельзя.
+    /// </summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (Engine.IsEditorHint() || SettingsMenu.AnyOpen)
+            return;
+
+        for (int i = 0; i < _panning.Length; i++)
+        {
+            if (!@event.IsAction(InputActions.CameraPanActions[i].Action))
+                continue;
+
+            if (@event.IsPressed())
+            {
+                if (!CameraControls.KeysMode || AltHeld())
+                    return;
+
+                _panning[i] = true;
+            }
+            else
+            {
+                if (!_panning[i])
+                    return;
+
+                _panning[i] = false;
+            }
+
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Окно потеряло фокус — удержание сбрасывается. Отпускание клавиши приходит тому окну,
+    /// которое им владеет, поэтому переключение в другое приложение с зажатой клавишей
+    /// оставило бы камеру идущей до самого возврата.
+    /// </summary>
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusOut || what == NotificationWMWindowFocusOut)
+            StopPanning();
+    }
+
+    /// <summary>Забыть удерживаемые клавиши хода.</summary>
+    private void StopPanning()
+    {
+        for (int i = 0; i < _panning.Length; i++)
+            _panning[i] = false;
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -249,12 +421,15 @@ public partial class CameraRig : Camera2D
                 case MouseButton.WheelDown when mouse.Pressed:
                     ApplyZoom(1f / ZoomStep);
                     break;
-
-                case MouseButton.Middle:
-                    _dragging = mouse.Pressed;
-                    break;
             }
         }
+
+        // Перетаскивание читается удержанием, а не нажатием, поэтому берётся IsAction,
+        // а не IsActionPressed: одно и то же действие включает захват по нажатию
+        // и выключает по отпусканию, чем бы оно ни было назначено — средней кнопкой мыши,
+        // боковой или клавишей
+        if (@event.IsAction(InputActions.CameraDrag))
+            _dragging = @event.IsPressed();
 
         if (@event is InputEventMouseMotion motion && _dragging)
             Position -= motion.Relative / Zoom;

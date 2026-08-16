@@ -48,6 +48,7 @@ public partial class SettingsMenu : CanvasLayer
 
     private HSlider _scaleSlider;
     private Label _scaleValue;
+    private OptionButton _panMode;
 
     /// <summary>
     /// Идёт перетаскивание ползунка масштаба. Пока оно идёт, масштаб не применяется:
@@ -57,12 +58,35 @@ public partial class SettingsMenu : CanvasLayer
     /// </summary>
     private bool _dragging;
 
+    /// <summary>
+    /// Кнопка мыши, отпускание которой предстоит проглотить. Назначение завершается
+    /// нажатием, но отпускание приходит после него и досталось бы кнопке интерфейса,
+    /// под которой стоит курсор, — то есть назначение началось бы заново.
+    /// </summary>
+    private MouseButton _swallow = MouseButton.None;
+
+    /// <summary>
+    /// Открыт ли экран настроек прямо сейчас. Признак нужен камере: в режиме клавиш она
+    /// перехватывает нажатия до интерфейса, и, пока идёт назначение, ход камеры отнял бы
+    /// у настроек ту самую клавишу, которую игрок назначает.
+    ///
+    /// Счётчик, а не булево поле: два экрана разом <see cref="Root.OpenSettings"/>
+    /// не допускает, но закрытие одного не должно снимать признак, поставленный другим,
+    /// если запрет однажды ослабнет.
+    /// </summary>
+    public static bool AnyOpen => _open > 0;
+
+    private static int _open;
+
     public override void _Ready()
     {
         // Выше меню паузы, ниже панели отладки: настройки перекрывают игру, но не отладку
         Layer = 20;
+        _open++;
         Build();
     }
+
+    public override void _ExitTree() => _open--;
 
     /// <summary>
     /// Клавиши ловим до всех остальных: пока идёт назначение, нажатие принадлежит настройкам
@@ -80,7 +104,7 @@ public partial class SettingsMenu : CanvasLayer
             // Escape отменяет назначение, а не назначается: иначе первым же промахом
             // игрок потерял бы клавишу отмены и не смог бы закрыть настройки
             if (key.PhysicalKeycode != Key.Escape)
-                Keybinds.Rebind(_capturing, key.PhysicalKeycode);
+                Keybinds.Rebind(_capturing, InputBinding.Of(key.PhysicalKeycode));
 
             StopCapture();
             GetViewport().SetInputAsHandled();
@@ -92,6 +116,48 @@ public partial class SettingsMenu : CanvasLayer
             Close();
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    /// <summary>
+    /// Назначение кнопки мыши. Разбирается в <see cref="Node._Input"/>, а не в
+    /// <see cref="Node._UnhandledInput"/>, поскольку до последнего нажатие мыши не доходит
+    /// вовсе: затемнение и кнопки настроек перехватывают его как обычный щелчок по
+    /// интерфейсу. Ввод помечается обработанным, поэтому нажатие, ушедшее в назначение,
+    /// не считается щелчком.
+    ///
+    /// Кнопка, назначить которую нельзя (<see cref="InputBinding.CanBind"/>), отменяет
+    /// назначение вместо того, чтобы быть молча пропущенной: щелчок мимо — обычный способ
+    /// передумать, и молчание выглядело бы так, будто настройки зависли в ожидании.
+    /// </summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is not InputEventMouseButton mouse)
+            return;
+
+        if (!mouse.Pressed)
+        {
+            if (mouse.ButtonIndex != _swallow)
+                return;
+
+            _swallow = MouseButton.None;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_capturing == null)
+            return;
+
+        if (InputBinding.CanBind(mouse.ButtonIndex))
+            Keybinds.Rebind(_capturing, InputBinding.Of(mouse.ButtonIndex));
+
+        StopCapture();
+
+        // Колесо отпускания не имеет, и глотать у него нечего
+        _swallow = mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown
+            ? MouseButton.None
+            : mouse.ButtonIndex;
+
+        GetViewport().SetInputAsHandled();
     }
 
     private void Close() => QueueFree();
@@ -134,6 +200,10 @@ public partial class SettingsMenu : CanvasLayer
         controls.Name = "Управление";
         tabs.AddChild(controls);
 
+        var camera = BuildCameraPage();
+        camera.Name = "Камера";
+        tabs.AddChild(camera);
+
         var graphics = BuildGraphicsPage();
         graphics.Name = "Графика";
         tabs.AddChild(graphics);
@@ -154,7 +224,9 @@ public partial class SettingsMenu : CanvasLayer
         var page = new VBoxContainer();
         page.AddThemeConstantOverride("separation", 8);
 
-        page.AddChild(HintLabel("Щёлкните по клавише и нажмите новую. Escape — отмена."));
+        page.AddChild(HintLabel(
+            "Щёлкните по назначению и нажмите новую клавишу либо среднюю или боковую "
+            + "кнопку мыши. Escape — отмена."));
 
         var scroll = new ScrollContainer
         {
@@ -167,7 +239,9 @@ public partial class SettingsMenu : CanvasLayer
         list.AddThemeConstantOverride("separation", 8);
         scroll.AddChild(list);
 
-        BuildSections(list);
+        // Камера вынесена на свою вкладку целиком: там к её клавишам примыкает выбор
+        // способа панорамирования, без которого половина этих клавиш не действует вовсе
+        BuildSections(list, section => section != InputSection.Camera);
 
         var footer = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         page.AddChild(footer);
@@ -181,11 +255,18 @@ public partial class SettingsMenu : CanvasLayer
     /// Разделы идут в порядке объявления <see cref="InputSection"/>, а действия внутри —
     /// в порядке объявления карты. Пустой раздел пропускается: отладочные действия могут
     /// когда-нибудь скрыться от игрока целиком, и заголовок без строк выглядел бы ошибкой.
+    ///
+    /// Отбор разделов задаётся условием, а не перечнем: вкладок с клавишами две, и каждая
+    /// показывает то, что не показывает другая, поэтому забытый раздел не исчезнет
+    /// из настроек молча.
     /// </summary>
-    private void BuildSections(Node parent)
+    private void BuildSections(Node parent, System.Func<InputSection, bool> allowed)
     {
         foreach (InputSection section in System.Enum.GetValues<InputSection>())
         {
+            if (!allowed(section))
+                continue;
+
             var rows = new List<InputAction>();
 
             foreach (var action in InputActions.All)
@@ -236,6 +317,90 @@ public partial class SettingsMenu : CanvasLayer
         row.AddChild(button);
 
         return row;
+    }
+
+    // ── вкладка камеры ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Камера: способ панорамирования и её собственные клавиши.
+    ///
+    /// СПОСОБ СТОИТ ПЕРВЫМ, ДО КЛАВИШ, потому что от него зависит, действуют ли клавиши
+    /// хода вообще: в режиме края экрана они не читаются, и показывать их прежде выбора
+    /// значило бы обещать действие, которого нет.
+    /// </summary>
+    private Control BuildCameraPage()
+    {
+        var page = new VBoxContainer();
+        page.AddThemeConstantOverride("separation", 8);
+
+        var scroll = new ScrollContainer
+        {
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        page.AddChild(scroll);
+
+        var list = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        list.AddThemeConstantOverride("separation", 8);
+        scroll.AddChild(list);
+
+        var caption = new Label { Text = "ПАНОРАМИРОВАНИЕ" };
+        caption.AddThemeFontSizeOverride("font_size", 13);
+        caption.AddThemeColorOverride("font_color", Heading);
+        list.AddChild(caption);
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        list.AddChild(row);
+
+        var label = new Label
+        {
+            Text = "Чем вести камеру",
+            CustomMinimumSize = new Vector2(TitleWidth, 0),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            ClipText = true,
+        };
+        label.AddThemeFontSizeOverride("font_size", 14);
+        row.AddChild(label);
+
+        _panMode = new OptionButton { CustomMinimumSize = new Vector2(140, 30) };
+        _panMode.AddThemeFontSizeOverride("font_size", 13);
+
+        foreach (CameraPanMode mode in System.Enum.GetValues<CameraPanMode>())
+            _panMode.AddItem(CameraControls.Label(mode), (int)mode);
+
+        _panMode.Selected = _panMode.GetItemIndex((int)CameraControls.PanMode);
+        _panMode.ItemSelected += OnPanModeSelected;
+        row.AddChild(_panMode);
+
+        list.AddChild(HintLabel(
+            "Курсором у края экрана — камера идёт, когда указатель подведён к границе окна. "
+            + "Клавишами — камера идёт по W, A, S, D, а край окна её не двигает. "
+            + "В режиме клавиш нажатие достаётся камере целиком, поэтому A под ней "
+            + "не отдаёт приказ атаки; зажатый Alt возвращает клавишам обычный смысл."));
+
+        list.AddChild(new Control { CustomMinimumSize = new Vector2(0, 6) });
+
+        list.AddChild(HintLabel("Щёлкните по назначению и нажмите новую клавишу либо "
+            + "среднюю или боковую кнопку мыши. Escape — отмена."));
+
+        BuildSections(list, section => section == InputSection.Camera);
+
+        var footer = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        page.AddChild(footer);
+
+        AddButton(footer, "Панорамирование по умолчанию", ResetPanMode);
+
+        return page;
+    }
+
+    private void OnPanModeSelected(long index) =>
+        CameraControls.SetPanMode((CameraPanMode)_panMode.GetItemId((int)index));
+
+    private void ResetPanMode()
+    {
+        CameraControls.Reset();
+        _panMode.Selected = _panMode.GetItemIndex((int)CameraControls.PanMode);
     }
 
     // ── вкладка графики ────────────────────────────────────────────────────────

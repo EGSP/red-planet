@@ -27,6 +27,11 @@
 | Запись TOML | `scripts/data/editor/TomlPatchWriter.cs` | точечная правка ключей и блоков `[[name]]` без потери комментариев |
 | Отрисовка зданий | `scripts/draw/BuildingVisual.cs` | общий код с Building._Draw |
 
+Исходники `addons/content_editor/` и `scripts/data/editor/` исключены из
+конфигураций `ExportDebug` и `ExportRelease` в `red_planet.csproj`: они ссылаются
+на типы редактора (`EditorInterface`, `EditorFileSystem`), которых нет в игровой
+сборке. В редакторе (конфигурация `Debug`) они компилируются как обычно.
+
 Неочевидные ограничения Godot и решения, принятые после обнаруженных дефектов,
 собраны в [`docs/content-editor-tips.md`](content-editor-tips.md).
 
