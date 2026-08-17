@@ -54,7 +54,7 @@ public partial class WeaponSystem : GameSystem
             armed.AimAt(to, dt);
 
             foreach (var mount in armed.Aim.Mounts)
-                TryShoot(armed, mount, from, to);
+                TryShoot(armed, mount, from, target);
         }
     }
 
@@ -66,13 +66,22 @@ public partial class WeaponSystem : GameSystem
     /// Сектор считается от оси ИМЕННО ЭТОГО ствола, а не от корпуса и не от главного ствола:
     /// иначе бортовое орудие, упёршееся в край своего сектора наведения, стреляло бы вслед
     /// за башней в сторону, куда оно не смотрит.
+    ///
+    /// ДАЛЬНОСТЬ ЗДЕСЬ СЧИТАЕТСЯ ТОЙ ЖЕ ФОРМУЛОЙ, ЧТО И ВЫШЕ. Проверка ведётся через
+    /// <see cref="Targeting.InFiringRange"/>, то есть до КРАЯ цели, а не до её середины.
+    /// Расстояние между центрами здесь не годится: подход к цели рассчитан от края
+    /// (<see cref="Targeting.ApproachDistance"/>), и потому носитель, вставший вплотную
+    /// к стене завода, отстоит от центра постройки дальше, чем бьёт его ствол. Со второй
+    /// формулой такой носитель молчал бы у самой стены, и тем сильнее, чем крупнее цель.
     /// </summary>
-    private void TryShoot(IArmed armed, ToolMount mount, Vector2 from, Vector2 to)
+    private void TryShoot(IArmed armed, ToolMount mount, Vector2 from, IDamageable target)
     {
         var weapon = mount.Weapon;
 
-        if (weapon == null || from.DistanceTo(to) > weapon.RangePx)
+        if (!Targeting.InFiringRange(weapon, from, target))
             return;
+
+        var to = target.GlobalPosition;
 
         if (!Heading.InCone(mount.World(armed.BodyFacing), from, to, weapon.FireArc))
             return;
@@ -85,35 +94,42 @@ public partial class WeaponSystem : GameSystem
 
     /// <summary>
     /// Своя цель в приоритете: враг бьёт того, к кому шёл, а не первого встречного.
-    /// Автовыбор и ответный огонь не выходят за обзор носителя: ствол длиннее зрения
-    /// не даёт права стрелять в то, чего носитель не видит.
+    ///
+    /// ДВА ПРЕДЕЛА, И РОЛИ У НИХ РАЗНЫЕ. Докуда достаёт выстрел, решает дальность ствола;
+    /// известно ли вообще, где противник, решает разведка стороны (<see cref="Sight"/>).
+    /// Прежде оба вопроса решал личный обзор стрелка, и меньшее из двух чисел справочника
+    /// молча отменяло большее: зоркий с коротким стволом вёл себя ровно как близорукий
+    /// с длинным. Теперь зоркий не стреляет дальше своего ствола, а слепой бьёт по цели,
+    /// разведанной союзником.
+    ///
+    /// Предел автовыбора меряется до края цели, как и сама огневая граница. Расстояние
+    /// между центрами отсекало бы крупные постройки: подойдя к стене завода вплотную,
+    /// носитель оставался бы от его середины дальше, чем бьёт ствол, и цели «не находил» —
+    /// притом что стрелять по ней разрешено.
     /// </summary>
     private IDamageable AcquireTarget(IArmed armed, WeaponDefinition weapon)
     {
-        float sight = SightRange(armed);
-
         var own = armed.FireTarget;
         if (own != null && Targeting.IsValid(own as GodotObject))
-        {
-            if (armed.GlobalPosition.DistanceTo(own.GlobalPosition) > sight)
-                return null;
+            return Spotted(armed, own) ? own : null;
 
-            return own;
-        }
-
-        float reach = Mathf.Min(weapon.RangePx, sight);
+        float reach = weapon.RangePx;
         if (reach <= 0f)
             return null;
 
-        return Targeting.Nearest(armed.GlobalPosition, armed.Faction.Opposite(), reach);
+        // Разведка спрашивается у одной цели, уже выбранной, а не у каждой из перебираемых:
+        // обход источников обзора на каждого кандидата стоил бы произведения численностей,
+        // тогда как правило «бьём ближайшего, если он разведан» даёт тот же исход всюду,
+        // кроме случая, когда ближайший скрыт, а дальний виден. Такой случай разрешается
+        // сам собой на следующей переигровке выбора
+        var target = Targeting.NearestInReach(armed.GlobalPosition, armed.Faction.Opposite(), reach);
+
+        return target != null && Spotted(armed, target) ? target : null;
     }
 
-    /// <summary>
-    /// Предел, дальше которого ствол сам цель не ищет. Нет обзора — нет автоогня;
-    /// нет признака зрения — предел не режет дальность (на случай носителя без IVision).
-    /// </summary>
-    private static float SightRange(IArmed armed) =>
-        armed is IVision vision ? vision.VisionRadius : float.MaxValue;
+    /// <summary>Разведана ли цель стороной стрелка. Свой обзор проверяется первым.</summary>
+    private static bool Spotted(IArmed armed, IDamageable target) =>
+        Sight.Spots(armed.Faction, target.GlobalPosition, armed as IVision);
 
     private void Fire(IArmed armed, ToolMount mount, Vector2 to)
     {

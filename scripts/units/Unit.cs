@@ -49,6 +49,12 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     private IDamageable _engaged;
 
     /// <summary>
+    /// Сколько секунд подряд драться не с кем. По нему отличается конец боя от паузы
+    /// между двумя противниками — см. <see cref="Regroup"/>.
+    /// </summary>
+    private float _calm;
+
+    /// <summary>
     /// Приказ патруля, который исполняется прямо сейчас. По смене ссылки обнуляются
     /// случайная точка и отсчёт пребывания: они принадлежат одному приказу, и переход
     /// к следующей точке маршрута начинает счёт заново.
@@ -419,12 +425,65 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Rotation = Heading.TurnToward(Rotation, request, step);
     }
 
-    /// <summary>Приказов нет — отпускаем узел работы и стоим.</summary>
+    /// <summary>
+    /// Приказов нет: узел работы отпускается, а противник в поле внимания принимается
+    /// к бою по тому же правилу, что и в приказе «идти с боем» (см. <see cref="Engaged"/>).
+    ///
+    /// Бой по своему почину ограничен режимом из справочника (<see cref="Engagement"/>):
+    /// одни виды держат место, другие преследуют. Оставшись без целей, юнит возвращается
+    /// к якорю — иначе преследование раз за разом уводило бы отряд с рубежа, на который
+    /// его поставили.
+    /// </summary>
     public void OnIdle(double dt)
     {
         _assisted = null;
         Detach();
+
+        if (Definition == null || !FightsOnOwn)
+            return;
+
+        if (Engaged(own: true))
+        {
+            _calm = 0f;
+            return;
+        }
+
+        _calm += (float)dt;
+
+        Regroup();
     }
+
+    /// <summary>
+    /// Вернуться на своё место, когда драться не с кем.
+    ///
+    /// ВОЗВРАТ НАЧИНАЕТСЯ НЕ СРАЗУ. Промежуток между гибелью одного противника и выбором
+    /// следующего — обычное дело в бою: волна подходит не разом, а цель на месте павшей
+    /// находится в ближайшие мгновения. Немедленный возврат превращал такой промежуток
+    /// в рывок назад с последующим разворотом обратно. Отсчёт тишины
+    /// (<see cref="Const.RegroupDelay"/>) отличает конец боя от паузы в нём.
+    ///
+    /// Возвращается только ПОСТАВЛЕННЫЙ (<see cref="Posted"/>) — тот, кому игрок указал место
+    /// либо кого завод отправил в точку сбора. У прочих якорем служит место появления,
+    /// и возврат к нему означал бы, что юнит противника после боя уходит обратно за карту.
+    ///
+    /// Допуск в клетку нужен против дрожания: строй расталкивает соседей, и точное совпадение
+    /// с якорем недостижимо — без допуска юнит подправлял бы положение вечно.
+    /// </summary>
+    private void Regroup()
+    {
+        if (!Posted || !Definition.IsMobile || _calm < Const.RegroupDelay)
+            return;
+
+        if (GlobalPosition.DistanceTo(_anchor) > Const.Unit)
+            Movement.Seek(_anchor, 0f);
+    }
+
+    /// <summary>
+    /// Вступает ли сущность в бой без приказа. Истинно у всех, кроме коммандера: им игрок
+    /// распоряжается напрямую, и уводить его с места по своему усмотрению нельзя — гибель
+    /// коммандера завершает партию. Стрелять с места это ему не мешает.
+    /// </summary>
+    protected virtual bool FightsOnOwn => true;
 
     /// <summary>
     /// Отработать приказ за кадр. Снимать невыполнимое с головы очереди не наше дело —
@@ -687,9 +746,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Подходим до дистанции, заведомо лежащей ВНУТРИ огневой границы, а не до самой
     /// границы. Остановка по признаку «уже достаю» оставляла юнита ровно на краю,
     /// откуда любое смещение цели или толчок соседа выводили его из радиуса.
-    /// Предел обзора режет подход: иначе дальнобойный вставал бы за пределами зрения,
-    /// откуда WeaponSystem огонь не откроет. Безоружный подходит на длину инструмента:
-    /// приказ хотя бы не зависает.
+    /// Обзор подход больше не режет: право на выстрел даёт разведка стороны, а не личное
+    /// зрение стрелка. Безоружный подходит на длину инструмента: приказ хотя бы не зависает.
     /// </summary>
     private void Approach(Node2D victim, IDamageable target)
     {
@@ -700,7 +758,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float stop = Weapon != null
             ? Targeting.ApproachDistance(Weapon, GlobalPosition, target,
-                Definition.ApproachHoldFraction, Definition.VisionRadiusPx)
+                Definition.ApproachHoldFraction)
             : Reach.StopDistance(GlobalPosition, victim, Definition.WorkRangePx);
 
         if (GlobalPosition.DistanceTo(to) > stop)
@@ -736,26 +794,69 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
     /// <summary>
     /// Отвлечение на цель в поле внимания: правило, общее для приказов «идти с боем»
-    /// и «патрулировать». Возвращает true, если исполнитель занят боем и дальше идти
-    /// ему сейчас не следует.
+    /// и «патрулировать» и для юнита БЕЗ приказов. Возвращает true, если исполнитель занят
+    /// боем и дальше идти ему сейчас не следует.
+    ///
+    /// ПОЧЕМУ ПРАВИЛО ОДНО НА ПРИКАЗ И НА ПРОСТОЙ. Прежде незанятый юнит стоял на месте,
+    /// и «отреагировать на противника» означало для него только выстрелить с места. Виду
+    /// с коротким стволом это не оставляло никакой возможности вступить в бой: огнемётчик
+    /// с дальностью в одну клетку ждал, пока противник подойдёт вплотную сам, и со стороны
+    /// это читалось как отсутствие реакции. Сближение — такая же часть реакции, как выстрел,
+    /// и зависеть от наличия приказа оно не должно.
     ///
     /// Цель принадлежит исполнителю, а не приказу: приказ общий на отряд, а отвлекается
     /// каждый на своё. Подход считается той же формулой огневой границы, что и у приказа
     /// атаки, — расходиться в ней виды приказов не должны.
+    ///
+    /// ЦЕЛЬ ИЩЕТСЯ В ПРЕДЕЛАХ СОБСТВЕННОГО ОБЗОРА, И ЭТО НЕ ТО ЖЕ, ЧТО ПРАВО НА ВЫСТРЕЛ.
+    /// Сближаться юнит готов с тем, что видит сам: идти на цель, разведанную соседом
+    /// за полкарты, он не должен. Стрелять же он вправе по всему разведанному стороной
+    /// в пределах ствола — см. <see cref="Sight"/>. Отсюда и разное поведение видов: зоркий
+    /// с коротким стволом сам едет на противника, слепой с длинным стоит и бьёт по цели,
+    /// разведанной союзником.
+    ///
+    /// ПРЕДЕЛ УХОДА ЗАДАН РЕЖИМОМ БОЯ И ДЕЙСТВУЕТ ПРИ ВЫБОРЕ ЦЕЛИ. <paramref name="own"/>
+    /// означает, что юнит вступает в бой по своему почину, а не по приказу; тогда режим
+    /// <see cref="Engagement.Hold"/> оставляет только те цели, к которым можно подойти
+    /// на дистанцию огня, не покинув поля внимания вокруг якоря, а <see cref="Engagement.Pursue"/>
+    /// не ограничивает ничего. Приказ режима не касается вовсе: указание игрока ведёт
+    /// исполнителя куда угодно далеко, и отвлечение по дороге тоже.
+    ///
+    /// ОТБОР ИДЁТ ИМЕННО ПРИ ВЫБОРЕ, А НЕ ПРИ ДВИЖЕНИИ. Прежде поводок останавливал уже
+    /// начатое сближение, и юнит с коротким стволом замирал на полпути: цель у него была,
+    /// а дистанции огня он не достигал и потому не стрелял вовсе. Отвергнутая заранее цель
+    /// такого положения не создаёт — юнит либо доходит и бьёт, либо не идёт совсем.
     /// </summary>
-    private bool Engaged()
+    private bool Engaged(bool own = false)
     {
-        float attention = Definition.AttentionRadiusPx;
+        if (Weapon == null)
+            return false;
 
-        // Цель, павшая или отставшая, перестаёт задерживать: приказ ведёт дальше
+        float sight = Definition.VisionRadiusPx;
+
+        // Цель, павшая, ушедшая из виду или ставшая недостижимой, перестаёт задерживать.
+        //
+        // ОТСЧЁТ ПЕРЕИГРОВКИ ПРИ ЭТОМ СБРАСЫВАЕТСЯ, и это важно: отсчёт нужен затем, чтобы
+        // не перебирать целей каждый кадр при ЖИВОЙ цели, а не затем, чтобы выдерживать
+        // паузу после её гибели. Без сброса юнит полторы секунды считался свободным
+        // и успевал тронуться назад к якорю, прежде чем находил следующего противника
         if (_engaged != null
             && (!Targeting.IsValid(_engaged as GodotObject)
-                || GlobalPosition.DistanceTo(_engaged.GlobalPosition) > attention))
-            _engaged = null;
-
-        if (_engaged == null && Weapon != null && NeedsTarget)
+                || GlobalPosition.DistanceTo(_engaged.GlobalPosition) > sight
+                || (own && !Reachable(_engaged))))
         {
-            _engaged = Targeting.Nearest(GlobalPosition, Faction.Opposite(), attention);
+            _engaged = null;
+            _retarget = 0f;
+        }
+
+        // Выбор переигрывается по отсчёту, а не каждый кадр: у юнита без приказов признак
+        // Orders.Idle истинен всегда, и поиск по нему шёл бы полным перебором целей
+        // на каждом кадре у каждого незанятого
+        if (_engaged == null && _retarget <= 0f)
+        {
+            _engaged = Targeting.Nearest(GlobalPosition, Faction.Opposite(), sight,
+                own ? Reachable : null);
+
             NoteTargeted();
         }
 
@@ -763,12 +864,33 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return false;
 
         float hold = Targeting.ApproachDistance(Weapon, GlobalPosition, _engaged,
-            Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
+            Definition.ApproachHoldFraction);
 
         if (GlobalPosition.DistanceTo(_engaged.GlobalPosition) > hold)
             Movement.Seek(_engaged.GlobalPosition, hold);
 
         return true;
+    }
+
+    /// <summary>
+    /// Годится ли цель для боя по своему почину. При <see cref="Engagement.Pursue"/> годится
+    /// любая; при <see cref="Engagement.Hold"/> — та, до которой юнит достанет, оставаясь
+    /// в поле внимания вокруг якоря.
+    ///
+    /// Дистанция подхода считается ОТ ЯКОРЯ, а не от нынешнего места: юнит пойдёт к цели
+    /// именно оттуда, куда ему позволено вернуться, и поправка на габарит цели должна быть
+    /// взята с той же стороны.
+    /// </summary>
+    private bool Reachable(IDamageable target)
+    {
+        if (Definition.Engagement != Engagement.Hold)
+            return true;
+
+        float approach = Targeting.ApproachDistance(Weapon, _anchor, target,
+            Definition.ApproachHoldFraction);
+
+        return _anchor.DistanceTo(target.GlobalPosition) - approach
+               <= Definition.AttentionRadiusPx;
     }
 
     /// <summary>
@@ -987,7 +1109,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Detach();
 
         float stop = Targeting.ApproachDistance(Weapon, GlobalPosition, victim as IDamageable,
-            Definition.ApproachHoldFraction, Definition.VisionRadiusPx);
+            Definition.ApproachHoldFraction);
 
         if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
             Movement.Seek(victim.GlobalPosition, stop);

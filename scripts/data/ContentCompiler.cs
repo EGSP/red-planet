@@ -485,8 +485,12 @@ public static class ContentCompiler
         // лежала в разделе spawn вместе с весом появления, хотя к появлению отношения
         // не имеет: определение обязано описывать сам юнит, а не то, как его выставляют
         if (document.Section("battle") is { } battle)
+        {
             definition.ApproachHoldFraction =
                 battle.Float("approach_hold", basis.ApproachHoldFraction);
+
+            definition.Engagement = battle.Enum("engagement", basis.Engagement);
+        }
 
         if (document.Section("plant") is { } plant)
         {

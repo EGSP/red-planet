@@ -160,6 +160,13 @@ public static class ContentSchema
             Section("terror", "ignore_modifiers", "Ignore zone modifiers", ContentFieldType.Bool),
 
             Section("battle", "approach_hold", "Approach hold", ContentFieldType.Float),
+            Hint(SectionEnum("battle", "engagement", "Engagement", typeof(Engagement)),
+                "How far the unit goes in a fight it started on its own, without an order. "
+                + "Hold — it only takes targets it can reach without leaving the attention "
+                + "radius around its anchor, so the line is kept. Pursue — no limit on how "
+                + "far it follows, and it returns to the anchor once no targets are left; "
+                + "this is what a short-ranged unit needs to reach anything at all. "
+                + "A player's order ignores the mode and leads the unit any distance."),
 
             Section("plant", "factory_cooldown", "Factory cooldown", ContentFieldType.Float,
                 def => def.Class == UnitClass.Plant || def.Plant != null),

@@ -100,6 +100,7 @@ public static class ContentValueReader
             "battle" => field.Key switch
             {
                 "approach_hold" => def.ApproachHoldFraction,
+                "engagement" => def.Engagement,
                 _ => null,
             },
             "plant" => field.Key switch

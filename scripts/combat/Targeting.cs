@@ -11,12 +11,37 @@ using Godot;
 /// </summary>
 public static class Targeting
 {
-    /// <summary>Ближайшая живая цель указанной стороны, не дальше maxDistance пикселей.</summary>
+    /// <summary>
+    /// Ближайшая живая цель указанной стороны, не дальше maxDistance пикселей.
+    ///
+    /// <paramref name="accept"/> отсеивает негодных ПО ПРИЧИНАМ ВЫЗЫВАЮЩЕГО — например,
+    /// недостижимых без ухода с рубежа. Отбор идёт при выборе, а не после него: цель,
+    /// отвергнутая позже, оставила бы юнита вовсе без цели, хотя рядом есть подходящая.
+    /// </summary>
     public static IDamageable Nearest(Vector2 from, Faction side,
-        float maxDistance = float.MaxValue) =>
+        float maxDistance = float.MaxValue, System.Func<IDamageable, bool> accept = null) =>
         GameManager.I.Targets[side]
             .Where(target => !target.Health.IsDead && !Leaving(target))
+            .Where(accept)
             .Nearest(from, target => target.GlobalPosition, maxDistance);
+
+    /// <summary>
+    /// Ближайшая живая цель указанной стороны, до ПОВЕРХНОСТИ которой инструмент дотягивается.
+    ///
+    /// Отличается от <see cref="Nearest"/> тем, как понимается предел: там он ограничивает
+    /// расстояние между центрами, здесь — расстояние до края цели, то есть ровно та величина,
+    /// которой меряется огневая граница. Разница существенна для крупных целей: у постройки
+    /// шесть на шесть край отстоит от середины на три клетки, и предел по центрам отсекал бы
+    /// её у стрелка, стоящего вплотную к стене.
+    ///
+    /// Предел по центрам остаётся у полей внимания и приказов: там речь идёт о месте на карте,
+    /// а не о том, дотянется ли ствол.
+    /// </summary>
+    public static IDamageable NearestInReach(Vector2 from, Faction side, float reach) =>
+        GameManager.I.Targets[side]
+            .Where(target => !target.Health.IsDead && !Leaving(target)
+                             && Reach.Within(from, target, reach))
+            .Nearest(from, target => target.GlobalPosition);
 
     /// <summary>Юнит ещё внутри корпуса завода — ни цель, ни стрелок.</summary>
     public static bool Leaving(object obj) =>
@@ -57,21 +82,23 @@ public static class Targeting
     /// ни при каких числах справочника. Запас берётся как доля дальности, но не меньше
     /// <see cref="ApproachMargin"/>.
     ///
-    /// <paramref name="maxRange"/> ограничивает рабочую дальность сверху: обзор меньше
-    /// ствола не должен оставлять юнита стоять за пределами видимости, откуда огонь
-    /// всё равно запрещён.
+    /// ОБЗОР СЮДА БОЛЬШЕ НЕ ВХОДИТ. Прежде рабочая дальность обрезалась сверху радиусом
+    /// обзора, поскольку огонь дальше видимого был запрещён. Теперь право на выстрел даёт
+    /// разведка стороны (<see cref="Sight"/>), а не личный обзор стрелка, и обрезать
+    /// сближение обзором значило бы, что дальнобойный, но близорукий юнит подъезжает
+    /// к противнику вплотную, хотя достаёт до него издалека.
     ///
     /// Зачем запас вообще нужен: цель движется, юнита толкают соседи, а выталкивание
     /// из построек сдвигает его на радиус корпуса. Остановка ровно на границе означала бы,
     /// что огонь прекращается от любого из этих смещений.
     /// </summary>
     public static float ApproachDistance(WeaponDefinition weapon, Vector2 from,
-        IDamageable target, float approachHoldFraction, float maxRange = float.MaxValue)
+        IDamageable target, float approachHoldFraction)
     {
         if (weapon == null)
             return 0f;
 
-        float reach = Mathf.Min(weapon.RangePx, maxRange);
+        float reach = weapon.RangePx;
         float slack = Mathf.Max(
             reach * (1f - Mathf.Clamp(approachHoldFraction, 0f, 1f)), ApproachMargin);
 

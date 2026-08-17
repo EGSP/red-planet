@@ -7,6 +7,13 @@ using Godot;
 /// </summary>
 public partial class Commander : Unit
 {
+    /// <summary>
+    /// Сам за противником не идёт. Прочие юниты без приказа сближаются с тем, кого видят,
+    /// а коммандер держит место: его гибель есть поражение, и решение подставить его под
+    /// огонь принадлежит игроку, а не правилу поведения.
+    /// </summary>
+    protected override bool FightsOnOwn => false;
+
     public override void _Ready()
     {
         base._Ready();
