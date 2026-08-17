@@ -43,6 +43,15 @@ public partial class MovementSystem : GameSystem
 
     [Export] public float AlignWeight = 0.35f;
 
+    /// <summary>Вес отклонения от стен. Заведомо больше веса обхода соседей: см. <see cref="Walls"/>.</summary>
+    [Export] public float WallWeight = 2.2f;
+
+    /// <summary>
+    /// На сколько радиусов корпуса сущность начинает отклоняться от стены. Расстояние
+    /// меряется от поверхности строения до края корпуса, а не до его середины.
+    /// </summary>
+    [Export] public float WallMargin = 2.2f;
+
     /// <summary>Сколько проходов расталкивания за кадр.</summary>
     [Export] public int ResolvePasses = 2;
 
@@ -58,6 +67,7 @@ public partial class MovementSystem : GameSystem
     private readonly List<IMobile> _actors = new();
     private readonly Dictionary<Vector2I, List<int>> _buckets = new();
     private readonly List<int> _nearby = new();
+    private readonly List<Obb> _walls = new();
 
     private PathfindingSystem _pathfinding;
     private int _active;
@@ -192,14 +202,17 @@ public partial class MovementSystem : GameSystem
 
         var avoid = Avoidance(mobile, movement, position, seek, radius * SenseFactor);
         var align = Alignment(mobile, position, radius * SenseFactor);
+        var wall = Walls(movement, position, seek, radius, remaining);
 
         movement.SeekForce = seek;
         movement.AvoidForce = avoid;
         movement.AlignForce = align;
+        movement.WallForce = wall;
         movement.SeekScale = SeekScale(mobile, position, seek, radius);
         movement.Neighbours = _nearby.Count;
 
-        var steer = seek * movement.SeekScale + avoid * AvoidWeight + align * AlignWeight;
+        var steer = seek * movement.SeekScale + avoid * AvoidWeight + align * AlignWeight
+                    + wall * WallWeight;
 
         var desired = steer.LengthSquared() > 0.000001f
             ? Drive(mobile, definition, steer, Approach(definition, remaining), dt)
@@ -251,9 +264,11 @@ public partial class MovementSystem : GameSystem
         movement.SeekForce = Vector2.Zero;
         movement.AvoidForce = Vector2.Zero;
         movement.AlignForce = Vector2.Zero;
+        movement.WallForce = Vector2.Zero;
         movement.SeekScale = 1f;
         movement.Neighbours = 0;
         movement.AvoidSide = 0;
+        movement.WallSide = 0;
 
         if (definition.SpeedPx <= 0f)
         {
@@ -331,7 +346,9 @@ public partial class MovementSystem : GameSystem
         movement.SeekForce = Vector2.Zero;
         movement.AvoidForce = Vector2.Zero;
         movement.AlignForce = Vector2.Zero;
+        movement.WallForce = Vector2.Zero;
         movement.AvoidSide = 0;
+        movement.WallSide = 0;
         movement.SeekScale = 1f;
         movement.StuckFor = 0f;
         movement.Neighbours = 0;
@@ -479,6 +496,130 @@ public partial class MovementSystem : GameSystem
     }
 
     /// <summary>
+    /// Отклонение от стен. Считается по геометрии строений, а не по растру навигации:
+    /// растр огрубляет границу до ячейки, и сила, выведенная из него, дёргалась бы
+    /// на ступеньках растеризации.
+    ///
+    /// ЗАЧЕМ ОНА НУЖНА ПРИ ЖЁСТКОМ ВЫТАЛКИВАНИИ. Выталкивание не даёт войти в здание,
+    /// но и только: сущность прижимается к стене вплотную и едет вдоль неё, а всякое
+    /// столкновение с соседом у самой стены оборачивается упором в угол. Отсюда следует,
+    /// что расходиться со строением нужно ЗАРАНЕЕ, силой, — тогда и место для расхождения
+    /// с соседями остаётся, и угол обходится по дуге.
+    ///
+    /// ДВЕ СОСТАВЛЯЮЩИЕ. Первая направлена по нормали от поверхности и растёт по мере
+    /// приближения к ней. Одной её мало: у сущности, идущей прямо в стену, нормаль
+    /// направлена навстречу стремлению к цели, и обе взаимно уничтожаются — это то самое
+    /// вырождение, из-за которого локальный слой построен на обходе, а не на отталкивании.
+    /// Поэтому добавляется вторая составляющая, направленная вдоль стены; её величина равна
+    /// тому, насколько точно курс направлен в стену.
+    ///
+    /// СТОРОНА ДВИЖЕНИЯ ВДОЛЬ СТЕНЫ ФИКСИРУЕТСЯ — по тому же основанию, что и сторона обхода
+    /// соседа (<see cref="Avoidance"/>), но здесь оно жёстче. У сущности, упёршейся в стену
+    /// поперёк, проекция стремления к цели на стену близка к нулю, и её знак определяется
+    /// случайными мелочами: толчком соседа, пересчётом пути, поворотом корпуса на градус.
+    /// Без фиксации отряд у длинной стены поэтому ходит вдоль неё то в одну сторону,
+    /// то в другую. Выбранная сторона держится, пока стена в полосе действия силы,
+    /// и снимается, когда сущность от стены отошла.
+    ///
+    /// СИЛА ГАСНЕТ У САМОЙ ЦЕЛИ. Строитель работает вплотную к каркасу, а стрелок с малой
+    /// дальностью подходит к постройке ближе полосы отклонения; если бы сила действовала
+    /// и там, оба кружили бы вокруг цели вместо работы. Множитель выведен из остатка хода,
+    /// поэтому отдельного перечня исключений не требуется.
+    /// </summary>
+    private Vector2 Walls(Movement movement, Vector2 position, Vector2 seek,
+        float radius, float remaining)
+    {
+        float margin = radius * WallMargin;
+        float fade = margin > 0.001f
+            ? Mathf.Clamp(remaining / (radius + margin), 0f, 1f)
+            : 0f;
+
+        if (fade <= 0.001f)
+        {
+            movement.WallSide = 0;
+            return Vector2.Zero;
+        }
+
+        GM.Obstacles.Nearby(position, radius + margin, _walls, movement.Exit);
+
+        var push = Vector2.Zero;
+        var facing = Vector2.Zero;
+        float strongest = 0f;
+        float into = 0f;
+
+        foreach (var shape in _walls)
+        {
+            var closest = shape.ClosestPoint(position);
+            var delta = position - closest;
+            float distance = delta.Length();
+
+            // Центр внутри корпуса означает, что жёсткое ограничение ещё не отработало
+            // в этом кадре. Направления выхода здесь нет, и назначать его наугад незачем:
+            // выталкивание разберётся достовернее любой силы
+            if (distance < 0.001f)
+                continue;
+
+            float gap = distance - radius;
+
+            if (gap >= margin)
+                continue;
+
+            var normal = delta / distance;
+            float strength = 1f - Mathf.Max(gap, 0f) / margin;
+
+            push += normal * strength;
+
+            // Вдоль чего ехать, решает ОДНА стена — ближайшая. Складывать касательные
+            // нескольких значило бы получать в углу между двумя строениями направление,
+            // не идущее вдоль ни одного из них
+            if (strength <= strongest)
+                continue;
+
+            strongest = strength;
+            facing = normal;
+            into = -seek.Dot(normal);
+        }
+
+        if (strongest <= 0.001f)
+        {
+            movement.WallSide = 0;
+            return Vector2.Zero;
+        }
+
+        if (into <= 0f)
+            return push * fade;
+
+        var tangent = facing.Orthogonal();
+
+        if (movement.WallSide == 0)
+            movement.WallSide = WallSide(tangent, seek, movement.Velocity);
+
+        return (push + tangent * (movement.WallSide * into * strongest)) * fade;
+    }
+
+    /// <summary>
+    /// В какую сторону вдоль стены ехать. Основной признак — проекция стремления к цели
+    /// на стену: она указывает, с какой стороны препятствие короче обойти. Когда курс
+    /// направлен в стену почти перпендикулярно, проекция мала и знак её недостоверен;
+    /// тогда сторона берётся по нынешней скорости, то есть сущность продолжает то движение,
+    /// которое уже начала, а в группе — то, к которому её привело выравнивание.
+    /// </summary>
+    private static int WallSide(Vector2 tangent, Vector2 seek, Vector2 velocity)
+    {
+        float bySeek = tangent.Dot(seek);
+
+        if (Mathf.Abs(bySeek) > 0.2f)
+            return bySeek > 0f ? 1 : -1;
+
+        float byVelocity = tangent.Dot(velocity);
+
+        if (Mathf.Abs(byVelocity) > 0.001f)
+            return byVelocity > 0f ? 1 : -1;
+
+        return bySeek >= 0f ? 1 : -1;
+    }
+
+    /// <summary>
     /// Выравнивание скорости со своими. Единственная сила сплочения, которая здесь нужна:
     /// притяжение к центру группы пришлось бы отключать при встречном движении, а сила,
     /// которую сразу отключают, не нужна вовсе.
@@ -586,6 +727,13 @@ public partial class MovementSystem : GameSystem
 
         movement.StuckFor = 0f;
         movement.AvoidSide = 0;
+
+        // Сторона движения вдоль стены здесь НЕ сбрасывается, хотя сторона обхода соседа
+        // сбрасывается. Различие в том, чем кончается ошибочный выбор. Обойдя соседа не с той
+        // стороны, сущность упирается в него же, и попытка с другой стороны — единственный
+        // выход. Поехав не в ту сторону вдоль стены, она всё же едет и рано или поздно стену
+        // минует; сброс же по сроку означал бы, что отряд у длинной стены разворачивается
+        // каждые StuckTimeout секунд, — это и есть наблюдаемое хождение туда и обратно
         _pathfinding?.Release(mobile);
     }
 

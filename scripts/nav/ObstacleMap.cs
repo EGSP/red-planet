@@ -42,6 +42,9 @@ public sealed class ObstacleMap
 
     private readonly List<ObstacleChange> _journal = new();
 
+    /// <summary>Уже выданные препятствия при обходе ячеек. Общий буфер: обход не вложенный.</summary>
+    private readonly HashSet<object> _seen = new(ByReference.Instance);
+
     /// <summary>Сколько раз менялся состав. По нему пересобирается растр навигации.</summary>
     public int Revision { get; private set; }
 
@@ -176,6 +179,41 @@ public sealed class ObstacleMap
         }
 
         return position;
+    }
+
+    /// <summary>
+    /// Прямоугольники препятствий, попадающих в квадрат заданного радиуса вокруг точки.
+    ///
+    /// Нужны локальному слою движения: чтобы отклоняться от стены заранее, а не упираться
+    /// в неё и ждать выталкивания, сила обхода обязана знать геометрию соседних строений.
+    /// Одно препятствие лежит сразу в нескольких ячейках широкой фазы, поэтому уже выданные
+    /// отмечаются во вспомогательном множестве — иначе длинное здание учитывалось бы
+    /// столько раз, сколько ячеек оно задевает, и сила выходила бы тем больше, чем крупнее
+    /// строение.
+    /// </summary>
+    public void Nearby(Vector2 position, float radius, List<Obb> destination,
+        IObstacle except = null)
+    {
+        destination.Clear();
+        _seen.Clear();
+
+        var probe = new Rect2(position - new Vector2(radius, radius),
+            new Vector2(radius * 2f, radius * 2f));
+
+        foreach (var cell in Cells(probe))
+        {
+            if (!_buckets.TryGetValue(cell, out var bucket))
+                continue;
+
+            foreach (var obstacle in bucket)
+            {
+                if (ReferenceEquals(obstacle, except) || !_seen.Add(obstacle))
+                    continue;
+
+                if (_shapes.TryGetValue(obstacle, out var shape))
+                    destination.Add(shape);
+            }
+        }
     }
 
     /// <summary>Есть ли препятствие ещё в карте. Нужно выезду: завод могли снести.</summary>

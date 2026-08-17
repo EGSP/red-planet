@@ -41,6 +41,7 @@ public enum VizKind
     BoidSeek,
     BoidAvoid,
     BoidAlign,
+    BoidWall,
     BoidSpeed,
     BoidSense,
     BoidBody,
@@ -113,6 +114,11 @@ public static class DrawTheme
         VizKind.BoidSeek => new(0.45f, 1.00f, 0.40f),
         VizKind.BoidAvoid => new(1.00f, 0.52f, 0.15f),
         VizKind.BoidAlign => new(0.55f, 0.58f, 1.00f),
+
+        // Отклонение от стен — розовый: рядом со стрелкой обхода соседей (оранжевой)
+        // и со стремлением к цели (зелёным) он различим и на светлой земле, и на тёмной
+        VizKind.BoidWall => new(1.00f, 0.35f, 0.75f),
+
         VizKind.BoidSpeed => new(1.00f, 1.00f, 1.00f),
         VizKind.BoidSense => new(0.42f, 0.48f, 1.00f),
         VizKind.BoidBody => new(1.00f, 0.82f, 0.28f),

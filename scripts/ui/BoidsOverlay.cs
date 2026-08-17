@@ -77,6 +77,7 @@ public partial class BoidsOverlay : Node2D
         Arrow(at, state.SeekForce * state.SeekScale, VizKind.BoidSeek);
         Arrow(at, state.AvoidForce, VizKind.BoidAvoid);
         Arrow(at, state.AlignForce, VizKind.BoidAlign);
+        Arrow(at, state.WallForce, VizKind.BoidWall);
 
         // Скорость рисуется в тех же единицах, что и силы: иначе не видно,
         // насколько результат разошёлся со стремлением к цели
