@@ -52,6 +52,19 @@ public partial class MovementSystem : GameSystem
     /// </summary>
     [Export] public float WallMargin = 2.2f;
 
+    /// <summary>
+    /// Насколько соль меняет веса локального слоя, долей от веса. Четверть означает,
+    /// что крайние по соли сущности расходятся в весах в полтора раза.
+    /// </summary>
+    [Export] public float SaltWeight = 0.25f;
+
+    /// <summary>
+    /// Насколько соль сдвигает порог выбора стороны обхода. Величина сравнивается
+    /// с векторным произведением единичных векторов, поэтому лежит в тех же пределах,
+    /// что и оно: единица означала бы, что сторона выбрана солью и только ею.
+    /// </summary>
+    [Export] public float SaltSide = 0.2f;
+
     /// <summary>Сколько проходов расталкивания за кадр.</summary>
     [Export] public int ResolvePasses = 2;
 
@@ -68,6 +81,10 @@ public partial class MovementSystem : GameSystem
     private readonly Dictionary<Vector2I, List<int>> _buckets = new();
     private readonly List<int> _nearby = new();
     private readonly List<Obb> _walls = new();
+    private readonly BoidSalt _salt = new();
+
+    /// <summary>Сколько слотов соли уже роздано. По нему назначается очередной.</summary>
+    private int _salted;
 
     private PathfindingSystem _pathfinding;
     private int _active;
@@ -131,6 +148,12 @@ public partial class MovementSystem : GameSystem
         {
             if (mobile.Definition == null)
                 continue;
+
+            // Слот соли назначается при первом появлении, а не при рождении сущности:
+            // порядок раздачи от этого не меняется, зато о соли не нужно помнить ни заводу,
+            // ни редактору содержимого, ни коду появления волн
+            if (mobile.Movement.Salt < 0)
+                mobile.Movement.Salt = _salted++ % BoidSalt.Slots;
 
             int at = _actors.Count;
             _actors.Add(mobile);
@@ -211,7 +234,14 @@ public partial class MovementSystem : GameSystem
         movement.SeekScale = SeekScale(mobile, position, seek, radius);
         movement.Neighbours = _nearby.Count;
 
-        var steer = seek * movement.SeekScale + avoid * AvoidWeight + align * AlignWeight
+        // Веса солятся встречными знаками: так различается не сила локального слоя в целом,
+        // а СООТНОШЕНИЕ обхода и выравнивания, то есть само поведение в толпе. Одинаковый
+        // знак у обоих давал бы просто более резвую и более вялую сущность
+        float salt = _salt.Of(movement.Salt) * SaltWeight;
+
+        var steer = seek * movement.SeekScale
+                    + avoid * (AvoidWeight * (1f + salt))
+                    + align * (AlignWeight * (1f - salt))
                     + wall * WallWeight;
 
         var desired = steer.LengthSquared() > 0.000001f
@@ -479,8 +509,13 @@ public partial class MovementSystem : GameSystem
             // Orthogonal(): для курса (1,0) она даёт (0,−1). Сосед снизу, направление (0,1),
             // даёт положительное векторное произведение — значит уводить надо
             // положительным множителем, то есть вверх. Обратный знак разворачивал бы
-            // юнита прямо в соседа, и обход читался бы как притяжение
-            side = seek.Cross(direction) > 0f ? 1 : -1;
+            // юнита прямо в соседа, и обход читался бы как притяжение.
+            //
+            // Порог сдвинут солью. У встречных лоб в лоб векторное произведение около нуля,
+            // и без сдвига обе сущности выбирают сторону по одному и тому же неустойчивому
+            // знаку — то есть чаще всего одну и ту же, что и есть затор. Сдвиг постоянен
+            // у сущности, поэтому в такой паре стороны почти всегда оказываются разными
+            side = seek.Cross(direction) > _salt.Of(movement.Salt) * SaltSide ? 1 : -1;
         }
 
         if (total <= 0.001f)
