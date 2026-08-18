@@ -17,6 +17,8 @@ model = "res://resources/units/player/dox/dox.tscn"
 [movement]
 speed      = 4.0
 turn_speed = 280
+# Разворот на месте: боту дешевле встать и повернуться, чем описывать дугу.
+turn_stop_angle = 90.0
 
 [assembly]
 cost_metal   = 45.0

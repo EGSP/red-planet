@@ -42,6 +42,7 @@
 [ext_resource type="Script" uid="uid://3fhl61arlssd" path="res://scripts/nav/MovementSystem.cs" id="35_movement"]
 [ext_resource type="Script" uid="uid://bpyei10ejuqti" path="res://scripts/ui/DebugPanel.cs" id="36_debugpanel"]
 [ext_resource type="Script" uid="uid://d1agiccjh58sj" path="res://scripts/ui/SandboxPanel.cs" id="36_sandboxpanel"]
+[ext_resource type="Script" path="res://scripts/ui/FpsPanel.cs" id="36_fpspanel"]
 [ext_resource type="Resource" uid="uid://dpydcpt1gpoip" path="res://resources/tuning/pressure.tres" id="37_pressuresettings"]
 [ext_resource type="Script" uid="uid://bwl8ipmuljqfq" path="res://scripts/pressure/WaveSystem.cs" id="38_waves"]
 [ext_resource type="Resource" uid="uid://d1tnepa4gkb1p" path="res://resources/tuning/waves.tres" id="39_wavesettings"]
@@ -249,6 +250,9 @@ script = ExtResource("36_debugpanel")
 
 [node name="SandboxPanel" type="CanvasLayer" parent="View" unique_id=579722716]
 script = ExtResource("36_sandboxpanel")
+
+[node name="FpsPanel" type="CanvasLayer" parent="View" unique_id=579722717]
+script = ExtResource("36_fpspanel")
 
 [node name="PauseMenu" type="CanvasLayer" parent="View" unique_id=764445159]
 script = ExtResource("22_pause")

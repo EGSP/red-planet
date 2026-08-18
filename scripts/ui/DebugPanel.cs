@@ -83,6 +83,11 @@ public partial class DebugPanel : ToolPanel
 
     protected override void Build(Control frame)
     {
+        // Лента скорости лежит в том же каркасе, но вне колонки вкладок: она принадлежит
+        // не какой-то одной из них, а наблюдению за выделенным юнитом вообще, и место
+        // у правого края экрана выбрано затем, чтобы не спорить с самой панелью
+        frame.AddChild(new SpeedGraph());
+
         var row = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Begin,

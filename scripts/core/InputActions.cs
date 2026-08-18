@@ -190,6 +190,12 @@ public static class InputActions
     /// </summary>
     public const string SandboxToggle = "sandbox_panel";
 
+    /// <summary>
+    /// Лента частоты кадров. В набор взаимоисключающих панелей не входит и потому имеет
+    /// собственную клавишу: провал частоты ищут при открытой панели отладки, а не вместо неё.
+    /// </summary>
+    public const string DebugFps = "debug_fps";
+
     public const string DebugRestart = "debug_restart";
 
     /// <summary>
@@ -264,6 +270,7 @@ public static class InputActions
         list.Add(new(GameCancel, InputSection.Game, "Отмена, меню паузы", Key.Escape));
         list.Add(new(SandboxToggle, InputSection.Debug, "Панель песочницы", Key.F2));
         list.Add(new(DebugToggle, InputSection.Debug, "Панель отладки", Key.F3));
+        list.Add(new(DebugFps, InputSection.Debug, "Лента частоты кадров", Key.F4));
         list.Add(new(DebugRestart, InputSection.Debug, "Пересобрать сессию", Key.F5));
 
         return list.ToArray();

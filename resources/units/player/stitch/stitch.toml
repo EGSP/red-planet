@@ -17,6 +17,8 @@ radius     = 0.3
 [movement]
 speed      = 2.4
 turn_speed = 220.0
+# Разворот на месте: боту дешевле встать и повернуться, чем описывать дугу.
+turn_stop_angle = 90.0
 
 [assembly]
 cost_metal   = 250.0

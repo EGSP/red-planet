@@ -583,7 +583,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float reach = Const.Unit * 0.2f;
 
-        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        if (!Movement.SettledAt(order.Pos) && GlobalPosition.DistanceTo(order.Pos) > reach)
         {
             Movement.Seek(order.Pos, reach, order.Fluid);
             return;
@@ -729,7 +729,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float reach = Const.Unit * 0.2f;
 
-        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        if (!Movement.SettledAt(order.Pos) && GlobalPosition.DistanceTo(order.Pos) > reach)
         {
             Movement.Seek(order.Pos, reach);
             return;
@@ -937,7 +937,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     {
         float reach = Const.Unit * 0.2f;
 
-        if (!Movement.Settled && GlobalPosition.DistanceTo(order.Pos) > reach)
+        if (!Movement.SettledAt(order.Pos) && GlobalPosition.DistanceTo(order.Pos) > reach)
         {
             Movement.Seek(order.Pos, reach);
             return;
@@ -989,7 +989,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         float reach = Const.Unit * 0.2f;
 
-        if (!Movement.Settled && GlobalPosition.DistanceTo(point) > reach)
+        if (!Movement.SettledAt(point) && GlobalPosition.DistanceTo(point) > reach)
         {
             Movement.Seek(point, reach);
             return;

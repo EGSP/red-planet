@@ -23,6 +23,8 @@ vision_range = 10.0
 [movement]
 speed      = 3.0
 turn_speed = 180.0
+# Разворот на месте: боту дешевле встать и повернуться, чем описывать дугу.
+turn_stop_angle = 90.0
 
 [assembly]
 cost_metal   = 1800.0

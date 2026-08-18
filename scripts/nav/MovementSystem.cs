@@ -20,7 +20,8 @@ using Godot;
 /// хода направлена по оси корпуса и урезана оставшимся расхождением
 /// (<see cref="UnitDefinition.SpeedFactorFor"/>). Отсюда берутся дуга на повороте и разворот
 /// на месте перед движением назад; отсюда же следует, что скорость вращения корпуса —
-/// величина игровая, а не украшение.
+/// величина игровая, а не украшение. Оттуда же берётся и обратное правило: ход ограничен
+/// так, чтобы цель не попадала внутрь окружности разворота (<see cref="Turning"/>).
 ///
 /// ПЕРВЫЙ СЛОЙ ОТКЛЮЧАЕМ. Намерение бывает двух видов: строгое идёт по найденному пути,
 /// свободное (<see cref="Movement.Fluid"/>) — прямо на цель, оставляя всё расхождение
@@ -204,6 +205,7 @@ public partial class MovementSystem : GameSystem
         movement.Blocked = handle is { Status: PathStatus.Unreachable };
         movement.Settled = movement.Blocked
                            || remaining <= 0f
+                           || Circling(mobile, definition, position, movement, remaining)
                            || Exhausted(handle, position, radius)
                            || Crowded(index, mobile, position, radius, movement.Goal);
 
@@ -244,8 +246,14 @@ public partial class MovementSystem : GameSystem
                     + align * (AlignWeight * (1f - salt))
                     + wall * WallWeight;
 
+        // Ход ограничен дважды: тормозным путём до цели и радиусом разворота. Первое
+        // отвечает за то, чтобы встать в точке, второе — за то, чтобы вообще суметь в неё
+        // попасть
+        float speed = Mathf.Min(Approach(definition, remaining),
+            Turning(mobile, definition, position, movement, remaining));
+
         var desired = steer.LengthSquared() > 0.000001f
-            ? Drive(mobile, definition, steer, Approach(definition, remaining), dt)
+            ? Drive(mobile, definition, steer, speed, dt)
             : Vector2.Zero;
 
         Accelerate(movement, definition, desired, dt);
@@ -352,6 +360,82 @@ public partial class MovementSystem : GameSystem
     }
 
     /// <summary>
+    /// Скорость, при которой цель ещё лежит вне окружности разворота.
+    ///
+    /// КАКОЙ ДЕФЕКТ ЭТО ЛЕЧИТ. Сущность едет туда, куда повёрнут корпус, поэтому радиус
+    /// её разворота равен скорости, делённой на скорость вращения. Цель, заданная сбоку
+    /// ближе этого радиуса, оказывается ВНУТРИ окружности разворота: сколько бы юнит
+    /// ни доворачивал, дуга проходит мимо, и он наматывает круги вокруг точки назначения.
+    /// Наблюдается это при приказе, отданном щелчком рядом с юнитом, но сбоку от его оси.
+    ///
+    /// УСЛОВИЕ ТОЧНОЕ, А НЕ ПОДОБРАННОЕ. Пусть до цели расстояние d, а расхождение оси
+    /// корпуса с направлением на неё — угол t. Середина окружности разворота отстоит
+    /// от корпуса на R перпендикулярно оси; подставив её в квадрат расстояния до цели
+    /// и потребовав, чтобы цель лежала не ближе R, получаем d ≥ 2·R·|sin t|. Отсюда
+    /// предельный радиус R = d / (2·|sin t|) и предельная скорость v = w·R.
+    ///
+    /// Цель прямо по курсу либо прямо позади даёт синус около нуля и ограничения не даёт:
+    /// в первом случае поворачивать не нужно вовсе, во втором любая дуга рано или поздно
+    /// выводит на цель. Наибольшее ограничение приходится на цель точно сбоку, где и
+    /// возникает наблюдаемое кружение.
+    /// </summary>
+    private static float Turning(IMobile mobile, UnitDefinition definition, Vector2 position,
+        Movement movement, float remaining)
+    {
+        if (definition.TurnSpeed <= 0.001f)
+            return definition.SpeedPx;
+
+        var delta = movement.Goal - position;
+
+        if (delta.LengthSquared() < 0.0001f)
+            return definition.SpeedPx;
+
+        float lateral = Mathf.Abs(Mathf.Sin(Heading.Delta(mobile.Rotation, delta.Angle())));
+
+        if (lateral < 0.001f)
+            return definition.SpeedPx;
+
+        // Меряем по ОСТАТКУ хода, а не по расстоянию до цели: стрелку достаточно выйти
+        // на окружность дальности ствола, и требовать от него дуги до самой цели значило бы
+        // заставить его ползти всю дорогу
+        return definition.TurnSpeed * Mathf.Max(remaining, 0f) / (2f * lateral);
+    }
+
+    /// <summary>
+    /// Цель ближе радиуса разворота и лежит не по курсу: подойти к ней точнее нельзя,
+    /// а попытка означала бы круг вокруг неё.
+    ///
+    /// ЗАЧЕМ ЭТО ПОМИМО ОГРАНИЧЕНИЯ СКОРОСТИ. Ограничение (<see cref="Turning"/>) заставляет
+    /// сущность вписываться в дугу, замедляясь тем сильнее, чем ближе цель. У самой точки
+    /// назначения предельная скорость падает почти до нуля, и остаток пути занял бы время,
+    /// несоразмерное оставшемуся расстоянию. Поэтому радиус прибытия расширен до радиуса
+    /// разворота на полном ходу: попав в него, сущность считает ход законченным, и приказ
+    /// завершается вместо медленного доворота на месте.
+    ///
+    /// Правило действует только при расхождении больше свободного угла поворота. Цель
+    /// по курсу достигается прямо, и расширять для неё радиус прибытия значило бы
+    /// останавливать отряд, не доходя до назначенной точки.
+    /// </summary>
+    private static bool Circling(IMobile mobile, UnitDefinition definition, Vector2 position,
+        Movement movement, float remaining)
+    {
+        if (definition.TurnSpeed <= 0.001f)
+            return false;
+
+        var delta = movement.Goal - position;
+
+        if (delta.LengthSquared() < 0.0001f)
+            return false;
+
+        float error = Mathf.Abs(Heading.Delta(mobile.Rotation, delta.Angle()));
+
+        if (error <= definition.TurnFreeAngle)
+            return false;
+
+        return remaining <= definition.SpeedPx / definition.TurnSpeed;
+    }
+
+    /// <summary>
     /// Изменить скорость в пределах разгона и торможения. Разгон и торможение — разные
     /// числа: разогнаться шагающий может не мгновенно, а встать может.
     /// </summary>
@@ -360,13 +444,21 @@ public partial class MovementSystem : GameSystem
     {
         bool slowing = desired.LengthSquared() < movement.Velocity.LengthSquared();
 
-        if (slowing && definition.BrakePx < 0f)
+        // Мгновенное торможение означает мгновенную ОСТАНОВКУ, а не мгновенное СБАВЛЕНИЕ хода.
+        // Прежде разница не имела значения: скорость либо держалась полной, либо обращалась
+        // в ноль. С ограничением по радиусу разворота (см. Turning) она меняется и в середине
+        // пути, и всякое такое изменение читалось рывком — ход падал за кадр, а возвращался
+        // за десятую долю секунды разгоном. Сбавление идёт разгонным темпом, остановка
+        // по-прежнему мгновенна
+        if (slowing && definition.BrakePx < 0f && desired.LengthSquared() < 0.0001f)
         {
             movement.Velocity = desired;
             return;
         }
 
-        float rate = slowing ? definition.BrakePx : definition.AccelerationPx;
+        float rate = slowing && definition.BrakePx >= 0f
+            ? definition.BrakePx
+            : definition.AccelerationPx;
         movement.Velocity = movement.Velocity.MoveToward(desired, rate * (float)dt);
     }
 
