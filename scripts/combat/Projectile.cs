@@ -57,6 +57,7 @@ public partial class Projectile : Node2D
             SourceId = SourceId,
             Amount = Damage,
             Pos = GlobalPosition,
+            Facing = Velocity.Angle(),
         });
 
         Retire();

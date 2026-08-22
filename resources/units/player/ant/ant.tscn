@@ -7,6 +7,7 @@
 [ext_resource type="Texture2D" uid="uid://b1vtld5yqwfol" path="res://resources/units/player/ant/ant_weapon.png" id="5_gun"]
 [ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="6_team"]
 [ext_resource type="PackedScene" uid="uid://bcwemggrliom3" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
+[ext_resource type="PackedScene" uid="uid://basv063qj6fco" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
 shader = ExtResource("6_team")
@@ -52,3 +53,6 @@ texture = ExtResource("5_gun")
 
 [node name="Muzzle" type="Marker2D" parent="Gun" unique_id=901777586]
 position = Vector2(28, -1)
+
+[node name="Flash" parent="Gun/Muzzle" unique_id=683684280 instance=ExtResource("91_flash")]
+position = Vector2(4, 1)

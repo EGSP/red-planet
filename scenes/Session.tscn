@@ -59,6 +59,7 @@
 [ext_resource type="Script" uid="uid://bbx3jv2sarmqs" path="res://scripts/metrics/MetricsSystem.cs" id="51_metrics"]
 [ext_resource type="Script" uid="uid://bbeajmwg6ryta" path="res://scripts/ui/MetricsScreen.cs" id="52_metricsscreen"]
 [ext_resource type="Script" path="res://scripts/effects/EffectSystem.cs" id="53_effects"]
+[ext_resource type="PackedScene" path="res://resources/particles/impact.tscn" id="54_impact"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
@@ -169,9 +170,9 @@ StepOrder = 40
 
 [node name="EffectSystem" type="Node" parent="Systems"]
 script = ExtResource("53_effects")
+Impact = ExtResource("54_impact")
 Phase = 2
 StepOrder = 50
-UpdateCycle = 1
 
 [node name="Playground" type="Node2D" parent="." unique_id=438516043]
 script = ExtResource("3_playground")
@@ -207,6 +208,8 @@ Pixelated = true
 [node name="Actors" type="Node2D" parent="Playground" unique_id=1387971349]
 
 [node name="Projectiles" type="Node2D" parent="Playground" unique_id=2038464301]
+
+[node name="AirEffects" type="Node2D" parent="Playground"]
 
 [node name="Clouds" type="Node2D" parent="Playground" unique_id=1232917337]
 

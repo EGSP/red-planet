@@ -3,7 +3,7 @@ using Godot;
 
 /// <summary>
 /// Эффекты мира: узлы частиц, объявленные в сценах моделей, связываются здесь с сущностями
-/// и ведутся отсюда каждый кадр.
+/// и проигрываются отсюда.
 ///
 /// ЗАЧЕМ СИСТЕМА, А НЕ КОД В САМОМ УЗЛЕ. Узел изображения не знает, чей он и что вокруг
 /// происходит: пыль не должна разыскивать носителя, а вспышка выстрела — угадывать, какому
@@ -11,23 +11,41 @@ using Godot;
 /// справочник инструментов и дерево модели, — и живёт в одном месте по той же причине,
 /// по которой в одном месте живёт <see cref="Spawner"/>.
 ///
+/// ДВА РОДА ПОВОДОВ, И РАЗЛИЧАЮТСЯ ОНИ ИСТОЧНИКОМ. Ход есть непрерывное состояние: фактов
+/// он не порождает, и пыль считается по скорости, читаемой каждый кадр. Выстрел и попадание
+/// суть факты, они уже лежат в журнале документами <see cref="WeaponFired"/>
+/// и <see cref="DamageDealt"/>, и разбираются пачкой за кадр. Заводить документ на движение
+/// было бы ошибкой: он писался бы каждый кадр на каждого юнита, то есть журнал стал бы
+/// копией состояния мира.
+///
 /// ГРАНИЦА С СИМУЛЯЦИЕЙ. Система только читает. Она не дописывает документов, не трогает
 /// индекс и ни на что в мире не влияет, поэтому снятие всего слоя эффектов не меняет хода
-/// партии. Отсюда же её место: фаза <see cref="Phase.React"/> графического цикла — эффект
-/// показывает уже случившееся и обязан совпадать с отрисовкой, а не с шагом физики.
+/// партии. Отсюда её место: фаза <see cref="Phase.React"/> физического цикла — документы
+/// кадра чистятся в конце того же цикла, и разбирать их из графического значило бы
+/// прочитать одну пачку дважды либо не прочитать вовсе.
 ///
-/// ЧТО ДОБАВЛЯЕТСЯ ДАЛЬШЕ. Поводов для эффекта будет несколько, и каждый читает своё:
-/// ход — скорость, выстрел — документ кадра, повреждение — <see cref="DamageDealt"/>.
-/// Общего у них только связывание, поэтому новый повод добавляется своим родом узла
-/// и своим разделом здесь, а не наследником <see cref="MovementParticles"/>.
-///
-/// СЛОЙ МЕНЯЕТСЯ ПРИ СВЯЗЫВАНИИ. Узел лежит в сцене модели, то есть внутри дерева юнита,
-/// и рисовался бы поверх корпуса, а пыль поднимается от грунта. Поэтому при связывании
-/// узел переносится на <see cref="WorldLayer.GroundEffects"/>, а положение ему выставляется
-/// каждый кадр по владельцу и запомненному смещению.
+/// СЛОЙ ВЫБИРАЕТСЯ ПО РОДУ ЭФФЕКТА. Пыль переносится на <see cref="WorldLayer.GroundEffects"/>:
+/// узел лежит в сцене модели, то есть внутри дерева юнита, и рисовался бы поверх корпуса,
+/// а поднимается он от грунта. Вспышка выстрела, наоборот, остаётся при стволе — она ему
+/// и принадлежит. Попадание рождается там, где ни модели, ни носителя нет вовсе, и потому
+/// живёт на <see cref="WorldLayer.AirEffects"/> общим набором.
 /// </summary>
 public partial class EffectSystem : GameSystem
 {
+    /// <summary>
+    /// Вид вспышки попадания. Общий на все виды оружия: показывать разные попадания
+    /// пока нечем, а как только понадобится, ссылка переедет к части-инструменту модели,
+    /// где уже лежит вспышка выстрела.
+    /// </summary>
+    [Export] public PackedScene Impact { get; set; }
+
+    /// <summary>
+    /// Сколько вспышек попадания держать наготове. Набор кольцевой: попадания идут часто
+    /// и коротко, поэтому поднимать сцену на каждое и освобождать её следом дороже, чем
+    /// перезапускать давно отыгравшую.
+    /// </summary>
+    [Export] public int ImpactPool { get; set; } = 24;
+
     /// <summary>
     /// Связка «узел частиц — его носитель». Смещение и угол запомнены в системе координат
     /// носителя в тот миг, когда узел ещё лежал в модели: после переноса на слой мира
@@ -44,6 +62,19 @@ public partial class EffectSystem : GameSystem
         public float Idle;
     }
 
+    /// <summary>Вспышка выстрела, найденная у части-инструмента, с ключом её инструмента.</summary>
+    private readonly struct Flash
+    {
+        public readonly string ToolId;
+        public readonly BurstParticles Node;
+
+        public Flash(string toolId, BurstParticles node)
+        {
+            ToolId = toolId;
+            Node = node;
+        }
+    }
+
     /// <summary>
     /// Узлы, потерявшие носителя. Освобождаются не сразу: выпущенная пыль обязана дожить
     /// свой срок, иначе облако исчезает вместе с погибшей машиной.
@@ -52,8 +83,16 @@ public partial class EffectSystem : GameSystem
 
     private readonly Dictionary<object, List<Trail>> _trails = new(ByReference.Instance);
 
-    protected override void OnLink() =>
+    private readonly Dictionary<object, Flash[]> _flashes = new(ByReference.Instance);
+
+    private BurstParticles[] _impacts;
+    private int _nextImpact;
+
+    protected override void OnLink()
+    {
         GM.Index.Watch<IMobile>(OnMobileAdded, OnMobileRetired, this);
+        GM.Index.Watch<IArmed>(OnArmedAdded, OnArmedRetired, this);
+    }
 
     public override void Step(double dt)
     {
@@ -62,7 +101,15 @@ public partial class EffectSystem : GameSystem
                 Advance(trail, dt);
 
         Fade(dt);
+
+        foreach (var shot in GM.Events.Stream<WeaponFired>().Records)
+            Flare(shot);
+
+        foreach (var hit in GM.Events.Stream<DamageDealt>().Records)
+            Strike(hit);
     }
+
+    // ── ход: пыль из-под корпуса ──────────────────────────────────────────────────
 
     /// <summary>
     /// Подвижная сущность вошла в мир: собрать в её модели узлы частиц хода и перенести
@@ -197,12 +244,117 @@ public partial class EffectSystem : GameSystem
         GM.Playground.Add(WorldLayer.GroundEffects, node);
     }
 
-    private static void Collect(Node node, List<MovementParticles> found)
+    // ── выстрел: вспышка у среза ствола ───────────────────────────────────────────
+
+    /// <summary>
+    /// Вооружённая сущность вошла в мир: разобрать её стенд наведения и запомнить вспышки,
+    /// лежащие в частях-инструментах.
+    ///
+    /// ОПОЗНАНИЕ ОТДАНО СБОРКЕ, А НЕ ХУДОЖНИКУ. Часть-инструмент уже связана с определением
+    /// оружия по <see cref="ModelTool.ToolId"/>, и вспышка, лежащая внутри неё, наследует
+    /// эту связь целиком. Поэтому подписывать вспышку не нужно вовсе: есть она у ствола —
+    /// значит, принадлежит ему, нет — значит, у этого ствола вспышки не нарисовали.
+    /// </summary>
+    private void OnArmedAdded(IArmed armed)
+    {
+        if (armed is not Node2D carrier || !Alive.Is(carrier))
+            return;
+
+        List<Flash> found = null;
+
+        foreach (var mount in armed.Aim.Mounts)
+        {
+            if (mount.Weapon == null || mount.Part == null || !Alive.Is(mount.Part))
+                continue;
+
+            var bursts = new List<BurstParticles>();
+            Collect(mount.Part, bursts);
+
+            foreach (var burst in bursts)
+                (found ??= new List<Flash>()).Add(new Flash(mount.Weapon.Id, burst));
+        }
+
+        if (found != null)
+            _flashes[armed] = found.ToArray();
+    }
+
+    private void OnArmedRetired(IArmed armed) => _flashes.Remove(armed);
+
+    /// <summary>
+    /// Показать выстрел. Носитель разыскивается по номеру сущности, а ствол — по ключу
+    /// инструмента: у носителя стволов бывает несколько, и вспышка обязана выйти из того,
+    /// который стрелял.
+    ///
+    /// Положение и угол из документа здесь не нужны: вспышка лежит при срезе ствола
+    /// и место своё знает сама. Читает их тот, у кого своего места нет, — попадание.
+    /// </summary>
+    private void Flare(WeaponFired shot)
+    {
+        if (GM.Entities.Get(shot.EntityId) is not IArmed armed
+            || !_flashes.TryGetValue(armed, out var flashes))
+            return;
+
+        foreach (var flash in flashes)
+            if (flash.ToolId == shot.ToolId && Alive.Is(flash.Node))
+                flash.Node.Play();
+    }
+
+    // ── попадание: вспышка на цели ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Показать попадание. Вспышка разворачивается против хода снаряда, поэтому разлёт
+    /// идёт навстречу выстрелу, а не в случайную сторону.
+    /// </summary>
+    private void Strike(DamageDealt hit)
+    {
+        var burst = NextImpact();
+
+        if (burst == null)
+            return;
+
+        burst.GlobalPosition = hit.Pos;
+        burst.GlobalRotation = hit.Facing + Mathf.Pi;
+        burst.Play();
+    }
+
+    /// <summary>
+    /// Очередная вспышка из кольцевого набора. Набор поднимается при первом попадании:
+    /// партия может пройти вовсе без стрельбы, и платить за него заранее незачем.
+    /// </summary>
+    private BurstParticles NextImpact()
+    {
+        if (Impact == null || ImpactPool <= 0)
+            return null;
+
+        if (_impacts == null)
+        {
+            _impacts = new BurstParticles[ImpactPool];
+
+            for (int i = 0; i < _impacts.Length; i++)
+            {
+                if (Impact.Instantiate() is not BurstParticles burst)
+                {
+                    GD.PushWarning("[EffectSystem] корень сцены попадания не BurstParticles");
+                    _impacts = null;
+                    return null;
+                }
+
+                _impacts[i] = GM.Playground.Add(WorldLayer.AirEffects, burst);
+            }
+        }
+
+        var next = _impacts[_nextImpact];
+        _nextImpact = (_nextImpact + 1) % _impacts.Length;
+
+        return Alive.Is(next) ? next : null;
+    }
+
+    private static void Collect<T>(Node node, List<T> found) where T : Node
     {
         foreach (var child in node.GetChildren())
         {
-            if (child is MovementParticles particles)
-                found.Add(particles);
+            if (child is T match)
+                found.Add(match);
 
             Collect(child, found);
         }

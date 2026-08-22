@@ -111,6 +111,29 @@ public struct ConstructionCompleted : IEventRecord
 }
 
 /// <summary>
+/// Ствол выстрелил. Документ отделён от рождения снаряда намеренно: снаряд есть предмет
+/// симуляции, а выстрел — факт, на который откликаются показ и звук, и откликаться им
+/// нужно на выстрел любого рода, включая тот, что снаряда не порождает.
+/// </summary>
+[TransientEvent]
+public struct WeaponFired : IEventRecord
+{
+    public int SequenceId { get; set; }
+
+    /// <summary>Кто выстрелил.</summary>
+    public int EntityId;
+
+    /// <summary>Ключ справочника инструмента: у носителя стволов бывает несколько.</summary>
+    public string ToolId;
+
+    /// <summary>Срез ствола в мировых координатах.</summary>
+    public Vector2 Pos;
+
+    /// <summary>Направление выстрела в радианах, уже с учётом разброса.</summary>
+    public float Facing;
+}
+
+/// <summary>
 /// Снаряд задел цель. Прочность правит не снаряд, а DamageSystem по этому документу:
 /// так у каждого попадания есть след, и никто не удаляет ноду посреди чужого обхода.
 /// </summary>
@@ -122,6 +145,13 @@ public struct DamageDealt : IEventRecord
     public int SourceId;
     public float Amount;
     public Vector2 Pos;
+
+    /// <summary>
+    /// Направление полёта снаряда в момент попадания, в радианах. Нужно показу:
+    /// вспышка попадания разворачивается против хода снаряда, а не рисуется одинаково
+    /// с любой стороны.
+    /// </summary>
+    public float Facing;
 }
 
 /// <summary>Прочность кончилась — сущность выбыла из игры.</summary>

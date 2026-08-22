@@ -36,24 +36,30 @@ public enum WorldLayer
     Projectiles = 6,
 
     /// <summary>
+    /// Эффекты выше земли: попадания, взрывы, дым. Лежат поверх снарядов, поскольку
+    /// показывают их конец, но под облаками и туманом войны.
+    /// </summary>
+    AirEffects = 7,
+
+    /// <summary>
     /// Облака и их тень. Лежат поверх всего, что стоит и ходит по земле, поскольку тень
     /// падает сверху, но под туманом войны и служебной графикой.
     /// </summary>
-    Clouds = 7,
+    Clouds = 8,
 
     /// <summary>
     /// Туман войны. Лежит поверх мира, но под служебной графикой: приказы, призрак постройки
     /// и отладочные выкладки закрываться туманом не должны — они принадлежат не миру,
     /// а тому, кто на мир смотрит.
     /// </summary>
-    Fog = 8,
+    Fog = 9,
 
     /// <summary>
     /// Служебная графика поверх мира: призрак постройки, отрисовка приказов, отладочные
     /// выкладки. Миру не принадлежит и потому эффектом не является — эффекты мира лежат
     /// в <see cref="GroundEffects"/>.
     /// </summary>
-    Overlay = 9,
+    Overlay = 10,
 }
 
 /// <summary>
@@ -74,6 +80,7 @@ public partial class Playground : Node2D
     [Export] public Node2D Structures;
     [Export] public Node2D Actors;
     [Export] public Node2D Projectiles;
+    [Export] public Node2D AirEffects;
     [Export] public Node2D Clouds;
     [Export] public Node2D Fog;
     [Export] public Node2D Overlay;
@@ -110,13 +117,15 @@ public partial class Playground : Node2D
         Structures ??= GetNodeOrNull<Node2D>(nameof(Structures));
         Actors ??= GetNodeOrNull<Node2D>(nameof(Actors));
         Projectiles ??= GetNodeOrNull<Node2D>(nameof(Projectiles));
+        AirEffects ??= GetNodeOrNull<Node2D>(nameof(AirEffects));
         Clouds ??= GetNodeOrNull<Node2D>(nameof(Clouds));
         Fog ??= GetNodeOrNull<Node2D>(nameof(Fog));
         Overlay ??= GetNodeOrNull<Node2D>(nameof(Overlay));
 
         _layers = new[]
         {
-            Terrain, Deposits, Shadows, GroundEffects, Structures, Actors, Projectiles, Clouds, Fog, Overlay,
+            Terrain, Deposits, Shadows, GroundEffects, Structures, Actors, Projectiles, AirEffects,
+            Clouds, Fog, Overlay,
         };
     }
 }

@@ -6,6 +6,7 @@
 [ext_resource type="Texture2D" uid="uid://bv7gt0qoyv4er" path="res://resources/buildings/turret/turret_body.png" id="4_body"]
 [ext_resource type="Texture2D" uid="uid://42jyhr3lwx5k" path="res://resources/buildings/turret/turret_gun.png" id="5_gun"]
 [ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="6_team"]
+[ext_resource type="PackedScene" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
 shader = ExtResource("6_team")
@@ -53,3 +54,5 @@ texture = ExtResource("5_gun")
 
 [node name="Muzzle" type="Marker2D" parent="Gun" unique_id=788034096]
 position = Vector2(37, 0)
+
+[node name="Flash" parent="Gun/Muzzle" instance=ExtResource("91_flash")]

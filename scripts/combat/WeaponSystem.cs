@@ -148,5 +148,15 @@ public partial class WeaponSystem : GameSystem
                       + _rng.RandfRange(-weapon.Spread, weapon.Spread);
 
         GM.Spawn.SpawnProjectile(weapon, armed, muzzle, angle);
+
+        // Факт выстрела публикуется отдельно от снаряда: на него откликаются показ и звук,
+        // и отклик этот не должен зависеть от того, каким снарядом стреляли
+        GM.Events.Append(new WeaponFired
+        {
+            EntityId = armed.EntityId,
+            ToolId = weapon.Id,
+            Pos = muzzle,
+            Facing = angle,
+        });
     }
 }
