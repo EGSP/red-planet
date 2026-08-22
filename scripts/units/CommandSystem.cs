@@ -1572,11 +1572,11 @@ public partial class CommandSystem : GameSystem
         // он был бы не виден именно там, где важнее всего — на них самих. Полупрозрачность
         // делает это допустимым, а отладка без вида на растеризованное здание бесполезна
         if (_navigation == null || !IsInstanceValid(_navigation))
-            _navigation = GM.Playground.Add(WorldLayer.Effects, new NavGridOverlay());
+            _navigation = GM.Playground.Add(WorldLayer.Overlay, new NavGridOverlay());
 
         if (_ghost == null || !IsInstanceValid(_ghost))
         {
-            _ghost = GM.Playground.Add(WorldLayer.Effects, new PlacementGhost());
+            _ghost = GM.Playground.Add(WorldLayer.Overlay, new PlacementGhost());
 
             // План принадлежит системе, а призрак получает его ссылкой: показанное
             // и поставленное обязаны быть одним и тем же списком
@@ -1584,16 +1584,16 @@ public partial class CommandSystem : GameSystem
         }
 
         if (_overlay == null || !IsInstanceValid(_overlay))
-            _overlay = GM.Playground.Add(WorldLayer.Effects, new OrderOverlay());
+            _overlay = GM.Playground.Add(WorldLayer.Overlay, new OrderOverlay());
 
         if (_paths == null || !IsInstanceValid(_paths))
-            _paths = GM.Playground.Add(WorldLayer.Effects, new PathOverlay());
+            _paths = GM.Playground.Add(WorldLayer.Overlay, new PathOverlay());
 
         if (_boids == null || !IsInstanceValid(_boids))
-            _boids = GM.Playground.Add(WorldLayer.Effects, new BoidsOverlay());
+            _boids = GM.Playground.Add(WorldLayer.Overlay, new BoidsOverlay());
 
         // Произвольные маркеры — поверх доменных оверлеев; доступ из кода через DebugDraw.Current.
         if (_debugDraw == null || !IsInstanceValid(_debugDraw))
-            _debugDraw = GM.Playground.Add(WorldLayer.Effects, new DebugDraw());
+            _debugDraw = GM.Playground.Add(WorldLayer.Overlay, new DebugDraw());
     }
 }

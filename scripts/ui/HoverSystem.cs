@@ -185,6 +185,6 @@ public partial class HoverSystem : GameSystem
     private void EnsureNodes()
     {
         if (_overlay == null || !IsInstanceValid(_overlay))
-            _overlay = GM.Playground.Add(WorldLayer.Effects, new HoverOverlay());
+            _overlay = GM.Playground.Add(WorldLayer.Overlay, new HoverOverlay());
     }
 }

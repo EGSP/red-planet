@@ -58,6 +58,7 @@
 [ext_resource type="Resource" uid="uid://dut65crdd0675" path="res://resources/tuning/graphics/graphics.tres" id="50_graphicssettings"]
 [ext_resource type="Script" uid="uid://bbx3jv2sarmqs" path="res://scripts/metrics/MetricsSystem.cs" id="51_metrics"]
 [ext_resource type="Script" uid="uid://bbeajmwg6ryta" path="res://scripts/ui/MetricsScreen.cs" id="52_metricsscreen"]
+[ext_resource type="Script" path="res://scripts/effects/EffectSystem.cs" id="53_effects"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
@@ -166,6 +167,12 @@ script = ExtResource("51_metrics")
 Phase = 2
 StepOrder = 40
 
+[node name="EffectSystem" type="Node" parent="Systems"]
+script = ExtResource("53_effects")
+Phase = 2
+StepOrder = 50
+UpdateCycle = 1
+
 [node name="Playground" type="Node2D" parent="." unique_id=438516043]
 script = ExtResource("3_playground")
 
@@ -193,6 +200,8 @@ script = ExtResource("46_shadow")
 Settings = ExtResource("35_lf1gi")
 Pixelated = true
 
+[node name="GroundEffects" type="Node2D" parent="Playground"]
+
 [node name="Structures" type="Node2D" parent="Playground" unique_id=539201372]
 
 [node name="Actors" type="Node2D" parent="Playground" unique_id=1387971349]
@@ -207,7 +216,7 @@ Settings = ExtResource("4_cloudtuning")
 
 [node name="Fog" type="Node2D" parent="Playground" unique_id=1153521829]
 
-[node name="Effects" type="Node2D" parent="Playground" unique_id=1153521828]
+[node name="Overlay" type="Node2D" parent="Playground" unique_id=1153521828]
 
 [node name="View" type="Node2D" parent="." unique_id=1034017929]
 

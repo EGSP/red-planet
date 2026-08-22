@@ -104,10 +104,11 @@ Root (Node)                     ← приложение: живёт от зап
     ├── Playground (Node2D)     ← мир, разложенный по слоям
     │   ├── Terrain  → Grid
     │   ├── Deposits
+    │   ├── GroundEffects
     │   ├── Structures
     │   ├── Actors
     │   ├── Projectiles
-    │   └── Effects
+    │   └── Overlay
     └── View (Node2D)           ← наблюдатели
         ├── Camera (CameraRig)
         ├── Hud             — счёт боя, подсказки и пауза, слева вверху

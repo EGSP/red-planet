@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/models/UnitModel.cs" id="1_model"]
 [ext_resource type="Script" path="res://scripts/models/ModelTool.cs" id="2_tool"]
@@ -6,6 +6,7 @@
 [ext_resource type="Texture2D" path="res://resources/units/enemies/peacekeeper/peacekeeper_body.png" id="4_body"]
 [ext_resource type="Texture2D" path="res://resources/units/enemies/peacekeeper/peacekeeper_gun.png" id="5_gun"]
 [ext_resource type="Shader" path="res://resources/shaders/team_color.gdshader" id="6_team"]
+[ext_resource type="PackedScene" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
 shader = ExtResource("6_team")
@@ -47,3 +48,5 @@ texture = ExtResource("5_gun")
 
 [node name="Muzzle" type="Marker2D" parent="Gun"]
 position = Vector2(20, 0)
+
+[node name="Dust" parent="." instance=ExtResource("90_dust")]

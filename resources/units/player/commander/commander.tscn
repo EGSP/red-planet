@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://bqk3v1n8yc0mq"]
+[gd_scene load_steps=11 format=3 uid="uid://bqk3v1n8yc0mq"]
 
 [ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
 [ext_resource type="Script" uid="uid://cukuju4hl6y1n" path="res://scripts/models/ModelTool.cs" id="2_tool"]
@@ -8,6 +8,7 @@
 [ext_resource type="Texture2D" uid="uid://baibfwty7kmn" path="res://resources/units/player/commander/commander_gun.png" id="6_gun"]
 [ext_resource type="Texture2D" uid="uid://bytj6e5hb2w5b" path="res://resources/units/player/commander/commander_buildarm.png" id="7_arm"]
 [ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="8_team"]
+[ext_resource type="PackedScene" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
 shader = ExtResource("8_team")
@@ -84,3 +85,5 @@ material = SubResource("ShaderMaterial_body")
 rotation = 1.5707963
 texture = ExtResource("7_arm")
 offset = Vector2(-0.5, 6.5)
+
+[node name="Dust" parent="." instance=ExtResource("90_dust")]
