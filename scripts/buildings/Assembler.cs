@@ -36,6 +36,19 @@ public partial class Assembler : Building, IWorker
     /// <summary>Башня стоит на месте, поэтому её якорь внимания — она сама.</summary>
     public Vector2 Anchor => GlobalPosition;
 
+    /// <summary>
+    /// То, над чем башня трудится: каркас важнее цели ремонта, как и у подвижного
+    /// исполнителя (см. <c>Unit.WorkAim</c>). Пусто — манипулятор возвращается к оси корпуса.
+    /// </summary>
+    protected override Vector2? WorkAim =>
+        Alive.Is(_attached) ? _attached.GlobalPosition
+        : Alive.Is(_repairTarget) ? _repairTarget.GlobalPosition
+        : null;
+
+    /// <summary>Откуда тянется луч работы. Без модели — из центра башни.</summary>
+    private Vector2 WorkBeamOrigin =>
+        Aim.PrimaryWork?.Muzzle(GlobalPosition) ?? GlobalPosition;
+
     public override void RunOrder(Order order, double dt)
     {
         switch (order.Kind)
@@ -71,8 +84,9 @@ public partial class Assembler : Building, IWorker
         var site = order.Target;
 
         // Дотягивается манипулятор до КРАЯ размеченного места, а не до его середины:
-        // иначе крупный каркас, задевающий круг углом, башне был бы недоступен
-        if (site == null || !Reach.Within(GlobalPosition, site, Definition.WorkRangePx))
+        // иначе крупный каркас, задевающий круг углом, башне был бы недоступен. Допуск
+        // общий на весь проект и живёт в Reach
+        if (site == null || !Reach.Reaches(GlobalPosition, site, Definition.WorkRangePx))
         {
             Detach();
             Orders.DropCurrent();
@@ -109,7 +123,7 @@ public partial class Assembler : Building, IWorker
         // не проходит: приказы она исполняет собственным кодом
         if (ReferenceEquals(target, this)
             || !Alive.Is(target)
-            || !Reach.Within(GlobalPosition, target, Definition.WorkRangePx))
+            || !Reach.Reaches(GlobalPosition, target, Definition.WorkRangePx))
         {
             _repairTarget = null;
             Orders.DropCurrent();
@@ -183,14 +197,19 @@ public partial class Assembler : Building, IWorker
 
         float half = Const.Unit * 0.5f;
 
-        // Луч к тому, с чем работаем: сразу видно, чем башня занята
+        // Луч к тому, с чем работаем, — от среза манипулятора, как у подвижного исполнителя
+        // (см. Unit.PaintMarks). Из центра он выходил бы мимо изображения руки
         var target = Alive.Is(_attached) ? (Node2D)_attached : _repairTarget;
 
         if (Alive.Is(target))
-            ShapeDraw.Line(canvas, Vector2.Zero, ToLocal(target.GlobalPosition),
+            ShapeDraw.Line(canvas, ToLocal(WorkBeamOrigin), ToLocal(target.GlobalPosition),
                 DrawTheme.Line(VizKind.WorkBeamRepair));
 
-        // Манипулятор: три коротких луча из центра — знак того, что башня рабочая
+        // Запасное изображение манипулятора — три коротких луча из центра. При модели
+        // руку рисует она сама, и три луча легли бы поверх спрайта
+        if (Model != null)
+            return;
+
         var arm = Working
             ? DrawTheme.Hue(VizKind.WorkBeamRepair)
             : new Color(0.55f, 0.6f, 0.6f);

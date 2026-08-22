@@ -1,0 +1,55 @@
+[gd_scene format=3 uid="uid://bewrgprg4e560"]
+
+[ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
+[ext_resource type="Script" uid="uid://cukuju4hl6y1n" path="res://scripts/models/ModelTool.cs" id="2_tool"]
+[ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="3_shade"]
+[ext_resource type="Texture2D" uid="uid://bv7gt0qoyv4er" path="res://resources/buildings/turret/turret_body.png" id="4_body"]
+[ext_resource type="Texture2D" uid="uid://42jyhr3lwx5k" path="res://resources/buildings/turret/turret_gun.png" id="5_gun"]
+[ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="6_team"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
+shader = ExtResource("6_team")
+shader_parameter/team_color = Color(1, 1, 1, 1)
+shader_parameter/strength = 1.0
+shader_parameter/lift = 0.0
+
+[node name="TurretModel" type="Node2D" unique_id=1968145911 node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Contact" type="Sprite2D" parent="." unique_id=734325434 node_paths=PackedStringArray("Source")]
+self_modulate = Color(0.05, 0.04, 0.07, 0.6)
+texture_filter = 2
+scale = Vector2(1.5, 1.5)
+script = ExtResource("3_shade")
+Source = NodePath("../Body")
+
+[node name="Body" type="Sprite2D" parent="." unique_id=1087659603]
+texture_filter = 1
+material = SubResource("ShaderMaterial_body")
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("4_body")
+
+[node name="Rim" type="Sprite2D" parent="." unique_id=22172733 node_paths=PackedStringArray("Source")]
+self_modulate = Color(0.05, 0.04, 0.07, 0.2)
+texture_filter = 2
+scale = Vector2(1.5, 1.5)
+script = ExtResource("3_shade")
+Source = NodePath("../Body")
+Kind = 2
+
+[node name="Gun" type="Node2D" parent="." unique_id=894114905 node_paths=PackedStringArray("Muzzle")]
+z_index = 1
+script = ExtResource("2_tool")
+ToolId = "turret_gun"
+Muzzle = NodePath("Muzzle")
+
+[node name="Sprite" type="Sprite2D" parent="Gun" unique_id=702571794]
+texture_filter = 1
+material = SubResource("ShaderMaterial_body")
+rotation = 1.5707963
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("5_gun")
+
+[node name="Muzzle" type="Marker2D" parent="Gun" unique_id=788034096]
+position = Vector2(37, 0)

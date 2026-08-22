@@ -410,25 +410,21 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     private void AimWork(double dt)
     {
-        var mount = Aim.PrimaryWork;
-
-        if (mount == null)
-        {
-            _workAim = null;
-            return;
-        }
-
-        // Подключённый узел и цель ремонта важнее заявки приказа: работа уже идёт,
-        // и рука обязана смотреть на то, над чем трудится, а не на то, к чему шли
-        var target = Alive.Is(_attached)
-            ? _attached.GlobalPosition
-            : (RepairTarget as Node2D)?.GlobalPosition ?? _workAim;
-
-        if (target is { } point)
-            Aim.Aim(mount, Rotation, GlobalPosition, point, dt);
-
+        Aim.AimWork(Rotation, GlobalPosition, WorkAim, dt);
         _workAim = null;
     }
+
+    /// <summary>
+    /// Куда рука тянется в этом шаге. Подключённый узел и цель ремонта важнее заявки
+    /// приказа: работа уже идёт, и рука обязана смотреть на то, над чем трудится, а не
+    /// на то, к чему шли.
+    ///
+    /// Тот же порядок предпочтений действует у башни-сборщика (см. <c>Assembler.WorkAim</c>):
+    /// правило принадлежит инструменту, а не тому, подвижен ли его носитель.
+    /// </summary>
+    private Vector2? WorkAim => Alive.Is(_attached)
+        ? _attached.GlobalPosition
+        : (RepairTarget as Node2D)?.GlobalPosition ?? _workAim;
 
     /// <summary>
     /// Заявить, куда рука тянется в этом шаге. Наводит её <see cref="AimWork"/> в конце
@@ -442,6 +438,40 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// хотя каркасу от неё ничего не нужно.
     /// </summary>
     private void AimWorkAt(Vector2 point) => _workAim = point;
+
+    /// <summary>
+    /// Дистанция подхода к месту работы, отсчитанная от центра цели. Считается тем же
+    /// вызовом и с тем же <c>approach_hold</c>, что и подход к бою: расходиться в глубине
+    /// сближения ствол и рабочая рука не должны.
+    /// </summary>
+    private float WorkApproach(object body, float reach) =>
+        Reach.ApproachDistance(GlobalPosition, body, reach,
+            Reach.Slack(reach, Definition?.ApproachHoldFraction ?? 1f));
+
+    /// <summary>
+    /// Сблизиться с точкой. Истина означает, что подход ещё идёт и ход этим кадром исчерпан;
+    /// ложь — что ближе подходить незачем либо некуда.
+    ///
+    /// ЕДИНСТВЕННЫЙ РАСЧЁТ ПРИБЫТИЯ У ИСПОЛНИТЕЛЯ. Прежде сравнение расстояния с дистанцией
+    /// остановки было выписано в каждом обработчике приказа отдельно, и признак
+    /// <see cref="Movement.SettledAt"/> спрашивали только три обработчика из восьми. Отсюда
+    /// следовал тупик: система движения объявляла ход законченным — упор в толпу, конец
+    /// пути, отказ кружить вокруг близкой цели, — а приказ продолжал считать, что идти ещё
+    /// далеко, и каждый кадр заново заявлял намерение, которое та же система тут же гасила.
+    /// Исполнитель стоял на месте до отмены приказа.
+    ///
+    /// ПРИБЫТИЕ НЕ ОЗНАЧАЕТ ПРАВА ДЕЙСТВОВАТЬ. Ближе не пройти — это ответ движения, а не
+    /// инструмента: цель может оказаться недостижимой вовсе. Достаёт ли рука или ствол,
+    /// решается отдельно и по границе досягаемости (<see cref="Reach.Reaches"/>).
+    /// </summary>
+    private bool Closing(Vector2 point, float stop, bool fluid = false)
+    {
+        if (Movement.SettledAt(point) || GlobalPosition.DistanceTo(point) <= stop)
+            return false;
+
+        Movement.Seek(point, stop, fluid);
+        return true;
+    }
 
     /// <summary>
     /// Довернуть корпус ради инструментов. Только СТОЯ: на ходу корпус принадлежит системе
@@ -614,13 +644,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     {
         Detach();
 
-        float reach = Const.Unit * 0.2f;
-
-        if (!Movement.SettledAt(order.Pos) && GlobalPosition.DistanceTo(order.Pos) > reach)
-        {
-            Movement.Seek(order.Pos, reach, order.Fluid);
+        if (Closing(order.Pos, Const.Unit * 0.2f, order.Fluid))
             return;
-        }
 
         order.Arrive(Id);
 
@@ -631,12 +656,19 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Стройка: дойти до места работы, а дойдя — поставить каркас, если это план,
-    /// или подключиться к нему инструментом, если это уже каркас.
+    /// Стройка: дойти до места работы, а как только рука достала — поставить каркас, если
+    /// это план, или подключиться к нему инструментом, если это уже каркас.
     ///
-    /// Приказ объявляет намерение и проверяет, дошли ли. Сам ход и доворот корпуса
-    /// на ходу делает система движения: обходя препятствие, юнит едет не туда, куда
-    /// его послали, и разворот к цели выглядел бы движением боком вперёд.
+    /// Приказ объявляет намерение. Сам ход и доворот корпуса на ходу делает система
+    /// движения: обходя препятствие, юнит едет не туда, куда его послали, и разворот
+    /// к цели выглядел бы движением боком вперёд.
+    ///
+    /// РАБОТА НАЧИНАЕТСЯ ПО ГРАНИЦЕ ДОСЯГАЕМОСТИ, А НЕ ПО ПРИБЫТИЮ. Это две разные
+    /// величины: подход ведёт вплотную к каркасу, граница отстоит от него на всю длину
+    /// руки, и между ними лежит запас (см. <see cref="Reach.Slack"/>). Поэтому
+    /// исполнитель, остановленный по дороге толпой или отказом кружить вокруг цели,
+    /// всё равно оказывается внутри границы и работать начинает. Сближение при этом
+    /// не прекращается: подключённый строитель продолжает подъезжать к стене.
     /// </summary>
     private void RunWork(Order order)
     {
@@ -645,21 +677,21 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // Дальность принадлежит инструменту, а не юниту: раньше одно число служило всем
         // занятиям сразу, хотя тянутся они на разное
         var tool = Definition.BuildTool;
+        float reach = tool?.RangePx ?? Const.Unit;
 
         // Дистанция меряется до КРАЯ места работы, а не до его середины: строитель,
         // вставший по диагонали от постройки, дотягивается до её угла, и отвергать его
         // на этом основании нельзя. Поправку на габарит цели держит Reach, а сюда она
         // приходит уже перенесённой на расстояние от центра — движение ведёт к центру
-        float stop = Reach.StopDistance(GlobalPosition, order.Body, tool?.RangePx ?? Const.Unit);
+        Closing(target, WorkApproach(order.Body, reach));
 
-        if (GlobalPosition.DistanceTo(target) > stop)
+        if (!Reach.Reaches(GlobalPosition, order.Body, reach))
         {
             Detach();
-            Movement.Seek(target, stop);
             return;
         }
 
-        // Дошли: к месту работы тянется рука, а стволы остаются у системы стрельбы
+        // Достали: к месту работы тянется рука, а стволы остаются у системы стрельбы
         AimWorkAt(target);
         order.Arrive(Id);
 
@@ -759,13 +791,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        float reach = Const.Unit * 0.2f;
-
-        if (!Movement.SettledAt(order.Pos) && GlobalPosition.DistanceTo(order.Pos) > reach)
-        {
-            Movement.Seek(order.Pos, reach);
+        if (Closing(order.Pos, Const.Unit * 0.2f))
             return;
-        }
 
         Orders.DropCurrent();
     }
@@ -786,15 +813,12 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (!Alive.Is(victim))
             return;
 
-        var to = victim.GlobalPosition;
-
         float stop = Weapon != null
             ? Targeting.ApproachDistance(Weapon, GlobalPosition, target,
                 Definition.ApproachHoldFraction)
             : Reach.StopDistance(GlobalPosition, victim, Definition.WorkRangePx);
 
-        if (GlobalPosition.DistanceTo(to) > stop)
-            Movement.Seek(to, stop);
+        Closing(victim.GlobalPosition, stop);
     }
 
     /// <summary>
@@ -898,8 +922,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         float hold = Targeting.ApproachDistance(Weapon, GlobalPosition, _engaged,
             Definition.ApproachHoldFraction);
 
-        if (GlobalPosition.DistanceTo(_engaged.GlobalPosition) > hold)
-            Movement.Seek(_engaged.GlobalPosition, hold);
+        Closing(_engaged.GlobalPosition, hold);
 
         return true;
     }
@@ -967,13 +990,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// <summary>Точка обхода: дойти и уступить место следующему приказу маршрута.</summary>
     private void RunPatrolPoint(Order order)
     {
-        float reach = Const.Unit * 0.2f;
-
-        if (!Movement.SettledAt(order.Pos) && GlobalPosition.DistanceTo(order.Pos) > reach)
-        {
-            Movement.Seek(order.Pos, reach);
+        if (Closing(order.Pos, Const.Unit * 0.2f))
             return;
-        }
 
         // Прибытие в составе приказа здесь не отмечается: сбор отряда патрулю не нужен —
         // маршрут каждый проходит сам, и подпись «ждём отставших» на нём означала бы
@@ -1019,13 +1037,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        float reach = Const.Unit * 0.2f;
-
-        if (!Movement.SettledAt(point) && GlobalPosition.DistanceTo(point) > reach)
-        {
-            Movement.Seek(point, reach);
+        if (Closing(point, Const.Unit * 0.2f))
             return;
-        }
 
         // Дошли или ближе не пройти: постоять, а следующее место выбрать после передышки
         _patrolPoint = null;
@@ -1045,8 +1058,11 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Ремонт: подойти на длину инструмента и стоять. Само восстановление прочности идёт
-    /// в Run — ремонт стоит ресурсов и потому проходит через экономику, как и стройка.
+    /// Ремонт: подойти вплотную и стоять. Само восстановление прочности идёт в Run —
+    /// ремонт стоит ресурсов и потому проходит через экономику, как и стройка.
+    ///
+    /// Подход и право чинить разведены так же, как у стройки: сближение ведёт к самой
+    /// цели, а чинит <see cref="Repairing"/> по границе досягаемости инструмента.
     /// </summary>
     private void RunRepair(Order order)
     {
@@ -1054,11 +1070,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         var to = order.Entity.GlobalPosition;
         float reach = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
-        float stop = Reach.StopDistance(GlobalPosition, order.Body, reach);
 
-        if (GlobalPosition.DistanceTo(to) > stop)
-            Movement.Seek(to, stop);
-        else
+        Closing(to, WorkApproach(order.Body, reach));
+
+        if (Reach.Reaches(GlobalPosition, order.Body, reach))
             AimWorkAt(to);
     }
 
@@ -1087,11 +1102,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        var to = order.Entity.GlobalPosition;
-        float range = FollowRange;
-
-        if (GlobalPosition.DistanceTo(to) > range)
-            Movement.Seek(to, range);
+        Closing(order.Entity.GlobalPosition, FollowRange);
     }
 
     /// <summary>
@@ -1143,8 +1154,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         float stop = Targeting.ApproachDistance(Weapon, GlobalPosition, victim as IDamageable,
             Definition.ApproachHoldFraction);
 
-        if (GlobalPosition.DistanceTo(victim.GlobalPosition) > stop)
-            Movement.Seek(victim.GlobalPosition, stop);
+        Closing(victim.GlobalPosition, stop);
 
         return true;
     }
@@ -1183,13 +1193,15 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         _assisted = work;
 
         // До края того, над чем работает ведущий, а не до середины: помощник, оказавшийся
-        // с дальней стороны каркаса, дотягивается до ближней к нему стены
-        float stop = Reach.StopDistance(GlobalPosition, work.Body, Definition.BuildTool.RangePx);
+        // с дальней стороны каркаса, дотягивается до ближней к нему стены. Подход и право
+        // работать разведены так же, как в RunWork
+        float reach = Definition.BuildTool.RangePx;
 
-        if (GlobalPosition.DistanceTo(point) > stop)
+        Closing(point, WorkApproach(work.Body, reach));
+
+        if (!Reach.Reaches(GlobalPosition, work.Body, reach))
         {
             Detach();
-            Movement.Seek(point, stop);
             return true;
         }
 
@@ -1272,10 +1284,11 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         if (ReferenceEquals(order.Entity, this))
             return null;
 
-        // Запас в пиксель: проверка обязана соглашаться там, где остановка уже разрешена,
-        // а движение встаёт не ровно в заданной точке
-        float reach = Definition.BuildTool.RangePx + 1f;
-        return Reach.Within(GlobalPosition, order.Entity, reach) ? repairable : null;
+        // Допуск общий на весь проект и живёт в Reach: прежде он был здесь и только здесь,
+        // а стройка и башня-сборщик обходились без него
+        return Reach.Reaches(GlobalPosition, order.Entity, Definition.BuildTool.RangePx)
+            ? repairable
+            : null;
     }
 
     private void Detach()

@@ -8,7 +8,7 @@
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
 shader = ExtResource("3_team")
 shader_parameter/team_color = Color(1, 1, 1, 1)
-shader_parameter/strength = 0.0
+shader_parameter/strength = 1.0
 shader_parameter/lift = 0.0
 
 [node name="VehicleFactoryModel" type="Node2D" node_paths=PackedStringArray("Body")]

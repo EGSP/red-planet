@@ -14,6 +14,7 @@ pattern_step = "narrow"
 
 [body]
 max_health = 7500.0
+model      = "res://resources/buildings/energy_storage/energy_storage.tscn"
 
 [storage]
 energy = 300000.0

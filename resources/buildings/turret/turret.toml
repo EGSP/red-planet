@@ -16,6 +16,7 @@ pattern_step = "margin"
 
 [body]
 max_health = 700.0
+model      = "res://resources/buildings/turret/turret.tscn"
 
 # Секции [movement] нет намеренно: турель вкопана, шасси у неё отсутствует, а скорость
 # вращения башни принадлежит орудию — см. aim_rate_degrees в turret_gun.toml.

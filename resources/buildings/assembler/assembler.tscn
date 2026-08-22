@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://bujckdg5a7gqi"]
+
+[ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
+[ext_resource type="Script" uid="uid://cukuju4hl6y1n" path="res://scripts/models/ModelTool.cs" id="2_tool"]
+[ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="3_shade"]
+[ext_resource type="Texture2D" uid="uid://b42qic4d131vf" path="res://resources/buildings/assembler/assembler_body.png" id="4_body"]
+[ext_resource type="Texture2D" uid="uid://ckrhbu8hmv10k" path="res://resources/buildings/assembler/assembler_gun.png" id="5_arm"]
+[ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="6_team"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
+shader = ExtResource("6_team")
+shader_parameter/team_color = Color(1, 1, 1, 1)
+shader_parameter/strength = 1.0
+shader_parameter/lift = 0.0
+
+[node name="AssemblerModel" type="Node2D" unique_id=1313299332 node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Contact" type="Sprite2D" parent="." unique_id=2140420751 node_paths=PackedStringArray("Source")]
+self_modulate = Color(0.05, 0.04, 0.07, 0.6)
+texture_filter = 2
+scale = Vector2(1.5, 1.5)
+script = ExtResource("3_shade")
+Source = NodePath("../Body")
+
+[node name="Body" type="Sprite2D" parent="." unique_id=1297157409]
+texture_filter = 1
+material = SubResource("ShaderMaterial_body")
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("4_body")
+
+[node name="Rim" type="Sprite2D" parent="." unique_id=513431641 node_paths=PackedStringArray("Source")]
+self_modulate = Color(0.05, 0.04, 0.07, 0.2)
+texture_filter = 2
+scale = Vector2(1.5, 1.5)
+script = ExtResource("3_shade")
+Source = NodePath("../Body")
+Kind = 2
+
+[node name="BuildArm" type="Node2D" parent="." unique_id=767273252 node_paths=PackedStringArray("Muzzle")]
+z_index = 1
+script = ExtResource("2_tool")
+Role = 1
+ToolId = "assembler_arm"
+Muzzle = NodePath("Muzzle")
+
+[node name="Sprite" type="Sprite2D" parent="BuildArm" unique_id=355330682]
+texture_filter = 1
+material = SubResource("ShaderMaterial_body")
+position = Vector2(-6, 0)
+rotation = 1.5707963
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("5_arm")
+
+[node name="Muzzle" type="Marker2D" parent="BuildArm" unique_id=1742974170]
+position = Vector2(20, 0)

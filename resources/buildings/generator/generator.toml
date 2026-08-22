@@ -15,6 +15,7 @@ pattern_step = "narrow"
 [body]
 max_health   = 1000.0
 model        = "res://resources/buildings/generator/generator.tscn"
+radius = 1
 
 [production]
 energy = 600.0

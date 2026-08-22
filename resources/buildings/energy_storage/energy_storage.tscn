@@ -1,7 +1,7 @@
-[gd_scene format=3 uid="uid://bmjhb1wdm78hq"]
+[gd_scene format=3 uid="uid://cf1jpb84sil5s"]
 
 [ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
-[ext_resource type="Texture2D" uid="uid://moqhtcvdjcg" path="res://resources/buildings/generator/generator_body.png" id="2_body"]
+[ext_resource type="Texture2D" uid="uid://ck68rnrsvtohk" path="res://resources/buildings/energy_storage/energy_storage_body.png" id="2_body"]
 [ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="3_team"]
 [ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="4_shade"]
 
@@ -11,27 +11,27 @@ shader_parameter/team_color = Color(1, 1, 1, 1)
 shader_parameter/strength = 0.0
 shader_parameter/lift = 0.0
 
-[node name="GeneratorModel" type="Node2D" unique_id=1178847877 node_paths=PackedStringArray("Body")]
+[node name="EnergyStorageModel" type="Node2D" unique_id=2105174741 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
 Body = NodePath("Body")
 
-[node name="Contact" type="Sprite2D" parent="." unique_id=1631015419 node_paths=PackedStringArray("Source")]
+[node name="Contact" type="Sprite2D" parent="." unique_id=1882316827 node_paths=PackedStringArray("Source")]
 self_modulate = Color(0.05, 0.04, 0.07, 0.6)
 texture_filter = 2
-scale = Vector2(1.5, 1.5)
+scale = Vector2(2.5, 2.5)
 script = ExtResource("4_shade")
 Source = NodePath("../Body")
 
-[node name="Body" type="Sprite2D" parent="." unique_id=2027018026]
+[node name="Body" type="Sprite2D" parent="." unique_id=2038038839]
 texture_filter = 1
 material = SubResource("ShaderMaterial_body")
-scale = Vector2(1.5, 1.5)
+scale = Vector2(2.5, 2.5)
 texture = ExtResource("2_body")
 
-[node name="Rim" type="Sprite2D" parent="." unique_id=2010302226 node_paths=PackedStringArray("Source")]
+[node name="Rim" type="Sprite2D" parent="." unique_id=2054493715 node_paths=PackedStringArray("Source")]
 self_modulate = Color(0.05, 0.04, 0.07, 0.2)
 texture_filter = 2
-scale = Vector2(1.5, 1.5)
+scale = Vector2(2.5, 2.5)
 script = ExtResource("4_shade")
 Source = NodePath("../Body")
 Kind = 2

@@ -205,12 +205,26 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     }
 
     /// <summary>
+    /// Куда постройка тянется рабочей рукой в этом шаге. Пусто — работы нет, и рука
+    /// возвращается к оси корпуса.
+    ///
+    /// ОБЪЯВЛЕНО ЗДЕСЬ, А НЕ У СБОРЩИКА, потому что наведение закрывает шаг вместе
+    /// со всем остальным стендом, а закрывает его эта постройка. Ствол наводит система
+    /// стрельбы, одна на подвижных и неподвижных, и потому турель крутит башню без единой
+    /// строки собственного кода; у рабочей руки такой системы нет, и место, где её наводят,
+    /// приходится назначать явно.
+    /// </summary>
+    protected virtual Vector2? WorkAim => null;
+
+    /// <summary>
     /// Области инструментов включаются кадрами (Ctrl, покрытие турелей, вкладка giz),
     /// поэтому постройка обязана перерисовываться, иначе круг появится только при
     /// следующей смене состояния.
     /// </summary>
     public override void _Process(double delta)
     {
+        Aim.AimWork(BodyFacing, GlobalPosition, WorkAim, delta);
+
         // Желаемый угол корпуса постройке безразличен: основание вкопано и развернуться
         // не может. Стенд всё равно закрывают каждый кадр — иначе инструменты не вернутся
         // в походное положение, а требования копились бы от кадра к кадру
@@ -291,39 +305,16 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         if (Definition == null)
             return;
 
-        var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
-        var rect = new Rect2(-size * 0.5f, size);
-
         UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
             selected: GizmoGate.IsSelected(this),
             armedStructure: Definition.Weapon != null);
 
-        // Корпус повёрнут на угол постановки. Правка трансформа канвы, а не поворот ноды:
-        // ноду держит за собой турель, у которой в Rotation ось башни
-        DrawSetTransform(Vector2.Zero, BodyFacing, Vector2.One);
-
-        // Площадка ложится под корпус: она принадлежит постройке, а не поверхности,
-        // и потому исчезает вместе с ней
-        BuildingSkirt.Draw(this, rect);
-
-        // Модель рисует себя сама дочерним узлом: запасной прямоугольник поверх неё не нужен.
-        // Площадка выше остаётся при любом изображении — она принадлежит месту, а не корпусу
-        if (Model == null)
-        {
-            ShapeDraw.Rect(this, rect,
-                ShapeStyle.Filled(Definition.Color, new Color(0f, 0f, 0f, 0.35f), 2f,
-                    WidthMode.Screen));
-
-            // Ось «вперёд» — короткая насечка от центра к краю. Рисуется в координатах
-            // корпуса, поэтому насечка вперёд и есть направление корпуса
-            float span = Mathf.Min(size.X, size.Y);
-            ShapeDraw.Line(this, Vector2.Right * span * 0.2f, Vector2.Right * span * 0.45f,
-                ShapeStyle.Outline(new Color(1f, 1f, 1f, 0.5f), 3f, WidthMode.Screen));
-        }
-
-        // Полоса прочности читается с экрана, а не с корпуса, поэтому поворот
-        // на неё не распространяется
-        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+        // Площадка и запасной корпус рисуются одной последовательностью на всю игру
+        // и редактор содержимого — см. BuildingVisual. Угол постановки применяется правкой
+        // трансформа канвы, а не поворотом ноды: ноду держит за собой турель, у которой
+        // в Rotation ось башни. Трансформ там же и снимается
+        BuildingVisual.Draw(this, Definition, Vector2.Zero, BodyFacing,
+            showFootprint: false, modelAttached: Model != null);
 
         // С моделью пометки рисует слой, идущий после неё; его перерисовку ведёт
         // _Process, поскольку наследники переопределяют _Draw целиком

@@ -16,6 +16,7 @@ pattern_step = "margin"
 
 [body]
 max_health   = 1500.0
+model        = "res://resources/buildings/assembler/assembler.tscn"
 vision_range = 9.0
 
 [terror]
