@@ -18,8 +18,9 @@ tools = ["commander_gun", "commander_arm"]
 
 [body]
 max_health   = 12500.0
-radius       = 0.38
+radius = 0.6
 vision_range = 11.0
+model        = "res://resources/units/player/commander/commander.tscn"
 
 [movement]
 speed      = 3.0

@@ -182,6 +182,31 @@ public partial class UnitModel : Node2D
     /// </summary>
     public void ShareParentMaterial(bool enabled) => ShareParentMaterial(this, enabled);
 
+    /// <summary>
+    /// Убрать из модели все слои затенения. Нужно каркасу: тень принадлежит стоящему
+    /// корпусу, а под шейдером строительства она вдобавок получает собственную сетку,
+    /// отчего силуэт каркаса двоится.
+    ///
+    /// Узлы именно снимаются, а не прячутся: <see cref="ModelShade"/> собирает себя заново
+    /// при всякой правке настроек затенения и невидимость бы себе вернул.
+    /// </summary>
+    public void DropShades() => DropShades(this);
+
+    private static void DropShades(Node node)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is ModelShade shade)
+            {
+                node.RemoveChild(shade);
+                shade.QueueFree();
+                continue;
+            }
+
+            DropShades(child);
+        }
+    }
+
     private static void ShareParentMaterial(Node node, bool enabled)
     {
         if (node is CanvasItem item)

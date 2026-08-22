@@ -280,6 +280,7 @@ public static class ContentCompiler
                 EnergyPerPower = document.Float("energy_per_power", 5f),
                 Kinds = ReadWorkKinds(document),
                 RepairsUnits = document.Bool("repairs_units"),
+                ApproachHold = document.Float("approach_hold", 0.55f),
             };
 
         tool.Id = id;

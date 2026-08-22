@@ -5,8 +5,8 @@
 /// подключается к узлу работы. Сам ресурсы не двигает: только сообщает свою мощность.
 ///
 /// Он же цель для чужой стороны и он же носитель ствола, если ствол задан справочником.
-/// Стрелять юнит начинает только без приказов: работа важнее, а огонь по площадям
-/// вместо стройки — не то, чего ждёшь от отданного приказа.
+/// Огонь ведётся при любом приказе, кроме работы: занятие у исполнителя одно в единицу
+/// времени, и стройка из этого правила не изъята — см. <see cref="CanFire"/>.
 ///
 /// Приказы юнит только ИСПОЛНЯЕТ. Кто их раздаёт — игрок через CommandSystem или мозговая
 /// система — его не касается, а чего ему отдать нельзя, отсекает набор AllowedOrders.
@@ -38,6 +38,13 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     public Movement Movement { get; } = new();
 
     private WorkNode _attached;
+
+    /// <summary>
+    /// Куда рабочая рука тянется в этом шаге по заявке приказа. Пусто — заявки не было,
+    /// и рука наводится на подключённый узел либо возвращается к оси корпуса.
+    /// См. <see cref="AimWorkAt"/>.
+    /// </summary>
+    private Vector2? _workAim;
 
     /// <summary>Сколько осталось до переигровки цели. Ведёт мозговая система, она же и решает.</summary>
     private float _retarget;
@@ -240,6 +247,12 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Сопровождение и движение стрельбе не мешают: прикрытие строителей — не отдельная
     /// задача, а то, что вооружённый делает попутно.
     ///
+    /// ПОЧЕМУ РАБОТА ОСТАЁТСЯ ИСКЛЮЧЕНИЕМ. Раздельные посадочные места (<see cref="AimRig"/>)
+    /// позволяют стрелять и за работой: рука и ствол доворачиваются врозь. Запрет тем не
+    /// менее сохранён и означает выбор занятия, а не нехватку снаряжения: строящий занят
+    /// стройкой, и вести огонь заодно с нею ему не полагается. Одно занятие в один
+    /// промежуток времени — общее правило исполнителя, и стрельба из него не изъята.
+    ///
     /// Приказ атаки стреляет и на работе — но работать и атаковать одновременно нельзя,
     /// поэтому случай этот вырожденный и оставлен ради ясности правила.
     /// </summary>
@@ -400,15 +413,35 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         var mount = Aim.PrimaryWork;
 
         if (mount == null)
+        {
+            _workAim = null;
             return;
+        }
 
+        // Подключённый узел и цель ремонта важнее заявки приказа: работа уже идёт,
+        // и рука обязана смотреть на то, над чем трудится, а не на то, к чему шли
         var target = Alive.Is(_attached)
             ? _attached.GlobalPosition
-            : (RepairTarget as Node2D)?.GlobalPosition;
+            : (RepairTarget as Node2D)?.GlobalPosition ?? _workAim;
 
         if (target is { } point)
             Aim.Aim(mount, Rotation, GlobalPosition, point, dt);
+
+        _workAim = null;
     }
+
+    /// <summary>
+    /// Заявить, куда рука тянется в этом шаге. Наводит её <see cref="AimWork"/> в конце
+    /// шага, поскольку наведение обязано случиться один раз: приказ и работа над узлом
+    /// нередко указывают на одно и то же место, и два доворота за шаг удвоили бы скорость.
+    ///
+    /// ЗАЧЕМ ЗАМЕНИЛО <see cref="AimAt"/>. Прежде приказы стройки и ремонта разворачивали
+    /// к месту работы ВСЕ СТВОЛЫ, потому что при единственном инструменте разворот носителя
+    /// и разворот его снаряжения были одним и тем же действием. У коммандера, снабжённого
+    /// и рукой, и пушкой, это означало, что пушка отворачивается от противника на каркас,
+    /// хотя каркасу от неё ничего не нужно.
+    /// </summary>
+    private void AimWorkAt(Vector2 point) => _workAim = point;
 
     /// <summary>
     /// Довернуть корпус ради инструментов. Только СТОЯ: на ходу корпус принадлежит системе
@@ -526,7 +559,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
                 return;
 
             case OrderKind.Repair:
-                RunRepair(order, dt);
+                RunRepair(order);
                 return;
 
             case OrderKind.Follow:
@@ -538,7 +571,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
                 return;
 
             default:
-                RunWork(order, dt);
+                RunWork(order);
                 return;
         }
     }
@@ -605,20 +638,19 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// на ходу делает система движения: обходя препятствие, юнит едет не туда, куда
     /// его послали, и разворот к цели выглядел бы движением боком вперёд.
     /// </summary>
-    private void RunWork(Order order, double dt)
+    private void RunWork(Order order)
     {
         var target = order.Target.GlobalPosition;
 
         // Дальность принадлежит инструменту, а не юниту: раньше одно число служило всем
         // занятиям сразу, хотя тянутся они на разное
         var tool = Definition.BuildTool;
-        float reach = tool?.RangePx ?? Const.Unit;
 
         // Дистанция меряется до КРАЯ места работы, а не до его середины: строитель,
         // вставший по диагонали от постройки, дотягивается до её угла, и отвергать его
         // на этом основании нельзя. Поправку на габарит цели держит Reach, а сюда она
         // приходит уже перенесённой на расстояние от центра — движение ведёт к центру
-        float stop = Reach.StopDistance(GlobalPosition, order.Body, reach);
+        float stop = Reach.WorkStopDistance(GlobalPosition, order.Body, tool);
 
         if (GlobalPosition.DistanceTo(target) > stop)
         {
@@ -627,8 +659,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return;
         }
 
-        // Дошли: разворачиваемся к тому, с чем работаем
-        AimAt(target, dt);
+        // Дошли: к месту работы тянется рука, а стволы остаются у системы стрельбы
+        AimWorkAt(target);
         order.Arrive(Id);
 
         if (tool == null)
@@ -1016,18 +1048,17 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Ремонт: подойти на длину инструмента и стоять. Само восстановление прочности идёт
     /// в Run — ремонт стоит ресурсов и потому проходит через экономику, как и стройка.
     /// </summary>
-    private void RunRepair(Order order, double dt)
+    private void RunRepair(Order order)
     {
         Detach();
 
         var to = order.Entity.GlobalPosition;
-        float reach = Definition.BuildTool?.RangePx ?? Definition.WorkRangePx;
-        float stop = Reach.StopDistance(GlobalPosition, order.Body, reach);
+        float stop = Reach.WorkStopDistance(GlobalPosition, order.Body, Definition.BuildTool);
 
         if (GlobalPosition.DistanceTo(to) > stop)
             Movement.Seek(to, stop);
         else
-            AimAt(to, dt);
+            AimWorkAt(to);
     }
 
     /// <summary>
@@ -1044,7 +1075,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     private void RunFollow(Order order, double dt)
     {
-        if (Assist(order, dt) || Guard(order))
+        if (Assist(order) || Guard(order))
             return;
 
         Detach();
@@ -1133,7 +1164,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     /// Предел внимания отсчитывается от непосредственного ведущего: помощник ходит за
     /// ним, а не за его работой, и уходить от него дальше, чем видит, не должен.
     /// </summary>
-    private bool Assist(Order order, double dt)
+    private bool Assist(Order order)
     {
         if (Definition.BuildTool == null || order.Entity is not IOrderable leader)
             return false;
@@ -1152,7 +1183,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         // До края того, над чем работает ведущий, а не до середины: помощник, оказавшийся
         // с дальней стороны каркаса, дотягивается до ближней к нему стены
-        float stop = Reach.StopDistance(GlobalPosition, work.Body, Definition.BuildTool.RangePx);
+        float stop = Reach.WorkStopDistance(GlobalPosition, work.Body, Definition.BuildTool);
 
         if (GlobalPosition.DistanceTo(point) > stop)
         {
@@ -1161,7 +1192,7 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
             return true;
         }
 
-        AimAt(point, dt);
+        AimWorkAt(point);
 
         // Ремонт идёт через RepairTarget, а каркас ставит сам ведущий: помощнику
         // остаётся подключиться к тому, что уже стоит

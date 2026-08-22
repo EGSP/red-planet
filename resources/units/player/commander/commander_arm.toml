@@ -9,3 +9,4 @@ power            = 30.0
 energy_per_power = 58.333
 works            = ["build"]
 repairs_units    = true
+body_assist = "never"

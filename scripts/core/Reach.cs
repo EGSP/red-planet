@@ -64,6 +64,32 @@ public static class Reach
     public static float StopDistance(Vector2 from, object target, float reach) =>
         reach + Inset(from, target);
 
+    /// <summary>Наименьший запас подхода к месту работы. Смысл тот же, что у огневого.</summary>
+    private static readonly float WorkMargin = Const.Unit * 0.5f;
+
+    /// <summary>
+    /// Дистанция, на которой исполнитель прекращает сближение с местом работы.
+    ///
+    /// Считается вычитанием запаса из досягаемости, поэтому по построению лежит внутри неё:
+    /// встать там, где рука уже не дотягивается, при таком определении невозможно ни при
+    /// каких числах справочника. Запас берётся долей дальности
+    /// (<see cref="WorkToolDefinition.ApproachHold"/>), но не меньше <see cref="WorkMargin"/>:
+    /// у короткой руки доля от дальности составила бы несколько пикселей, и исполнитель
+    /// вставал бы фактически на самой границе.
+    ///
+    /// Устроено так же, как <see cref="Targeting.ApproachDistance"/> у стрельбы, и по той же
+    /// причине: две формулы подхода неизбежно разойдутся, и исполнитель остановится там,
+    /// где действовать ещё нельзя.
+    /// </summary>
+    public static float WorkStopDistance(Vector2 from, object target, WorkToolDefinition tool)
+    {
+        float reach = tool?.RangePx ?? Const.Unit;
+        float slack = Mathf.Max(reach * (1f - Mathf.Clamp(tool?.ApproachHold ?? 1f, 0f, 1f)),
+            WorkMargin);
+
+        return StopDistance(from, target, Mathf.Max(reach - slack, 0f));
+    }
+
     /// <summary>
     /// Положение цели. Сущности приходят сюда под разными признаками — нода, уязвимое,
     /// место работы, — а общего предка с положением у них нет, поэтому разбор по типу.

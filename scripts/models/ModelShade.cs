@@ -218,6 +218,29 @@ public partial class ModelShade : Sprite2D
         Position = Source.Position + _shift.Rotated(-owner);
     }
 
+    /// <summary>
+    /// Убрать испечённое изображение из сохраняемой сцены.
+    ///
+    /// ЗАЧЕМ. Слой печётся из альфы источника при вводе в дерево — и в игре, и в редакторе,
+    /// — а <see cref="Sprite2D.Texture"/> есть обыкновенное сохраняемое свойство. Поэтому
+    /// редактор, сохраняя сцену модели, записывал в неё готовое изображение целиком,
+    /// в виде PackedByteArray на несколько сотен килобайт: у коммандера с четырьмя частями
+    /// текстовая сцена разрослась до без малого мегабайта, и Godot сам предупреждал
+    /// о медленном чтении и записи.
+    ///
+    /// Данные при этом бесполезны: <see cref="Rebuild"/> печёт слой заново при каждом
+    /// вводе в дерево и при всякой правке настроек затенения, то есть сохранённое
+    /// изображение перезаписывается прежде, чем его успевают показать.
+    /// </summary>
+    public override void _ValidateProperty(Godot.Collections.Dictionary property)
+    {
+        if (property["name"].AsStringName() != Sprite2D.PropertyName.Texture)
+            return;
+
+        var usage = (PropertyUsageFlags)(int)property["usage"];
+        property["usage"] = (int)(usage & ~PropertyUsageFlags.Storage);
+    }
+
     public override string[] _GetConfigurationWarnings()
     {
         if (Source == null)

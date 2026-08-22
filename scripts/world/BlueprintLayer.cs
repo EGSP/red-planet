@@ -71,9 +71,26 @@ public partial class BlueprintLayer : Node2D
         if (model == null)
             return;
 
+        // Слои затенения каркасу не полагаются: тень принадлежит стоящему корпусу, а под
+        // шейдером строительства она вдобавок получала бы собственную сетку, отчего силуэт
+        // каркаса двоился. Снимаются они, а не прячутся: ModelShade собирает себя заново
+        // при всякой правке настроек и невидимость бы себе вернул
+        model.DropShades();
+
         model.ShareParentMaterial(true);
         AddChild(model);
+
+        // Габарит нужен шейдеру: уровень готовности идёт по всей модели, а не по каждой
+        // её части отдельно. Меряется до подчинения веществу, но после снятия теней —
+        // тень отнесена от корпуса и растянула бы габарит на величину отхода
+        _bounds = model.Bounds();
     }
+
+    /// <summary>
+    /// Габарит поднятой модели в осях слоя. Служит шейдеру мерой, в которой считается
+    /// уровень готовности. Пусто, если модели нет: рисовать тогда нечего.
+    /// </summary>
+    private Rect2? _bounds;
 
     /// <summary>
     /// Согласовать слой с каркасом: угол корпуса, признак работы и параметры шейдера.
@@ -131,6 +148,15 @@ public partial class BlueprintLayer : Node2D
         if (Material != _material)
             Material = _material;
 
+        // Оси слоя и габарит модели: по ним шейдер переводит мировое положение точки
+        // в общую для всех частей систему отсчёта — см. construction.gdshader
+        var bounds = _bounds ?? Footprint();
+
+        _material.SetShaderParameter("hull_origin", GlobalPosition);
+        _material.SetShaderParameter("hull_axis", Vector2.Right.Rotated(GlobalRotation));
+        _material.SetShaderParameter("hull_min", bounds.Position);
+        _material.SetShaderParameter("hull_size", bounds.Size);
+
         _material.SetShaderParameter("progress", _owner.Ratio);
         _material.SetShaderParameter("activity", _activity);
         _material.SetShaderParameter("wire_color", settings.Wire);
@@ -143,6 +169,21 @@ public partial class BlueprintLayer : Node2D
         _material.SetShaderParameter("wave_amplitude", settings.WaveAmplitude);
         _material.SetShaderParameter("wave_frequency", settings.WaveFrequency);
         _material.SetShaderParameter("wave_speed", settings.WaveSpeed);
+    }
+
+    /// <summary>
+    /// Запасной габарит — клетки, занятые постройкой. Годится там, где модели нет вовсе:
+    /// шейдеру нужна мера в любом случае, а без модели рисовать всё равно нечего.
+    /// </summary>
+    private Rect2 Footprint()
+    {
+        var def = _owner?.Definition;
+
+        if (def == null)
+            return new Rect2(-Const.Unit * 0.5f, -Const.Unit * 0.5f, Const.Unit, Const.Unit);
+
+        var size = new Vector2(def.Size.X, def.Size.Y) * Const.Unit;
+        return new Rect2(-size * 0.5f, size);
     }
 
     public override void _Draw()
