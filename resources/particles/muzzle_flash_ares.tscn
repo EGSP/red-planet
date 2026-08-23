@@ -1,0 +1,81 @@
+[gd_scene format=3 uid="uid://tiddkn6frmc2"]
+
+[ext_resource type="Script" uid="uid://c5th55ch3jdcd" path="res://scripts/effects/BurstParticles.cs" id="1_hmtiu"]
+[ext_resource type="Texture2D" uid="uid://bofnvpaaec4hl" path="res://assets/textures/37.png" id="2_f2qcy"]
+[ext_resource type="Texture2D" uid="uid://dtgjhwbdo0n4" path="res://assets/textures/ken_muzzle_01.png" id="3_sp2ol"]
+
+[sub_resource type="Gradient" id="Gradient_core"]
+offsets = PackedFloat32Array(0.024390243, 0.12891985, 0.9163763)
+colors = PackedColorArray(1, 1, 1, 0, 1.1291975, 0.73744136, 0.48454225, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_core"]
+gradient = SubResource("Gradient_core")
+
+[sub_resource type="Curve" id="Curve_core"]
+_data = [Vector2(0, 0.45), 0.0, 0.0, 0, 0, Vector2(0.15335463, 1), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="CurveTexture" id="CurveTexture_core"]
+curve = SubResource("Curve_core")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_core"]
+direction = Vector3(0, 0, 0)
+spread = 0.0
+gravity = Vector3(0, 0, 0)
+damping_min = 30.0
+damping_max = 60.0
+use_scale_3d = true
+scale_3d_min = Vector3(0.6, 0.2, 0.3)
+scale_3d_max = Vector3(0.8, 0.2, 0.3)
+scale_min = 0.5
+scale_max = 0.5
+scale_curve = SubResource("CurveTexture_core")
+color_ramp = SubResource("GradientTexture1D_core")
+
+[sub_resource type="Gradient" id="Gradient_flame"]
+offsets = PackedFloat32Array(0.0034843206, 0.6759582, 0.815331, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 0.85, 0.45, 1, 1, 0.5, 0.15, 0.7, 0.35, 0.3, 0.28, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_flame"]
+gradient = SubResource("Gradient_flame")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_flame"]
+lifetime_randomness = 0.4
+emission_shape_offset = Vector3(0, -60, 0)
+direction = Vector3(0, 0, 0)
+spread = 0.0
+initial_velocity_min = 90.0
+initial_velocity_max = 190.0
+gravity = Vector3(0, 0, 0)
+damping_min = 200.0
+damping_max = 320.0
+scale_min = 0.29999998
+scale_max = 0.29999998
+color_ramp = SubResource("GradientTexture1D_flame")
+
+[node name="MuzzleFlashAres" type="Node2D" unique_id=53984251]
+script = ExtResource("1_hmtiu")
+PreviewLoop = true
+
+[node name="Core" type="GPUParticles2D" parent="." unique_id=1178782642]
+texture_filter = 1
+rotation = 1.5707964
+emitting = false
+amount = 1
+texture = ExtResource("2_f2qcy")
+lifetime = 0.3
+one_shot = true
+explosiveness = 1.0
+process_material = SubResource("ParticleProcessMaterial_core")
+
+[node name="Flame" type="GPUParticles2D" parent="." unique_id=1054644557]
+texture_filter = 2
+rotation = 1.5707964
+emitting = false
+amount = 1
+texture = ExtResource("3_sp2ol")
+lifetime = 0.3
+one_shot = true
+explosiveness = 1.0
+randomness = 0.5
+process_material = SubResource("ParticleProcessMaterial_flame")

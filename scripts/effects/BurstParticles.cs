@@ -41,13 +41,21 @@ public partial class BurstParticles : Node2D
     [Export(PropertyHint.Range, "0.1,5,0.1")] public float PreviewInterval { get; set; } = 1f;
 
     private GpuParticles2D[] _emitters;
+    private ScorchStamp[] _stamps;
     private float _preview;
 
     /// <summary>
     /// Части эффекта. Собираются один раз при первом обращении: состав сцены во время
     /// игры не меняется.
     /// </summary>
-    public GpuParticles2D[] Emitters => _emitters ??= Collect();
+    public GpuParticles2D[] Emitters => _emitters ??= Collect<GpuParticles2D>();
+
+    /// <summary>
+    /// Объявленные в эффекте отметины копоти. Сам узел их не ставит: собрать их — работа
+    /// сцены, а поставить — <see cref="EffectSystem"/>, поскольку он один знает про слой
+    /// отпечатков. Пустой набор означает эффект, следа не оставляющий.
+    /// </summary>
+    public ScorchStamp[] Stamps => _stamps ??= Collect<ScorchStamp>();
 
     /// <summary>
     /// В игре выдача выключается принудительно.
@@ -100,19 +108,19 @@ public partial class BurstParticles : Node2D
                 emitter.Restart();
     }
 
-    private GpuParticles2D[] Collect()
+    private T[] Collect<T>() where T : Node
     {
-        var found = new List<GpuParticles2D>();
+        var found = new List<T>();
         Walk(this, found);
         return found.ToArray();
     }
 
-    private static void Walk(Node node, List<GpuParticles2D> found)
+    private static void Walk<T>(Node node, List<T> found) where T : Node
     {
         foreach (var child in node.GetChildren())
         {
-            if (child is GpuParticles2D emitter)
-                found.Add(emitter);
+            if (child is T match)
+                found.Add(match);
 
             Walk(child, found);
         }

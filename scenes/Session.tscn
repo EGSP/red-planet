@@ -60,6 +60,7 @@
 [ext_resource type="Script" uid="uid://bbeajmwg6ryta" path="res://scripts/ui/MetricsScreen.cs" id="52_metricsscreen"]
 [ext_resource type="Script" path="res://scripts/effects/EffectSystem.cs" id="53_effects"]
 [ext_resource type="PackedScene" path="res://resources/particles/impact.tscn" id="54_impact"]
+[ext_resource type="PackedScene" path="res://resources/particles/explosion.tscn" id="55_boom"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kv8ms"]
 
@@ -171,6 +172,7 @@ StepOrder = 40
 [node name="EffectSystem" type="Node" parent="Systems"]
 script = ExtResource("53_effects")
 Impact = ExtResource("54_impact")
+Explosion = ExtResource("55_boom")
 Phase = 2
 StepOrder = 50
 

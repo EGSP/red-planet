@@ -12,8 +12,9 @@ rows = ["##", "##"]
 
 [body]
 max_health   = 50000.0
-radius = 2.5
+radius = 2
 vision_range = 14.0
+model = "res://resources/units/player/titan/ares/ares.tscn"
 
 [movement]
 speed      = 2.0

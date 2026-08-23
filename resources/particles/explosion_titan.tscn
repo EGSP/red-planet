@@ -1,0 +1,18 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://resources/particles/explosion.tscn" id="1_base"]
+[ext_resource type="Resource" path="res://resources/particles/scorch_b.tres" id="2_decal"]
+[ext_resource type="Resource" path="res://resources/particles/scorch_nuke.tres" id="3_nuke"]
+[ext_resource type="Script" path="res://scripts/effects/ScorchStamp.cs" id="4_stamp"]
+
+[node name="Explosion" instance=ExtResource("1_base")]
+
+[node name="Scorch" parent="." index="0"]
+Decal = ExtResource("2_decal")
+
+[node name="Nuke" type="Node2D" parent="."]
+z_index = -11
+script = ExtResource("4_stamp")
+Decal = ExtResource("3_nuke")
+Size = 180.0
+SizeRandom = 0.15

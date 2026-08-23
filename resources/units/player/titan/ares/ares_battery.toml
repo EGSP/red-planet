@@ -12,3 +12,5 @@ spread_degrees    = 1.5
 fire_arc_degrees  = 6.0
 projectile_radius = 0.16
 projectile_color  = [0.4, 0.68, 1]
+aim_arc_degrees = 50
+aim_rate_degrees = 15

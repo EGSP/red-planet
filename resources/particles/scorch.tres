@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ScorchDecal" format=3 uid="uid://dcc3snq7ivymk"]
+
+[ext_resource type="Script" uid="uid://dbrrw4b3n4h5n" path="res://scripts/effects/ScorchDecal.cs" id="1_scorch"]
+[ext_resource type="Texture2D" uid="uid://c8ynu5io07s2m" path="res://assets/textures/booms/scorch_a_01_diffuse.png" id="2_a"]
+[ext_resource type="Texture2D" uid="uid://dbge2h6we1tk1" path="res://assets/textures/booms/scorch_b_01_diffuse.png" id="3_b"]
+[ext_resource type="Texture2D" uid="uid://dfii1em4gko0l" path="res://assets/textures/booms/scorch_c_01_diffuse.png" id="4_c"]
+[ext_resource type="Texture2D" uid="uid://bncxp2cxsclce" path="res://assets/textures/booms/scorch_feature_01_diffuse.png" id="5_f"]
+
+[resource]
+script = ExtResource("1_scorch")
+Textures = [ExtResource("2_a"), ExtResource("3_b"), ExtResource("4_c"), ExtResource("5_f")]
+Tint = Color(1, 1, 1, 0.7)

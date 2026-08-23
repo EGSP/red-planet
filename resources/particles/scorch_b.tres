@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ScorchDecal" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/effects/ScorchDecal.cs" id="1_scorch"]
+[ext_resource type="Texture2D" uid="uid://dbge2h6we1tk1" path="res://assets/textures/booms/scorch_b_01_diffuse.png" id="2_b"]
+
+[resource]
+script = ExtResource("1_scorch")
+Textures = Array[Texture2D]([ExtResource("2_b")])
+Tint = Color(1, 1, 1, 0.7)
+RandomRotation = true
+Lifetime = 0.0
+Fade = 10.0

@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3 uid="uid://bqk3v1n8yc0mq"]
+[gd_scene load_steps=13 format=3 uid="uid://bqk3v1n8yc0mq"]
 
 [ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
 [ext_resource type="Script" uid="uid://cukuju4hl6y1n" path="res://scripts/models/ModelTool.cs" id="2_tool"]
@@ -10,6 +10,8 @@
 [ext_resource type="PackedScene" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
 [ext_resource type="PackedScene" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
 [ext_resource type="Material" path="res://resources/materials/unit.tres" id="92_body"]
+[ext_resource type="Script" path="res://scripts/models/DeathEffect.cs" id="93_death"]
+[ext_resource type="PackedScene" path="res://resources/particles/explosion.tscn" id="94_boom"]
 
 [node name="CommanderModel" type="Node2D" unique_id=154610350 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -84,3 +86,15 @@ offset = Vector2(-0.5, 6.5)
 [node name="Dust" parent="." instance=ExtResource("90_dust")]
 
 [node name="Flash" parent="Gun/Muzzle" instance=ExtResource("91_flash")]
+
+[node name="Death" type="Node2D" parent="."]
+script = ExtResource("93_death")
+Effect = ExtResource("94_boom")
+Size = 1.5
+
+[node name="Death2" type="Node2D" parent="."]
+position = Vector2(20, -12)
+script = ExtResource("93_death")
+Effect = ExtResource("94_boom")
+Size = 0.7
+Delay = 0.25

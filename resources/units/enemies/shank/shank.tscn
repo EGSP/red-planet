@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/models/UnitModel.cs" id="1_model"]
 [ext_resource type="Script" path="res://scripts/models/ModelTool.cs" id="2_tool"]
@@ -8,6 +8,8 @@
 [ext_resource type="PackedScene" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
 [ext_resource type="PackedScene" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
 [ext_resource type="Material" path="res://resources/materials/enemy.tres" id="92_body"]
+[ext_resource type="Script" path="res://scripts/models/DeathEffect.cs" id="93_death"]
+[ext_resource type="PackedScene" path="res://resources/particles/explosion_tank.tscn" id="94_boom"]
 
 [node name="ShankModel" type="Node2D" node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -47,3 +49,8 @@ position = Vector2(20, 0)
 [node name="Dust" parent="." instance=ExtResource("90_dust")]
 
 [node name="Flash" parent="Gun/Muzzle" instance=ExtResource("91_flash")]
+
+[node name="Death" type="Node2D" parent="."]
+script = ExtResource("93_death")
+Effect = ExtResource("94_boom")
+Size = 0.85
