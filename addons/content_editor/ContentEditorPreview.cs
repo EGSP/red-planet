@@ -80,6 +80,12 @@ public partial class ContentEditorPreview : Control
     /// </summary>
     private readonly System.Collections.Generic.Dictionary<string, UnitModel> _models = new();
 
+    /// <summary>
+    /// Экземпляр взрыва, показывающий область поражения активного ствола. Один на всё
+    /// поле — см. <see cref="SyncSplash"/>; null означает, что показывать его некому.
+    /// </summary>
+    private BurstParticles _splash;
+
     public void RefreshFromStore()
     {
         int count = _store?.SessionsIn(ContentEditorScope.Entities).Count() ?? 0;
@@ -112,6 +118,13 @@ public partial class ContentEditorPreview : Control
                 model.QueueFree();
 
         _models.Clear();
+
+        // Взрыв поднимается из той же файловой системы и правится так же, как модель
+        if (Alive.Is(_splash))
+            _splash.QueueFree();
+
+        _splash = null;
+
         SyncModels();
         QueueRedraw();
     }
@@ -169,6 +182,69 @@ public partial class ContentEditorPreview : Control
             AddChild(model);
             _models[id] = model;
         }
+
+        SyncSplash();
+    }
+
+    /// <summary>
+    /// Поднять экземпляр взрыва, если он нужен хоть одной открытой вкладке.
+    ///
+    /// ЭКЗЕМПЛЯР ОДИН НА ВСЁ ПОЛЕ, а не по одному на вкладку: взрыв показывается только
+    /// у активной сущности. Несколько повторяющихся вспышек разом означали бы, что поле
+    /// мигает, и подобрать по нему радиус стало бы труднее, а не легче.
+    ///
+    /// ПОДНИМАЕТСЯ НЕ В <c>_Draw</c> по той же причине, по которой не поднимаются модели:
+    /// добавление узлов посреди отрисовки родителя Godot не допускает. Отрисовка только
+    /// ставит готовое на место — см. <see cref="PlaceSplash"/>.
+    /// </summary>
+    private void SyncSplash()
+    {
+        bool wanted = _store != null
+            && _store.SessionsIn(ContentEditorScope.Entities).Any(s => SplashWeapon(s) != null);
+
+        if (!wanted)
+        {
+            if (Alive.Is(_splash))
+                _splash.QueueFree();
+
+            _splash = null;
+            return;
+        }
+
+        if (Alive.Is(_splash))
+            return;
+
+        if (CombatSettings.Active.SplashEffect?.Instantiate() is not BurstParticles burst)
+            return;
+
+        // Повтор — тот же признак, которым художник пользуется, открыв сцену эффекта:
+        // одноразовая вспышка, проигранная раз, для подбора радиуса бесполезна
+        burst.PreviewLoop = true;
+        burst.PreviewInterval = 1.4f;
+
+        // Предпросмотр отметины копоти на поле не нужен: она ложится на грунт, которого
+        // здесь нет вовсе, а её круги разброса читались бы как ещё одна граница взрыва
+        foreach (var stamp in burst.Stamps)
+            stamp.ShowGizmo = false;
+
+        AddChild(burst);
+        _splash = burst;
+    }
+
+    /// <summary>
+    /// Ствол вкладки, у которого есть взрыв. Пусто означает, что показывать нечего:
+    /// вкладка не про оружие либо оружие бьёт только прямым попаданием.
+    /// </summary>
+    private WeaponDefinition SplashWeapon(OpenEntitySession session)
+    {
+        if (session == null || !session.ShowOnField)
+            return null;
+
+        var weapon = session.Kind is ContentEntityKind.Weapon
+            ? _store.PreviewTool(session.Id) as WeaponDefinition
+            : _store.PreviewUnit(session.Id)?.Weapon;
+
+        return weapon is { HasSplash: true } ? weapon : null;
     }
 
     /// <summary>
@@ -240,6 +316,34 @@ public partial class ContentEditorPreview : Control
         foreach (var model in _models.Values)
             if (Alive.Is(model))
                 model.Visible = false;
+
+        if (Alive.Is(_splash))
+        {
+            _splash.Visible = false;
+
+            // Спрятанный взрыв и проигрываться не должен: перезапуск частиц каждые
+            // полторы секунды при закрытом переключателе есть работа впустую
+            _splash.PreviewLoop = false;
+        }
+    }
+
+    /// <summary>
+    /// Поставить взрыв туда же, где гизмо ствола рисует круг области поражения, — на край
+    /// дальности по оси ствола. Точка одна на оба изображения: круг показывает границу
+    /// области, эффект — то, как она будет выглядеть в бою, и разъехаться они не должны.
+    ///
+    /// РАЗМЕР СЧИТАЕТСЯ ТЕМ ЖЕ ПЕРЕВОДОМ, что и в игре
+    /// (<see cref="CombatSettings.SplashSize"/>), и домножается на приближение поля.
+    /// </summary>
+    private void PlaceSplash(WeaponDefinition weapon, Vector2 origin, bool active)
+    {
+        if (!active || !_showAttack || weapon is not { HasSplash: true } || !Alive.Is(_splash))
+            return;
+
+        _splash.Position = origin + Vector2.Right * weapon.RangePx * _zoom;
+        _splash.Scale = Vector2.One * _zoom * CombatSettings.SplashSize(weapon.SplashRadiusPx);
+        _splash.Visible = true;
+        _splash.PreviewLoop = true;
     }
 
     /// <summary>
@@ -561,8 +665,9 @@ public partial class ContentEditorPreview : Control
             if (tool is WeaponDefinition weapon && _showAttack)
             {
                 DrawSetTransform(origin, 0f, Vector2.One * _zoom);
-                WeaponGizmo.Draw(this, weapon);
+                WeaponGizmo.Draw(this, weapon, splash: true);
                 DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+                PlaceSplash(weapon, origin, active);
             }
 
             // Носителя у вкладки инструмента нет, поэтому ось корпуса берётся нулевой:
@@ -588,10 +693,12 @@ public partial class ContentEditorPreview : Control
         if (_showVision)
             VisionGizmo.Draw(this, def.VisionRadiusPx);
         if (_showAttack && def.Weapon != null)
-            WeaponGizmo.Draw(this, def.Weapon);
+            WeaponGizmo.Draw(this, def.Weapon, splash: true);
         if (_showWork && def.BuildTool != null)
             WorkGizmo.Draw(this, def.WorkRangePx);
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+
+        PlaceSplash(def.Weapon, origin, active);
 
         PlaceModel(session, def, origin, alpha);
         DrawAimArcs(session, def, origin);

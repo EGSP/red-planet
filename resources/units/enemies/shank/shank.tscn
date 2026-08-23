@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
 [ext_resource type="Material" path="res://resources/materials/enemy.tres" id="92_body"]
 [ext_resource type="Script" path="res://scripts/models/DeathEffect.cs" id="93_death"]
+[ext_resource type="Script" path="res://scripts/models/ImpactEffect.cs" id="95_impact"]
 [ext_resource type="PackedScene" path="res://resources/particles/explosion_tank.tscn" id="94_boom"]
 
 [node name="ShankModel" type="Node2D" node_paths=PackedStringArray("Body")]
@@ -49,6 +50,11 @@ position = Vector2(20, 0)
 [node name="Dust" parent="." instance=ExtResource("90_dust")]
 
 [node name="Flash" parent="Gun/Muzzle" instance=ExtResource("91_flash")]
+
+[node name="Impact" type="Node2D" parent="Gun/Muzzle"]
+script = ExtResource("95_impact")
+Effect = ExtResource("94_boom")
+Size = 0.85
 
 [node name="Death" type="Node2D" parent="."]
 script = ExtResource("93_death")

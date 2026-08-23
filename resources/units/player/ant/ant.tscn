@@ -9,7 +9,8 @@
 [ext_resource type="PackedScene" uid="uid://basv063qj6fco" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
 [ext_resource type="Material" uid="uid://ef56q8sw8vld" path="res://resources/materials/unit.tres" id="92_body"]
 [ext_resource type="Script" uid="uid://b6yjtdjtrguev" path="res://scripts/models/DeathEffect.cs" id="93_death"]
-[ext_resource type="PackedScene" path="res://resources/particles/explosion_tank.tscn" id="94_boom"]
+[ext_resource type="PackedScene" uid="uid://cd4gdqsbp5hmg" path="res://resources/particles/explosion_tank.tscn" id="94_boom"]
+[ext_resource type="Script" uid="uid://dt50x4exxyswc" path="res://scripts/models/ImpactEffect.cs" id="95_impact"]
 
 [node name="AntModel" type="Node2D" unique_id=1731228396 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -52,6 +53,12 @@ position = Vector2(28, -1)
 
 [node name="Flash" parent="Gun/Muzzle" unique_id=683684280 instance=ExtResource("91_flash")]
 position = Vector2(4, 1)
+
+[node name="Impact" type="Node2D" parent="Gun/Muzzle" unique_id=168485589]
+position = Vector2(178, 0)
+script = ExtResource("95_impact")
+Effect = ExtResource("94_boom")
+Size = 0.8
 
 [node name="Death" type="Node2D" parent="." unique_id=1032393908]
 script = ExtResource("93_death")

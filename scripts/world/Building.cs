@@ -217,6 +217,13 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     protected virtual Vector2? WorkAim => null;
 
     /// <summary>
+    /// Куда тянуть луч работы. У постройки совпадает с точкой наведения: сдвинуться
+    /// с места она не может, и наводит руку только на то, над чем уже трудится. У подвижного
+    /// исполнителя эти две точки расходятся — см. <c>Unit.WorkBeamAim</c>.
+    /// </summary>
+    protected virtual Vector2? WorkBeamAim => WorkAim;
+
+    /// <summary>
     /// Области инструментов включаются кадрами (Ctrl, покрытие турелей, вкладка giz),
     /// поэтому постройка обязана перерисовываться, иначе круг появится только при
     /// следующей смене состояния.
@@ -233,6 +240,9 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
         AfterAim();
         SyncModel();
         Model?.ApplyDamage(Health?.Ratio ?? 1f);
+
+        // После согласования углов: начало луча стоит на уже повёрнутой руке
+        Aim.DriveWorkBeam(WorkBeamAim);
         QueueRedraw();
         _marks?.QueueRedraw();
     }

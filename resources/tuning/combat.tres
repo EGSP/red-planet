@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CombatSettings" format=3 uid="uid://bjsuvtje2mx1h"]
+
+[ext_resource type="Script" uid="uid://cvdjpc18jfc4b" path="res://scripts/combat/CombatSettings.cs" id="1_combat"]
+[ext_resource type="PackedScene" uid="uid://c5xsofg0uwtko" path="res://resources/particles/explosion.tscn" id="2_splash"]
+
+[sub_resource type="Curve" id="Curve_splash"]
+_data = [Vector2(0, 1), 0.0, -1.0, 0, 1, Vector2(1, 0), -1.0, 0.0, 1, 0]
+point_count = 2
+
+[resource]
+script = ExtResource("1_combat")
+SplashFalloff = SubResource("Curve_splash")
+SplashEffect = ExtResource("2_splash")

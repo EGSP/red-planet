@@ -1,9 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://cd4gdqsbp5hmg"]
 
-[ext_resource type="PackedScene" path="res://resources/particles/explosion.tscn" id="1_base"]
+[ext_resource type="PackedScene" uid="uid://c5xsofg0uwtko" path="res://resources/particles/explosion.tscn" id="1_base"]
 [ext_resource type="Resource" path="res://resources/particles/scorch_b.tres" id="2_decal"]
 
-[node name="Explosion" instance=ExtResource("1_base")]
+[node name="Explosion" unique_id=1096320903 instance=ExtResource("1_base")]
 
-[node name="Scorch" parent="." index="0"]
+[node name="Scorch" parent="." index="0" unique_id=379220742]
 Decal = ExtResource("2_decal")

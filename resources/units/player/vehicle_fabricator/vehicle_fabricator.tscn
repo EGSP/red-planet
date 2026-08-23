@@ -7,6 +7,8 @@
 [ext_resource type="Texture2D" uid="uid://dia87rnt70e7e" path="res://resources/units/player/vehicle_fabricator/vehicle_fabricator_arm.png" id="4_arm"]
 [ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="6_shade"]
 [ext_resource type="PackedScene" uid="uid://bcwemggrliom3" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
+[ext_resource type="Script" path="res://scripts/effects/BeamVisual.cs" id="95_beam"]
+[ext_resource type="Resource" path="res://resources/beams/build_beam.tres" id="96_beamstyle"]
 
 [node name="VehicleFabricatorModel" type="Node2D" unique_id=1758241675 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -43,3 +45,11 @@ texture = ExtResource("4_arm")
 position = Vector2(26, 0)
 
 [node name="Dust" parent="." unique_id=1490066852 instance=ExtResource("90_dust")]
+
+[node name="Beam" type="Node2D" parent="Arm/Muzzle" node_paths=PackedStringArray("PreviewTarget")]
+script = ExtResource("95_beam")
+Style = ExtResource("96_beamstyle")
+PreviewTarget = NodePath("../../BeamPreview")
+
+[node name="BeamPreview" type="Marker2D" parent="Arm"]
+position = Vector2(140, 0)

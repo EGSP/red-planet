@@ -316,8 +316,9 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
 
         HealthBar.Draw(canvas, Health, radius * 2.4f, -radius - 10f, Rotation);
 
-        // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей
-        if (Alive.Is(_attached))
+        // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей.
+        // Запасное изображение: вид, объявивший в модели луч, рисует его сам
+        if (Alive.Is(_attached) && Aim.WorkBeam == null)
             ShapeDraw.Line(canvas, ToLocal(WorkBeamOrigin), ToLocal(_attached.GlobalPosition),
                 DrawTheme.Line(VizKind.WorkBeamBuild));
     }
@@ -399,6 +400,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // а материалом задаётся всё остальное — см. UnitModel.ApplyDamage
         _model?.ApplyDamage(Health?.Ratio ?? 1f);
 
+        // Луч работы ведётся после наведения: рука к этому мигу уже повёрнута, и начало
+        // луча стоит там, где ему быть
+        Aim.DriveWorkBeam(WorkBeamAim);
+
         QueueRedraw();
         _marks?.QueueRedraw();
     }
@@ -429,6 +434,16 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
     private Vector2? WorkAim => Alive.Is(_attached)
         ? _attached.GlobalPosition
         : (RepairTarget as Node2D)?.GlobalPosition ?? _workAim;
+
+    /// <summary>
+    /// Куда тянуть луч работы. Отличается от <see cref="WorkAim"/> одним: заявка приказа
+    /// сюда не входит. Наведение начинается заранее, чтобы рука встретила цель уже
+    /// повёрнутой, а луч означает «работа идёт», и тянуть его к месту, до которого ещё
+    /// едут, значило бы строить издалека.
+    /// </summary>
+    private Vector2? WorkBeamAim => Alive.Is(_attached)
+        ? _attached.GlobalPosition
+        : (RepairTarget as Node2D)?.GlobalPosition;
 
     /// <summary>
     /// Заявить, куда рука тянется в этом шаге. Наводит её <see cref="AimWork"/> в конце

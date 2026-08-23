@@ -198,8 +198,11 @@ public partial class Assembler : Building, IWorker
         float half = Const.Unit * 0.5f;
 
         // Луч к тому, с чем работаем, — от среза манипулятора, как у подвижного исполнителя
-        // (см. Unit.PaintMarks). Из центра он выходил бы мимо изображения руки
-        var target = Alive.Is(_attached) ? (Node2D)_attached : _repairTarget;
+        // (см. Unit.PaintMarks). Из центра он выходил бы мимо изображения руки. Это запасное
+        // изображение: вид, объявивший в модели узел луча, рисует его сам
+        var target = Aim.WorkBeam != null ? null
+            : Alive.Is(_attached) ? (Node2D)_attached
+            : _repairTarget;
 
         if (Alive.Is(target))
             ShapeDraw.Line(canvas, ToLocal(WorkBeamOrigin), ToLocal(target.GlobalPosition),

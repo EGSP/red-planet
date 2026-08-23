@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://bqk3v1n8yc0mq"]
+[gd_scene load_steps=15 format=3 uid="uid://bqk3v1n8yc0mq"]
 
 [ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
 [ext_resource type="Script" uid="uid://cukuju4hl6y1n" path="res://scripts/models/ModelTool.cs" id="2_tool"]
@@ -12,6 +12,8 @@
 [ext_resource type="Material" path="res://resources/materials/unit.tres" id="92_body"]
 [ext_resource type="Script" path="res://scripts/models/DeathEffect.cs" id="93_death"]
 [ext_resource type="PackedScene" path="res://resources/particles/explosion.tscn" id="94_boom"]
+[ext_resource type="Script" path="res://scripts/effects/BeamVisual.cs" id="95_beam"]
+[ext_resource type="Resource" path="res://resources/beams/build_beam.tres" id="96_beamstyle"]
 
 [node name="CommanderModel" type="Node2D" unique_id=154610350 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -98,3 +100,11 @@ script = ExtResource("93_death")
 Effect = ExtResource("94_boom")
 Size = 0.7
 Delay = 0.25
+
+[node name="Beam" type="Node2D" parent="BuildArm/Muzzle2" node_paths=PackedStringArray("PreviewTarget")]
+script = ExtResource("95_beam")
+Style = ExtResource("96_beamstyle")
+PreviewTarget = NodePath("../../BeamPreview")
+
+[node name="BeamPreview" type="Marker2D" parent="BuildArm"]
+position = Vector2(150, 0)

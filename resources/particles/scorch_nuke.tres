@@ -1,12 +1,9 @@
-[gd_resource type="Resource" script_class="ScorchDecal" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="ScorchDecal" format=3 uid="uid://jcfsailers5i"]
 
-[ext_resource type="Script" path="res://scripts/effects/ScorchDecal.cs" id="1_scorch"]
-[ext_resource type="Texture2D" uid="uid://belpxvk5ocb2q" path="res://assets/textures/booms/nuke_scorch_01_diffuse.png" id="2_nuke"]
+[ext_resource type="Texture2D" uid="uid://dfii1em4gko0l" path="res://assets/textures/booms/scorch_c_01_diffuse.png" id="1_jl6s1"]
+[ext_resource type="Script" uid="uid://dbrrw4b3n4h5n" path="res://scripts/effects/ScorchDecal.cs" id="1_scorch"]
 
 [resource]
 script = ExtResource("1_scorch")
-Textures = Array[Texture2D]([ExtResource("2_nuke")])
-Tint = Color(1, 1, 1, 0.55)
-RandomRotation = true
-Lifetime = 0.0
-Fade = 10.0
+Textures = [ExtResource("1_jl6s1")]
+Tint = Color(1, 1, 1, 0.5058824)

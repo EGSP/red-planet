@@ -2,22 +2,22 @@
 
 [ext_resource type="Script" uid="uid://c5th55ch3jdcd" path="res://scripts/effects/BurstParticles.cs" id="1_burst"]
 [ext_resource type="Script" uid="uid://b8m5np7mtdx1s" path="res://scripts/effects/ScorchStamp.cs" id="2_stamp"]
-[ext_resource type="Resource" path="res://resources/particles/scorch.tres" id="3_scorch"]
-[ext_resource type="Texture2D" uid="uid://ctj2goaopd688" path="res://assets/textures/ken_light_02.png" id="4_light"]
+[ext_resource type="Resource" uid="uid://dcc3snq7ivymk" path="res://resources/particles/scorch.tres" id="3_scorch"]
+[ext_resource type="Texture2D" uid="uid://ddb3byqun8f55" path="res://assets/textures/50.png" id="4_x6yn7"]
 [ext_resource type="Texture2D" uid="uid://btfkfhr3eujnp" path="res://assets/textures/ken_magic_03.png" id="5_magic"]
 [ext_resource type="Texture2D" uid="uid://w1g1ej0e6d0r" path="res://assets/textures/ken_smoke_03.png" id="6_smoke"]
 [ext_resource type="Texture2D" uid="uid://dnqgll223egud" path="res://assets/textures/ken_magic_04.png" id="7_x6yn7"]
 
 [sub_resource type="Gradient" id="Gradient_flash"]
-offsets = PackedFloat32Array(0, 0.35, 1)
-colors = PackedColorArray(1, 0.96, 0.8, 1, 1, 0.72, 0.32, 0.85, 1, 0.5, 0.15, 0)
+offsets = PackedFloat32Array(0, 0.24738675, 0.5644599, 1)
+colors = PackedColorArray(1, 0.96000004, 0.8, 0.5568628, 1, 0.7166667, 0.32, 0.8980392, 1, 0.55450004, 0.19, 0.74509805, 1, 0.50416666, 0.14999998, 0.1882353)
 
 [sub_resource type="GradientTexture1D" id="GradientTexture1D_flash"]
 gradient = SubResource("Gradient_flash")
 
 [sub_resource type="Curve" id="Curve_flash"]
-_data = [Vector2(0, 0.35), 0.0, 0.0, 0, 0, Vector2(0.25, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.8), 0.0, 0.0, 0, 0]
-point_count = 3
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 2
 
 [sub_resource type="CurveTexture" id="CurveTexture_flash"]
 curve = SubResource("Curve_flash")
@@ -31,35 +31,22 @@ gravity = Vector3(0, 0, 0)
 scale_min = 0.28
 scale_max = 0.36
 scale_curve = SubResource("CurveTexture_flash")
-color = Color(2.4, 1.35, 0.55, 1)
 color_ramp = SubResource("GradientTexture1D_flash")
-
-[sub_resource type="Gradient" id="Gradient_fire"]
-offsets = PackedFloat32Array(0, 0.45, 1)
-colors = PackedColorArray(1, 0.85, 0.55, 1, 0.95, 0.45, 0.16, 0.9, 0.35, 0.2, 0.14, 0)
-
-[sub_resource type="GradientTexture1D" id="GradientTexture1D_fire"]
-gradient = SubResource("Gradient_fire")
 
 [sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_fire"]
 lifetime_randomness = 0.3
 particle_flag_disable_z = true
-emission_shape = 1
-emission_sphere_radius = 10.0
 angle_min = -180.0
 angle_max = 180.0
 spread = 180.0
-initial_velocity_min = 40.0
-initial_velocity_max = 130.0
 angular_velocity_min = -90.0
 angular_velocity_max = 90.0
 gravity = Vector3(0, 0, 0)
 damping_min = 90.0
 damping_max = 220.0
-scale_min = 0.14
-scale_max = 0.26
-color = Color(1.8, 0.95, 0.4, 1)
-color_ramp = SubResource("GradientTexture1D_fire")
+scale_min = 0.14999999
+scale_max = 0.14999999
+color = Color(1.7999877, 1.0799712, 0.69226986, 1)
 
 [sub_resource type="Gradient" id="Gradient_smoke"]
 offsets = PackedFloat32Array(0, 0.2, 1)
@@ -136,7 +123,7 @@ SizeRandom = 0.3
 texture_filter = 2
 emitting = false
 amount = 2
-texture = ExtResource("4_light")
+texture = ExtResource("4_x6yn7")
 lifetime = 0.3
 one_shot = true
 explosiveness = 1.0
@@ -146,7 +133,7 @@ process_material = SubResource("ParticleProcessMaterial_flash")
 [node name="Fire" type="GPUParticles2D" parent="." unique_id=1964047750]
 texture_filter = 2
 emitting = false
-amount = 3
+amount = 1
 texture = ExtResource("5_magic")
 lifetime = 0.34
 one_shot = true

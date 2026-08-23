@@ -210,6 +210,21 @@ public static class ContentSchema
                 + "already aimed and is measured from the barrel. Usually single digits."),
             Root("projectile_radius", "Projectile radius", ContentFieldType.Float),
             Root("projectile_color", "Projectile color", ContentFieldType.Color),
+            Hint(Root("splash_radius", "Splash radius", ContentFieldType.Float),
+                "Blast radius in world units around the point of impact. 0 means no blast "
+                + "at all: only the target that was struck takes damage. Distance is "
+                + "measured to the SURFACE of each victim, so a blast next to a wall does "
+                + "hit the building behind it."),
+            Hint(Root("splash_damage", "Splash damage", ContentFieldType.Float),
+                "Damage at the CENTRE of the blast, falling off towards the rim along the "
+                + "shared curve in resources/tuning/combat.tres. Separate from damage: the "
+                + "target that was struck directly takes damage and is left out of the "
+                + "blast, so it is never charged twice."),
+            Hint(Root("splash_friendly_fire", "Splash friendly fire",
+                    ContentFieldType.Bool),
+                "Whether the blast also hits the shooter's own side. Belongs to the weapon "
+                + "rather than to the game as a whole: one design has shells that hit "
+                + "everyone, another has shells that spare friendlies."),
         ]);
 
         return fields;

@@ -16,7 +16,17 @@ public static class WeaponGizmo
     /// <summary>Доля дальности, на которую тянутся рёбра сектора: на всю длину они превращают экран в паутину.</summary>
     private const float ConeLength = 0.35f;
 
-    public static void Draw(CanvasItem canvas, WeaponDefinition weapon, float toolOffset = 0f)
+    /// <summary>Прозрачность заливки области поражения. Выше — и пятно закрывает цели под собой.</summary>
+    private const float SplashAlpha = 0.22f;
+
+    /// <param name="splash">
+    /// Показывать ли область поражения. Ложь в игре и истина в поле редактора контента,
+    /// и различие не декоративно: в бою круг рисуется у выделенных и наведённых сущностей
+    /// разом, и пятно на краю дальности у каждой из них превратило бы поле в мешанину.
+    /// В редакторе же сущность на поле одна и разбирается по числам — там пятно и нужно.
+    /// </param>
+    public static void Draw(CanvasItem canvas, WeaponDefinition weapon, float toolOffset = 0f,
+        bool splash = false)
     {
         if (weapon == null)
             return;
@@ -32,6 +42,30 @@ public static class WeaponGizmo
 
         ShapeDraw.Line(canvas, Vector2.Zero, Heading.Forward(toolOffset + arc) * length, edge);
         ShapeDraw.Line(canvas, Vector2.Zero, Heading.Forward(toolOffset - arc) * length, edge);
+
+        if (splash)
+            Splash(canvas, weapon, toolOffset);
+    }
+
+    /// <summary>
+    /// Область поражения — залитый круг на КРАЮ дальности по оси ствола.
+    ///
+    /// ПОЧЕМУ НА КРАЮ, А НЕ ВОКРУГ НОСИТЕЛЯ. Взрыв случается там, куда прилетел снаряд,
+    /// и вокруг стрелка его не бывает вовсе. Край дальности выбран потому, что это
+    /// единственная точка, определённая одними числами справочника: цели у гизмо нет,
+    /// а показать нужно соотношение двух величин — далеко ли бьёт и широко ли накрывает.
+    /// </summary>
+    private static void Splash(CanvasItem canvas, WeaponDefinition weapon, float toolOffset)
+    {
+        if (!weapon.HasSplash)
+            return;
+
+        var at = Heading.Forward(toolOffset) * weapon.RangePx;
+        var hue = DrawTheme.Hue(VizKind.Attack);
+
+        ShapeDraw.Circle(canvas, at, weapon.SplashRadiusPx,
+            ShapeStyle.Filled(hue with { A = SplashAlpha }, hue with { A = 0.8f }, 2f,
+                WidthMode.Screen), 48);
     }
 }
 

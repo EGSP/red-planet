@@ -1,16 +1,9 @@
 [gd_scene format=3 uid="uid://cjtk2faoqj4c0"]
 
 [ext_resource type="Script" uid="uid://c5th55ch3jdcd" path="res://scripts/effects/BurstParticles.cs" id="1_burst"]
-[ext_resource type="Texture2D" uid="uid://btfkfhr3eujnp" path="res://assets/textures/ken_magic_03.png" id="2_8mit5"]
+[ext_resource type="Texture2D" uid="uid://bk8uo25oxowgv" path="res://assets/textures/ken_star_07.png" id="2_jr0k4"]
 [ext_resource type="Texture2D" uid="uid://bcmilokq71f7" path="res://assets/textures/9.png" id="3_8mit5"]
 [ext_resource type="Texture2D" uid="uid://ctj2goaopd688" path="res://assets/textures/ken_light_02.png" id="3_jr0k4"]
-
-[sub_resource type="Gradient" id="Gradient_core"]
-offsets = PackedFloat32Array(0, 0.6759582, 1)
-colors = PackedColorArray(1, 1, 1, 0.54901963, 0.96, 0.75200003, 0.46080002, 1, 1, 1, 1, 0)
-
-[sub_resource type="GradientTexture1D" id="GradientTexture1D_core"]
-gradient = SubResource("Gradient_core")
 
 [sub_resource type="Curve" id="Curve_core"]
 _data = [Vector2(0, 0.8651686), 0.0, 0.0, 0, 0, Vector2(0.35463262, 0.8314607), 0.0, 0.0, 0, 0, Vector2(1, 0.75280905), 0.0, 0.0, 0, 0]
@@ -29,14 +22,9 @@ gravity = Vector3(0, 0, 0)
 scale_min = 0.06
 scale_max = 0.11
 scale_curve = SubResource("CurveTexture_core")
-color_ramp = SubResource("GradientTexture1D_core")
-
-[sub_resource type="Gradient" id="Gradient_jr0k4"]
-offsets = PackedFloat32Array(0.46689895, 1)
-colors = PackedColorArray(1, 1, 1, 0.54901963, 1, 1, 1, 0)
+color = Color(1.2360035, 0.8321826, 0.5629685, 1)
 
 [sub_resource type="GradientTexture1D" id="GradientTexture1D_d4iw1"]
-gradient = SubResource("Gradient_jr0k4")
 
 [sub_resource type="Curve" id="Curve_u10rd"]
 _data = [Vector2(0, 0.7083333), 0.0, 0.0, 0, 0, Vector2(0.99361026, 0.9499999), 0.0, 0.0, 0, 0]
@@ -55,7 +43,7 @@ gravity = Vector3(0, 0, 0)
 scale_min = 0.08
 scale_max = 0.099999994
 scale_curve = SubResource("CurveTexture_cxerw")
-color = Color(2.2449565, 0.75017065, 0.15292226, 1)
+color = Color(0.96024394, 0.5833366, 0.47908565, 1)
 color_ramp = SubResource("GradientTexture1D_d4iw1")
 
 [sub_resource type="Gradient" id="Gradient_spray"]
@@ -87,8 +75,9 @@ PreviewLoop = true
 
 [node name="Core" type="GPUParticles2D" parent="." unique_id=1625123121]
 texture_filter = 2
+emitting = false
 amount = 1
-texture = ExtResource("2_8mit5")
+texture = ExtResource("2_jr0k4")
 lifetime = 0.2
 one_shot = true
 explosiveness = 1.0
@@ -96,10 +85,11 @@ randomness = 1.0
 process_material = SubResource("ParticleProcessMaterial_core")
 
 [node name="Core2" type="GPUParticles2D" parent="." unique_id=1695973729]
+visible = false
 texture_filter = 2
 amount = 1
 texture = ExtResource("3_jr0k4")
-lifetime = 0.21000000000000002
+lifetime = 0.21
 one_shot = true
 explosiveness = 1.0
 randomness = 1.0

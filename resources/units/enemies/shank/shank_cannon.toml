@@ -11,3 +11,8 @@ projectile_speed  = 10.0
 spread_degrees    = 2.5
 projectile_radius = 0.09
 projectile_color  = [1, 0.7, 0.68]
+
+# Взрыв. Радиус подобран по игре, а не переведён из PA: там он после деления на 15
+# оказался бы меньше корпуса. Урон в середине — четверть прямого попадания.
+splash_radius = 1.1
+splash_damage = 32.0

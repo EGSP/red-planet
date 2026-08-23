@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BeamStyle" format=3 uid="uid://p28qnkevijq6"]
+
+[ext_resource type="Script" uid="uid://dce40og6yk5xk" path="res://scripts/effects/BeamStyle.cs" id="1_beam"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_beam"]
+blend_mode = 1
+
+[resource]
+script = ExtResource("1_beam")
+Color = Color(0.28, 0.92, 0.38, 1)
+GlowWidth = 13.0
+GlowAlpha = 0.3
+MuzzleRadius = 5.0
+ImpactRadius = 9.0
+PulseSpeed = 6.0
+PulseDepth = 0.25
+Material = SubResource("CanvasItemMaterial_beam")

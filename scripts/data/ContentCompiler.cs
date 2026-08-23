@@ -273,6 +273,9 @@ public static class ContentCompiler
                 FireArcDegrees = document.Float("fire_arc_degrees", 8f),
                 ProjectileRadius = document.Float("projectile_radius", 0.08f),
                 ProjectileColor = document.Color("projectile_color", new Color(1f, 0.85f, 0.4f)),
+                SplashRadius = document.Float("splash_radius"),
+                SplashDamage = document.Float("splash_damage"),
+                SplashFriendlyFire = document.Bool("splash_friendly_fire"),
             }
             : (ToolDefinition)new WorkToolDefinition
             {

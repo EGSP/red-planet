@@ -33,9 +33,10 @@ using Godot;
 public partial class EffectSystem : GameSystem
 {
     /// <summary>
-    /// Вид вспышки попадания. Общий на все виды оружия: показывать разные попадания
-    /// пока нечем, а как только понадобится, ссылка переедет к части-инструменту модели,
-    /// где уже лежит вспышка выстрела.
+    /// Запасной вид вспышки попадания: им показывается урон, у которого своего вида нет, —
+    /// от оружия, не объявившего <see cref="ImpactEffect"/>, и от сноса, у которого
+    /// инструмента нет вовсе. Своя вспышка объявляется в модели, внутри части-инструмента,
+    /// рядом со вспышкой выстрела.
     /// </summary>
     [Export] public PackedScene Impact { get; set; }
 
@@ -54,10 +55,15 @@ public partial class EffectSystem : GameSystem
     [Export] public PackedScene Explosion { get; set; }
 
     /// <summary>
-    /// Сколько взрывов держать наготове. Меньше, чем попаданий: гибнет реже, чем попадает,
-    /// зато волна гибнет разом, поэтому единицей набор быть не может.
+    /// Сколько взрывов держать наготове.
+    ///
+    /// НАБОР ОБЩИЙ СО ВЗРЫВАМИ ОБЛАСТИ, поскольку он заводится на сцену, а сцена у них
+    /// обыкновенно одна и та же (см. <see cref="CombatSettings.SplashEffect"/>). Поэтому
+    /// число выведено не из частоты гибели, а из частоты стрельбы фугасным оружием:
+    /// десяток антов даёт по разрыву на каждый выстрел, и набора на восемь штук хватало бы
+    /// меньше чем на секунду, обрывая уже идущие взрывы.
     /// </summary>
-    [Export] public int ExplosionPool { get; set; } = 8;
+    [Export] public int ExplosionPool { get; set; } = 24;
 
     /// <summary>
     /// Сколько отметин копоти держать на карте — см. <see cref="ScorchField.Capacity"/>.
@@ -104,6 +110,27 @@ public partial class EffectSystem : GameSystem
     private readonly Dictionary<object, List<Trail>> _trails = new(ByReference.Instance);
 
     private readonly Dictionary<object, Flash[]> _flashes = new(ByReference.Instance);
+
+    /// <summary>
+    /// Вспышка попадания, объявленная у ствола: ключ его инструмента, сцена и размер.
+    /// Хранится ссылкой на сцену, а не узлом: разрыв случается там, где ни модели,
+    /// ни носителя нет, и играть его будет общий набор готовых экземпляров.
+    /// </summary>
+    private readonly struct Blow
+    {
+        public readonly string ToolId;
+        public readonly PackedScene Scene;
+        public readonly float Size;
+
+        public Blow(string toolId, PackedScene scene, float size)
+        {
+            ToolId = toolId;
+            Scene = scene;
+            Size = size;
+        }
+    }
+
+    private readonly Dictionary<object, Blow[]> _impacts = new(ByReference.Instance);
 
     /// <summary>Один объявленный в модели взрыв, снятый в системе координат носителя.</summary>
     private readonly struct Wreck
@@ -188,6 +215,9 @@ public partial class EffectSystem : GameSystem
 
         foreach (var hit in GM.Events.Stream<DamageDealt>().Records)
             Strike(hit);
+
+        foreach (var blast in GM.Events.Stream<SplashRequested>().Records)
+            Burst(blast);
 
         Track();
         Await(dt);
@@ -350,6 +380,7 @@ public partial class EffectSystem : GameSystem
             return;
 
         List<Flash> found = null;
+        List<Blow> blows = null;
 
         foreach (var mount in armed.Aim.Mounts)
         {
@@ -361,13 +392,31 @@ public partial class EffectSystem : GameSystem
 
             foreach (var burst in bursts)
                 (found ??= new List<Flash>()).Add(new Flash(mount.Weapon.Id, burst));
+
+            // Вспышка попадания объявлена внутри той же части — см. ImpactEffect.
+            // Собирается ссылкой: узел останется в модели, а играть эффект придётся
+            // на цели, до которой снаряду ещё лететь
+            var declared = new List<ImpactEffect>();
+            Collect(mount.Part, declared);
+
+            foreach (var item in declared)
+                if (item.Effect != null)
+                    (blows ??= new List<Blow>())
+                        .Add(new Blow(mount.Weapon.Id, item.Effect, item.Size));
         }
 
         if (found != null)
             _flashes[armed] = found.ToArray();
+
+        if (blows != null)
+            _impacts[armed] = blows.ToArray();
     }
 
-    private void OnArmedRetired(IArmed armed) => _flashes.Remove(armed);
+    private void OnArmedRetired(IArmed armed)
+    {
+        _flashes.Remove(armed);
+        _impacts.Remove(armed);
+    }
 
     /// <summary>
     /// Показать выстрел. Носитель разыскивается по номеру сущности, а ствол — по ключу
@@ -396,16 +445,85 @@ public partial class EffectSystem : GameSystem
     /// </summary>
     private void Strike(DamageDealt hit)
     {
-        var burst = Take(Impact, ImpactPool);
+        // Задетым взрывом вспышка не полагается: у самого взрыва есть свой эффект
+        // в середине, и вспышка на каждой цели сверх него дала бы десяток вспышек
+        // на один разрыв, вычерпав при этом набор готовых экземпляров
+        if (hit.FromSplash)
+            return;
+
+        var (scene, size) = ImpactOf(hit);
+        var burst = Take(scene, ImpactPool);
 
         if (burst == null)
             return;
 
         burst.GlobalPosition = hit.Pos;
         burst.GlobalRotation = hit.Facing + Mathf.Pi;
-        burst.Scale = Vector2.One;
+        burst.Scale = Vector2.One * size;
 
         Play(burst);
+    }
+
+    /// <summary>
+    /// Чем показывать это попадание. Вид принадлежит ОРУЖИЮ, а не цели: разрыв говорит,
+    /// чем ударили, и болванка малого калибра обязана отличаться от снаряда титана на одной
+    /// и той же машине. Поэтому объявление ищется у стрелявшего, по ключу его ствола.
+    ///
+    /// ОБЩАЯ ВСПЫШКА ОСТАЁТСЯ ЗАПАСНОЙ и достаётся трём случаям: у оружия объявления нет,
+    /// урон нанесён не оружием вовсе (снос), либо стрелявший погиб раньше, чем его снаряд
+    /// долетел, — спросить объявление тогда не у кого.
+    /// </summary>
+    private (PackedScene Scene, float Size) ImpactOf(DamageDealt hit) =>
+        Declared(hit.SourceId, hit.ToolId) is { } blow
+            ? (blow.Scene, blow.Size)
+            : (Impact, 1f);
+
+    /// <summary>
+    /// Объявление вспышки у стрелявшего по ключу его ствола. Пусто означает, что своей
+    /// вспышки у оружия нет либо спросить её уже не у кого.
+    /// </summary>
+    private Blow? Declared(int sourceId, string toolId)
+    {
+        if (string.IsNullOrEmpty(toolId)
+            || GM.Entities.Get(sourceId) is not IArmed armed
+            || !_impacts.TryGetValue(armed, out var declared))
+            return null;
+
+        foreach (var blow in declared)
+            if (blow.ToolId == toolId)
+                return blow;
+
+        return null;
+    }
+
+    // ── взрыв: эффект в середине области ──────────────────────────────────────────
+
+    /// <summary>
+    /// Показать взрыв. Повод — требование раздачи урона по области, то есть тот же
+    /// документ, по которому урон и раздаётся: эффект и его последствия так не разойдутся
+    /// ни при каком стечении обстоятельств.
+    ///
+    /// РАЗМЕР ВЫВЕДЕН ИЗ РАДИУСА, а не задан отдельно, поэтому увеличение радиуса
+    /// в справочнике само растит картинку, и подписывать одно число дважды не приходится.
+    /// Перевод считает <see cref="CombatSettings.SplashSize"/>, общий с полем редактора.
+    ///
+    /// Сцена берётся из свода боя; не назначена — играется общий взрыв гибели. Поворот
+    /// случайный: рисунок частиц один на все разрывы, и без разворота два соседних
+    /// выглядели бы одинаково.
+    /// </summary>
+    private void Burst(SplashRequested blast)
+    {
+        // Оружие со своей вспышкой попадания показало разрыв уже ею: два эффекта в одной
+        // точке читаются как сбой, а не как мощный взрыв. Общий взрыв области поэтому
+        // остаётся тем, у кого своей вспышки нет, — и тем поводам, у которых прямого
+        // попадания не было вовсе
+        if (Declared(blast.SourceId, blast.ToolId) != null)
+            return;
+
+        var scene = CombatSettings.Active.SplashEffect ?? Explosion;
+
+        Fire(scene, blast.Pos, (float)GD.RandRange(0d, Mathf.Tau),
+            CombatSettings.SplashSize(blast.Radius));
     }
 
     // ── гибель: взрыв и копоть на земле ───────────────────────────────────────────

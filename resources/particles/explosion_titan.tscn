@@ -1,18 +1,54 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://ht71hlo1evk8"]
 
-[ext_resource type="PackedScene" path="res://resources/particles/explosion.tscn" id="1_base"]
+[ext_resource type="PackedScene" uid="uid://c5xsofg0uwtko" path="res://resources/particles/explosion.tscn" id="1_base"]
 [ext_resource type="Resource" path="res://resources/particles/scorch_b.tres" id="2_decal"]
-[ext_resource type="Resource" path="res://resources/particles/scorch_nuke.tres" id="3_nuke"]
-[ext_resource type="Script" path="res://scripts/effects/ScorchStamp.cs" id="4_stamp"]
+[ext_resource type="Resource" uid="uid://jcfsailers5i" path="res://resources/particles/scorch_nuke.tres" id="3_nuke"]
+[ext_resource type="Script" uid="uid://b8m5np7mtdx1s" path="res://scripts/effects/ScorchStamp.cs" id="4_stamp"]
+[ext_resource type="Texture2D" uid="uid://damulqgqgstop" path="res://assets/textures/ken_circle_01.png" id="5_43xut"]
 
-[node name="Explosion" instance=ExtResource("1_base")]
+[sub_resource type="Gradient" id="Gradient_jox4n"]
+offsets = PackedFloat32Array(0.020905923, 0.44947734, 1)
+colors = PackedColorArray(0.89314497, 0.5889914, 0.118743874, 1, 1, 0.44000006, 0.16000003, 1, 0.57, 0.171, 0, 0.43137255)
 
-[node name="Scorch" parent="." index="0"]
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_5fjgg"]
+gradient = SubResource("Gradient_jox4n")
+
+[sub_resource type="Curve" id="Curve_5fjgg"]
+_data = [Vector2(0, 0.23333335), 0.0, 0.0, 0, 0, Vector2(0.37060702, 1), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="CurveTexture" id="CurveTexture_jox4n"]
+curve = SubResource("Curve_5fjgg")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_h3mb1"]
+particle_flag_disable_z = true
+spread = 0.0
+gravity = Vector3(0, 0, 0)
+scale_min = 0.78999996
+scale_max = 0.78999996
+scale_curve = SubResource("CurveTexture_jox4n")
+color = Color(1.8247963, 1.8247963, 1.8247963, 1)
+color_ramp = SubResource("GradientTexture1D_5fjgg")
+
+[node name="Explosion" unique_id=426052043 instance=ExtResource("1_base")]
+
+[node name="Scorch" parent="." index="0" unique_id=379220742]
+visible = false
 Decal = ExtResource("2_decal")
 
-[node name="Nuke" type="Node2D" parent="."]
+[node name="Scorch_Nuke" type="Node2D" parent="." index="5" unique_id=14633352]
 z_index = -11
 script = ExtResource("4_stamp")
 Decal = ExtResource("3_nuke")
-Size = 180.0
+Size = 221.0
 SizeRandom = 0.15
+
+[node name="Wave" type="GPUParticles2D" parent="." index="6" unique_id=177242036]
+emitting = false
+amount = 1
+texture = ExtResource("5_43xut")
+lifetime = 0.5
+one_shot = true
+explosiveness = 1.0
+randomness = 0.5
+process_material = SubResource("ParticleProcessMaterial_h3mb1")

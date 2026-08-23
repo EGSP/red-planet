@@ -64,6 +64,45 @@ public partial class ModelTool : Node2D
     /// <summary>Точка вылета в мировых координатах — с учётом поворота корпуса и наведения.</summary>
     public Vector2 MuzzleGlobal => Muzzle != null ? Muzzle.GlobalPosition : GlobalPosition;
 
+    private BeamVisual _beam;
+    private bool _beamSought;
+
+    /// <summary>
+    /// Луч, объявленный внутри части. Null означает, что луча в модели нет и носитель
+    /// покажет работу запасным отрезком.
+    ///
+    /// Ищется один раз при первом обращении: состав сцены во время игры не меняется.
+    /// Подписывать луч не нужно — он принадлежит той части, внутри которой лежит, ровно
+    /// как вспышка выстрела принадлежит своему стволу.
+    /// </summary>
+    public BeamVisual Beam
+    {
+        get
+        {
+            if (!_beamSought)
+            {
+                _beamSought = true;
+                _beam = Seek(this);
+            }
+
+            return Alive.Is(_beam) ? _beam : null;
+        }
+    }
+
+    private static BeamVisual Seek(Node node)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is BeamVisual beam)
+                return beam;
+
+            if (Seek(child) is { } found)
+                return found;
+        }
+
+        return null;
+    }
+
     /// <summary>Подходит ли часть под запрос по роли и идентификатору инструмента.</summary>
     public bool Matches(ModelToolRole role, string toolId) =>
         Role == role && (string.IsNullOrEmpty(toolId) || string.IsNullOrEmpty(ToolId)

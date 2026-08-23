@@ -26,8 +26,26 @@ public partial class Projectile : Node2D
     /// <summary>Кто выстрелил — id уходит в документ о попадании.</summary>
     public int SourceId;
 
+    /// <summary>
+    /// Из какого ствола выстрелен. Уходит в документ попадания и нужен показу: вид вспышки
+    /// объявлен у самого оружия (<see cref="ImpactEffect"/>), а стволов у носителя бывает
+    /// несколько.
+    /// </summary>
+    public string ToolId = "";
+
     /// <summary>По какой стороне бьёт.</summary>
     public Faction TargetSide;
+
+    /// <summary>
+    /// Радиус взрыва в пикселях. Ноль — снаряд бьёт только ту цель, которую задел.
+    /// </summary>
+    public float SplashRadius;
+
+    /// <summary>Урон в середине взрыва. К краю убывает — раздаёт его <see cref="SplashSystem"/>.</summary>
+    public float SplashDamage;
+
+    /// <summary>Задевает ли взрыв своих.</summary>
+    public bool SplashFriendlyFire;
 
     public Color Tint = new(1f, 0.9f, 0.4f);
 
@@ -55,10 +73,26 @@ public partial class Projectile : Node2D
         {
             TargetId = hit.EntityId,
             SourceId = SourceId,
+            ToolId = ToolId,
             Amount = Damage,
             Pos = GlobalPosition,
             Facing = Velocity.Angle(),
         });
+
+        // Взрыв публикуется отдельным требованием: кого он задел, решает SplashSystem —
+        // снаряд об окружении цели не знает и знать не должен
+        if (SplashRadius > 0f && SplashDamage > 0f)
+            GameManager.I.Events.Append(new SplashRequested
+            {
+                SourceId = SourceId,
+                ToolId = ToolId,
+                Side = TargetSide.Opposite(),
+                FriendlyFire = SplashFriendlyFire,
+                Pos = GlobalPosition,
+                Radius = SplashRadius,
+                Amount = SplashDamage,
+                DirectId = hit.EntityId,
+            });
 
         Retire();
     }

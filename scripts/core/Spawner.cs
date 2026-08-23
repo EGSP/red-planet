@@ -190,8 +190,12 @@ public sealed class Spawner
             Radius = weapon.ProjectileRadiusPx,
             Life = weapon.Lifetime,
             SourceId = shooter.EntityId,
+            ToolId = weapon.Id,
             TargetSide = shooter.Faction.Opposite(),
             Tint = weapon.ProjectileColor,
+            SplashRadius = weapon.SplashRadiusPx,
+            SplashDamage = weapon.SplashDamage,
+            SplashFriendlyFire = weapon.SplashFriendlyFire,
         };
 
         _gm.Playground.Add(WorldLayer.Projectiles, projectile);

@@ -48,6 +48,13 @@ public partial class GameManager : Node
     /// </summary>
     [Export] public GraphicsSettings GraphicsTuning;
 
+    /// <summary>
+    /// Настройки боя: форма спада урона по области. Действуют через
+    /// <see cref="CombatSettings.Active"/>; незаполненное поле оставляет свод, загруженный
+    /// по пути, — так же, как это устроено у настроек графики.
+    /// </summary>
+    [Export] public CombatSettings CombatTuning;
+
 
     /// <summary>Журнал документов — шина, через которую системы говорят друг с другом.</summary>
     public EventStore Events { get; } = new();
@@ -137,6 +144,9 @@ public partial class GameManager : Node
         // же отрисовке, и подмена свода после этого потребовала бы пересборки запечённых слоёв
         if (GraphicsTuning != null)
             GraphicsSettings.Use(GraphicsTuning);
+
+        if (CombatTuning != null)
+            CombatSettings.Use(CombatTuning);
 
         // Площадка — сестринская ветка, и к этому мигу она уже собрана: дерево сцены
         // создаётся целиком до того, как хоть кто-то в нём получит _EnterTree

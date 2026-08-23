@@ -18,6 +18,8 @@
 [ext_resource type="Script" uid="uid://dotcigshtufxu" path="res://scripts/combat/WeaponSystem.cs" id="13_weapon"]
 [ext_resource type="Script" uid="uid://dhkbabtkukh50" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
 [ext_resource type="Script" uid="uid://dhy78rf5woxf3" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
+[ext_resource type="Script" path="res://scripts/combat/SplashSystem.cs" id="15_splash"]
+[ext_resource type="Resource" path="res://resources/tuning/combat.tres" id="15_combattuning"]
 [ext_resource type="Script" uid="uid://b0ki5uv7akvii" path="res://scripts/world/CameraRig.cs" id="16_camera"]
 [ext_resource type="Resource" uid="uid://5bo3xkxq5bvu" path="res://resources/tuning/camera.tres" id="16_cameratuning"]
 [ext_resource type="Script" uid="uid://byltoatikqvmc" path="res://scripts/ui/Hud.cs" id="17_hud"]
@@ -73,6 +75,7 @@ script = ExtResource("2_manager")
 WorldTuning = ExtResource("40_worldsettings")
 NavTuning = ExtResource("43_navsettings")
 GraphicsTuning = ExtResource("50_graphicssettings")
+CombatTuning = ExtResource("15_combattuning")
 
 [node name="CursorSystem" type="Node" parent="Systems" unique_id=926610412]
 script = ExtResource("5_cursor")
@@ -147,6 +150,11 @@ script = ExtResource("41_vision")
 Settings = ExtResource("42_fogsettings")
 StepOrder = 90
 UpdateCycle = 1
+
+[node name="SplashSystem" type="Node" parent="Systems"]
+script = ExtResource("15_splash")
+Phase = 2
+StepOrder = 5
 
 [node name="DamageSystem" type="Node" parent="Systems" unique_id=1799323355]
 script = ExtResource("15_damage")
