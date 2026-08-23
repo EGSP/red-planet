@@ -1,31 +1,30 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://cibv4nt3na2qv"]
 
-[ext_resource type="Script" path="res://scripts/models/UnitModel.cs" id="1_model"]
-[ext_resource type="Texture2D" path="res://resources/units/player/fabricator/fabricator_body.png" id="2_body"]
-[ext_resource type="Shader" path="res://resources/shaders/team_color.gdshader" id="3_team"]
-[ext_resource type="Script" path="res://scripts/models/ModelShade.cs" id="4_shade"]
-[ext_resource type="PackedScene" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
+[ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
+[ext_resource type="Texture2D" uid="uid://b1546ue0bmpkx" path="res://resources/units/player/fabricator/fabricator_body.png" id="2_body"]
+[ext_resource type="Material" uid="uid://ef56q8sw8vld" path="res://resources/materials/unit.tres" id="3_sfkeu"]
+[ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="4_shade"]
+[ext_resource type="PackedScene" uid="uid://bcwemggrliom3" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
-shader = ExtResource("3_team")
-shader_parameter/team_color = Color(1, 1, 1, 1)
-shader_parameter/strength = 0.0
-shader_parameter/lift = 0.0
-
-[node name="FabricatorModel" type="Node2D" node_paths=PackedStringArray("Body")]
+[node name="FabricatorModel" type="Node2D" unique_id=1782973647 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
 Body = NodePath("Body")
 
-[node name="Cast" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+[node name="Cast" type="Sprite2D" parent="." unique_id=41567766 node_paths=PackedStringArray("Source")]
+self_modulate = Color(0.05, 0.04, 0.07, 0.4)
+texture_filter = 2
+position = Vector2(9.095088, 15.440394)
+rotation = 1.5707963
+scale = Vector2(2, 2)
 script = ExtResource("4_shade")
 Source = NodePath("../Body")
 Kind = 0
 
-[node name="Body" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_body")
+[node name="Body" type="Sprite2D" parent="." unique_id=1925549422]
 texture_filter = 1
+material = ExtResource("3_sfkeu")
 rotation = 1.5707963
 scale = Vector2(2, 2)
 texture = ExtResource("2_body")
 
-[node name="Dust" parent="." instance=ExtResource("90_dust")]
+[node name="Dust" parent="." unique_id=1738396981 instance=ExtResource("90_dust")]

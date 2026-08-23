@@ -7,13 +7,13 @@
 1. Собрать утилиту:
 
 ```powershell
-dotnet build "c:\workroot\Разработка\Программы\csharp\red-planet\tools\PapaTextureTool\PapaTextureTool.csproj"
+dotnet build "c:\workroot\Разработка\Gamedev\red-planet\tools\PapaTextureTool\PapaTextureTool.csproj"
 ```
 
 2. Запустить конвертацию:
 
 ```powershell
-dotnet run --project "c:\workroot\Разработка\Программы\csharp\red-planet\tools\PapaTextureTool\PapaTextureTool.csproj" -- "<input1>" [<input2> ...] -o "<output_dir>"
+dotnet run --project "c:\workroot\Разработка\Gamedev\red-planet\tools\PapaTextureTool\PapaTextureTool.csproj" -- "<input1>" [<input2> ...] -o "<output_dir>"
 ```
 
 ## Что можно передавать во входы
@@ -26,7 +26,7 @@ dotnet run --project "c:\workroot\Разработка\Программы\csharp
 Чтобы минимизировать ошибки по не-текстурным `.papa`, передавайте в утилиту в первую очередь каталоги `textures`:
 
 ```powershell
-dotnet run --project "c:\workroot\Разработка\Программы\csharp\red-planet\tools\PapaTextureTool\PapaTextureTool.csproj" -- `
+dotnet run --project "c:\workroot\Разработка\Gamedev\red-planet\tools\PapaTextureTool\PapaTextureTool.csproj" -- `
   "c:\workroot\quarantine\downloads\torrent\Planetary.Annihilation.TITANS.v2026.07.02\Planetary Annihilation\media\pa\terrain\desert\textures" `
   "c:\workroot\quarantine\downloads\torrent\Planetary.Annihilation.TITANS.v2026.07.02\Planetary Annihilation\media\pa\terrain\grass\textures" `
   "c:\workroot\quarantine\downloads\torrent\Planetary.Annihilation.TITANS.v2026.07.02\Planetary Annihilation\media\pa\terrain\ice\textures" `

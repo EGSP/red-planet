@@ -395,6 +395,10 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         // и к моменту его отрисовки поворот обязан быть уже выставлен
         Aim.Apply();
 
+        // Слой повреждения ведётся отсюда же: доля прочности принадлежит сущности,
+        // а материалом задаётся всё остальное — см. UnitModel.ApplyDamage
+        _model?.ApplyDamage(Health?.Ratio ?? 1f);
+
         QueueRedraw();
         _marks?.QueueRedraw();
     }

@@ -2,14 +2,8 @@
 
 [ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
 [ext_resource type="Texture2D" uid="uid://ck68rnrsvtohk" path="res://resources/buildings/energy_storage/energy_storage_body.png" id="2_body"]
-[ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="3_team"]
+[ext_resource type="Material" uid="uid://boco48xw1csi5" path="res://resources/materials/building.tres" id="3_sfaml"]
 [ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="4_shade"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
-shader = ExtResource("3_team")
-shader_parameter/team_color = Color(1, 1, 1, 1)
-shader_parameter/strength = 0.0
-shader_parameter/lift = 0.0
 
 [node name="EnergyStorageModel" type="Node2D" unique_id=2105174741 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -24,7 +18,7 @@ Source = NodePath("../Body")
 
 [node name="Body" type="Sprite2D" parent="." unique_id=2038038839]
 texture_filter = 1
-material = SubResource("ShaderMaterial_body")
+material = ExtResource("3_sfaml")
 scale = Vector2(2.5, 2.5)
 texture = ExtResource("2_body")
 

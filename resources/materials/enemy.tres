@@ -1,0 +1,23 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://cmmu2krp2tmsn"]
+
+[ext_resource type="Shader" uid="uid://yqc642yea0tk" path="res://resources/shaders/unit_body.gdshader" id="1_shader"]
+[ext_resource type="Texture2D" uid="uid://dwnijbkppyosm" path="res://assets/textures/metal_platform_unique_01_diffuse.png" id="2_xja7v"]
+[ext_resource type="Texture2D" uid="uid://4i3qhi65d0y5" path="res://assets/textures/imperial_able_diffuse.png" id="3_dmu0i"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/team_color = Color(1, 1, 1, 1)
+shader_parameter/strength = 1.0
+shader_parameter/lift = 0.0
+shader_parameter/damage_tex = ExtResource("2_xja7v")
+shader_parameter/dissolve_tex = ExtResource("3_dmu0i")
+shader_parameter/damage_scale = 0.45
+shader_parameter/dissolve_scale = 0.1
+shader_parameter/dissolve_contrast = 1.1530000547675
+shader_parameter/dissolve_brightness = 0.23000005842499993
+shader_parameter/health = 0.2850000135375
+shader_parameter/damage_start = 0.7
+shader_parameter/damage_full = 0.0
+shader_parameter/damage_curve = 2.40600011102512
+shader_parameter/edge_width = 0.0290000013775
+shader_parameter/edge_color = Color(0.7915199, 0.3007, 0.97, 1)

@@ -32,7 +32,8 @@ scale_curve = SubResource("CurveTexture_core")
 color_ramp = SubResource("GradientTexture1D_core")
 
 [sub_resource type="Gradient" id="Gradient_jr0k4"]
-colors = PackedColorArray(1, 1, 1, 0.54901963, 1, 1, 1, 1)
+offsets = PackedFloat32Array(0.46689895, 1)
+colors = PackedColorArray(1, 1, 1, 0.54901963, 1, 1, 1, 0)
 
 [sub_resource type="GradientTexture1D" id="GradientTexture1D_d4iw1"]
 gradient = SubResource("Gradient_jr0k4")
@@ -54,7 +55,7 @@ gravity = Vector3(0, 0, 0)
 scale_min = 0.08
 scale_max = 0.099999994
 scale_curve = SubResource("CurveTexture_cxerw")
-color = Color(0.9, 0.64485, 0.333, 1)
+color = Color(2.2449565, 0.75017065, 0.15292226, 1)
 color_ramp = SubResource("GradientTexture1D_d4iw1")
 
 [sub_resource type="Gradient" id="Gradient_spray"]
@@ -86,7 +87,6 @@ PreviewLoop = true
 
 [node name="Core" type="GPUParticles2D" parent="." unique_id=1625123121]
 texture_filter = 2
-emitting = false
 amount = 1
 texture = ExtResource("2_8mit5")
 lifetime = 0.2
@@ -97,10 +97,9 @@ process_material = SubResource("ParticleProcessMaterial_core")
 
 [node name="Core2" type="GPUParticles2D" parent="." unique_id=1695973729]
 texture_filter = 2
-emitting = false
 amount = 1
 texture = ExtResource("3_jr0k4")
-lifetime = 0.2
+lifetime = 0.21000000000000002
 one_shot = true
 explosiveness = 1.0
 randomness = 1.0
@@ -108,7 +107,6 @@ process_material = SubResource("ParticleProcessMaterial_4unao")
 
 [node name="Spray" type="GPUParticles2D" parent="." unique_id=1998546641]
 texture_filter = 2
-emitting = false
 amount = 5
 texture = ExtResource("3_8mit5")
 lifetime = 0.35

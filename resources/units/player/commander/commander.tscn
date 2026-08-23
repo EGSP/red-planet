@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://bqk3v1n8yc0mq"]
+[gd_scene load_steps=11 format=3 uid="uid://bqk3v1n8yc0mq"]
 
 [ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
 [ext_resource type="Script" uid="uid://cukuju4hl6y1n" path="res://scripts/models/ModelTool.cs" id="2_tool"]
@@ -7,15 +7,9 @@
 [ext_resource type="Texture2D" uid="uid://dwmlio7c5barm" path="res://resources/units/player/commander/commander_body.png" id="5_body"]
 [ext_resource type="Texture2D" uid="uid://baibfwty7kmn" path="res://resources/units/player/commander/commander_gun.png" id="6_gun"]
 [ext_resource type="Texture2D" uid="uid://bytj6e5hb2w5b" path="res://resources/units/player/commander/commander_buildarm.png" id="7_arm"]
-[ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="8_team"]
 [ext_resource type="PackedScene" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
 [ext_resource type="PackedScene" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
-shader = ExtResource("8_team")
-shader_parameter/team_color = Color(1, 1, 1, 1)
-shader_parameter/strength = 1.0
-shader_parameter/lift = 0.0
+[ext_resource type="Material" path="res://resources/materials/unit.tres" id="92_body"]
 
 [node name="CommanderModel" type="Node2D" unique_id=154610350 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -41,7 +35,7 @@ Source = NodePath("../Tracks")
 
 [node name="Tracks" type="Sprite2D" parent="." unique_id=233076400]
 texture_filter = 1
-material = SubResource("ShaderMaterial_body")
+material = ExtResource("92_body")
 rotation = 1.5707963
 texture = ExtResource("4_tracks")
 offset = Vector2(4, -2)
@@ -54,7 +48,7 @@ Muzzle = NodePath("Muzzle")
 
 [node name="Sprite" type="Sprite2D" parent="Gun" unique_id=2068343865]
 texture_filter = 1
-material = SubResource("ShaderMaterial_body")
+material = ExtResource("92_body")
 rotation = 1.5707964
 texture = ExtResource("6_gun")
 offset = Vector2(0.5, -20)
@@ -64,7 +58,7 @@ position = Vector2(57, 7)
 
 [node name="Body" type="Sprite2D" parent="." unique_id=1620926608]
 texture_filter = 1
-material = SubResource("ShaderMaterial_body")
+material = ExtResource("92_body")
 rotation = 1.5707963
 texture = ExtResource("5_body")
 offset = Vector2(4, -2)
@@ -82,7 +76,7 @@ position = Vector2(1, 1)
 
 [node name="Sprite" type="Sprite2D" parent="BuildArm" unique_id=976495482]
 texture_filter = 1
-material = SubResource("ShaderMaterial_body")
+material = ExtResource("92_body")
 rotation = 1.5707963
 texture = ExtResource("7_arm")
 offset = Vector2(-0.5, 6.5)

@@ -5,14 +5,8 @@
 [ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="3_shade"]
 [ext_resource type="Texture2D" uid="uid://bv7gt0qoyv4er" path="res://resources/buildings/turret/turret_body.png" id="4_body"]
 [ext_resource type="Texture2D" uid="uid://42jyhr3lwx5k" path="res://resources/buildings/turret/turret_gun.png" id="5_gun"]
-[ext_resource type="Shader" uid="uid://ikt3ljk6u8m3" path="res://resources/shaders/team_color.gdshader" id="6_team"]
-[ext_resource type="PackedScene" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_body"]
-shader = ExtResource("6_team")
-shader_parameter/team_color = Color(1, 1, 1, 1)
-shader_parameter/strength = 1.0
-shader_parameter/lift = 0.0
+[ext_resource type="PackedScene" uid="uid://basv063qj6fco" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
+[ext_resource type="Material" uid="uid://boco48xw1csi5" path="res://resources/materials/building.tres" id="92_body"]
 
 [node name="TurretModel" type="Node2D" unique_id=1968145911 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -27,7 +21,7 @@ Source = NodePath("../Body")
 
 [node name="Body" type="Sprite2D" parent="." unique_id=1087659603]
 texture_filter = 1
-material = SubResource("ShaderMaterial_body")
+material = ExtResource("92_body")
 scale = Vector2(1.5, 1.5)
 texture = ExtResource("4_body")
 
@@ -47,7 +41,7 @@ Muzzle = NodePath("Muzzle")
 
 [node name="Sprite" type="Sprite2D" parent="Gun" unique_id=702571794]
 texture_filter = 1
-material = SubResource("ShaderMaterial_body")
+material = ExtResource("92_body")
 rotation = 1.5707963
 scale = Vector2(1.5, 1.5)
 texture = ExtResource("5_gun")
@@ -55,4 +49,4 @@ texture = ExtResource("5_gun")
 [node name="Muzzle" type="Marker2D" parent="Gun" unique_id=788034096]
 position = Vector2(37, 0)
 
-[node name="Flash" parent="Gun/Muzzle" instance=ExtResource("91_flash")]
+[node name="Flash" parent="Gun/Muzzle" unique_id=1214639731 instance=ExtResource("91_flash")]

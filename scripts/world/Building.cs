@@ -232,6 +232,7 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
 
         AfterAim();
         SyncModel();
+        Model?.ApplyDamage(Health?.Ratio ?? 1f);
         QueueRedraw();
         _marks?.QueueRedraw();
     }

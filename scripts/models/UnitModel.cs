@@ -50,9 +50,13 @@ public partial class UnitModel : Node2D
 
     private ModelTool[] _tools;
     private ShaderMaterial[] _tinted;
+    private float _health = float.NaN;
 
     /// <summary>Имя параметра шейдера, через который передаётся цвет команды.</summary>
     private const string TeamColorParameter = "team_color";
+
+    /// <summary>Имя параметра шейдера, через который передаётся доля прочности.</summary>
+    private const string HealthParameter = "health";
 
     /// <summary>
     /// Части-инструменты, найденные во всём поддереве. Ищутся один раз при первом
@@ -171,6 +175,32 @@ public partial class UnitModel : Node2D
 
         foreach (var material in _tinted)
             material.SetShaderParameter(TeamColorParameter, color);
+    }
+
+    /// <summary>
+    /// Передать долю прочности слою повреждения: 1 — целая сущность, 0 — вскрытая целиком.
+    ///
+    /// ЗАЧЕМ ЭТО ИДЁТ КОДОМ, А ВСЁ ОСТАЛЬНОЕ В СЛОЕ ПОВРЕЖДЕНИЯ — МАТЕРИАЛОМ. Текстура
+    /// внутренностей, карта порядка вскрытия и цвет каймы принадлежат виду и выбираются
+    /// материалом в сцене модели. Прочность же принадлежит сущности и у двух машин одного
+    /// вида разная, поэтому материалом её задать нельзя вовсе.
+    ///
+    /// ЗНАЧЕНИЕ СВЕРЯЕТСЯ С ПРЕЖНИМ. Метод зовут каждый кадр, а прочность меняется редко;
+    /// запись в параметр шейдера идёт через движок, и платить за неё на каждом кадре
+    /// за каждую сущность незачем.
+    /// </summary>
+    public void ApplyDamage(float health)
+    {
+        health = Mathf.Clamp(health, 0f, 1f);
+
+        if (Mathf.IsEqualApprox(health, _health))
+            return;
+
+        _health = health;
+        _tinted ??= PrepareTinted();
+
+        foreach (var material in _tinted)
+            material.SetShaderParameter(HealthParameter, health);
     }
 
     /// <summary>
