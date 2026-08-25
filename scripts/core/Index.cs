@@ -24,13 +24,17 @@ using System.Collections.Generic;
 /// в одни обходы и не попадало в другие — в зависимости от порядка систем. Заодно снимается
 /// вечная беда обхода: список не меняется у идущей по нему системы под ногами.
 ///
-/// ЖИВОСТЬ ОБЪЯВЛЯЕТ САМ ОБЪЕКТ. У ноды признак актуальности берётся из движка: освобождённая
-/// или помеченная QueueFree нода перестаёт попадать в разрезы без единого вызова. Всё
-/// остальное объявляет своё условие при добавлении — <see cref="Add(object, Func{bool})"/>
-/// принимает предикат, по которому индекс сам решает, что объект вышел из игры. Это и есть
-/// замена ручному снятию: тот, кто кладёт объект в индекс, обязан сказать, как узнать о его
-/// смерти, а не помнить о вызове Remove в каждой ветке кода. Remove остаётся для случаев,
-/// когда момент снятия известен точно и предикат заводить незачем.
+/// ЖИВОСТЬ ОБЪЯВЛЯЕТ САМ ОБЪЕКТ, И ТРЕМЯ СПОСОБАМИ. Сущность мира несёт признак сама
+/// (<see cref="ILive"/>) — это самый дешёвый ответ и потому самый частый: обход разреза
+/// спрашивает живость на каждом элементе, и вызов движка в этом месте стоил четверти времени
+/// главного потока. Всё прочее объявляет своё условие при добавлении —
+/// <see cref="Add(object, Func{bool})"/> принимает предикат. Оставшимся — тем, кто ни
+/// признака, ни предиката не дал, — служит прежний способ: у ноды актуальность берётся
+/// из движка, освобождённая или помеченная QueueFree выпадает из разрезов сама.
+///
+/// Все три способа суть одно правило: тот, кто кладёт объект в индекс, обязан сказать, как
+/// узнать о его смерти, а не помнить о вызове Remove в каждой ветке кода. Remove остаётся
+/// для случаев, когда момент снятия известен точно и объявлять условие незачем.
 ///
 /// ПОДПИСКИ. <see cref="Watch{T}"/> сообщает читателю о входе и выходе объектов из разреза,
 /// поэтому производное состояние — счётчики, метрики, собственные раскладки — пересчитывается
@@ -95,8 +99,19 @@ public sealed class Index
 
         _pending.Add(item);
 
-        if (live != null)
-            _live[item] = live;
+        if (live == null)
+            return;
+
+        // Условие живости и собственный признак — два ответа на один вопрос, и второй
+        // из них проверка не спрашивает вовсе (см. IsLive). Совмещать их нельзя
+        if (item is ILive)
+        {
+            Godot.GD.PushError($"[Index] {item.GetType().Name} объявляет ILive — " +
+                               "условие живости для него не действует");
+            return;
+        }
+
+        _live[item] = live;
     }
 
     /// <summary>
@@ -105,8 +120,21 @@ public sealed class Index
     /// </summary>
     public void Remove(object item)
     {
-        if (item != null)
-            _retired.Add(item);
+        switch (item)
+        {
+            case null:
+                return;
+
+            // Своим признаком сущность и снимается: класть её ещё и в список снятых значило бы
+            // держать два ответа на один вопрос, а проверка живости смотрит только на признак
+            case ILive declared:
+                declared.Drop();
+                return;
+
+            default:
+                _retired.Add(item);
+                return;
+        }
     }
 
     /// <summary>Объект уже в множестве. Ждущие входа в счёт не идут — они войдут в Sweep.</summary>
@@ -216,6 +244,12 @@ public sealed class Index
     /// </summary>
     internal bool IsLive(object item)
     {
+        // Сущность отвечает о себе сама и полем, а не вызовом движка. Проверка стоит здесь
+        // первой намеренно: это единственная ветвь, в которую попадает обход разреза,
+        // и всё, что в ней окажется, будет исполнено миллионы раз в секунду — см. ILive
+        if (item is ILive declared)
+            return declared.Live;
+
         if (item == null || _retired.Contains(item))
             return false;
 
@@ -288,7 +322,7 @@ public sealed class Index
     {
         private readonly Index _owner;
 
-        public readonly List<T> Items = new();
+        public readonly List<Member<T>> Items = new();
 
         private readonly List<Watcher<T>> _watchers = new();
 
@@ -310,7 +344,7 @@ public sealed class Index
         public void Fill(object item)
         {
             if (item is T typed)
-                Items.Add(typed);
+                Items.Add(new Member<T>(typed));
         }
 
         public void TryAdd(object item)
@@ -318,7 +352,7 @@ public sealed class Index
             if (item is not T typed)
                 return;
 
-            Items.Add(typed);
+            Items.Add(new Member<T>(typed));
             _added.Add(typed);
             Revision++;
         }
@@ -329,15 +363,15 @@ public sealed class Index
 
             for (int read = 0; read < Items.Count; read++)
             {
-                var item = Items[read];
+                var member = Items[read];
 
-                if (_owner.IsLive(item))
+                if (member.Live != null ? member.Live.Live : _owner.IsLive(member.Item))
                 {
-                    Items[write++] = item;
+                    Items[write++] = member;
                     continue;
                 }
 
-                _removed.Add(item);
+                _removed.Add(member.Item);
                 Revision++;
             }
 
@@ -358,8 +392,10 @@ public sealed class Index
 
             // Текущий состав — те же события добавления, только сразу. Погибшие, но ещё
             // не выметенные сюда не идут: читателю незачем знать о том, чего уже нет
-            foreach (var item in Items)
+            foreach (var member in Items)
             {
+                var item = member.Item;
+
                 if (!_owner.IsLive(item))
                 {
                     // Ближайшая уборка объявит их выбывшими, а этот читатель об их входе

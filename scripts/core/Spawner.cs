@@ -112,7 +112,7 @@ public sealed class Spawner
         int id = _gm.NewId();
         unit.Id = id;
         unit.Definition = def;
-        unit.Position = position;
+        unit.GlobalPosition = position;
         unit.Faction = faction;
 
         _gm.Playground.Add(WorldLayer.Actors, unit);
@@ -184,7 +184,7 @@ public sealed class Spawner
 
         var projectile = new Projectile
         {
-            Position = from + direction * weapon.ProjectileRadiusPx * 2f,
+            GlobalPosition = from + direction * weapon.ProjectileRadiusPx * 2f,
             Velocity = direction * weapon.SpeedPx,
             Damage = weapon.Damage,
             Radius = weapon.ProjectileRadiusPx,

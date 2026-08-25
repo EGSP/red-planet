@@ -48,8 +48,16 @@ public static class DebugFlags
     /// <summary>Линии к соседям, которых сущность учитывает.</summary>
     public static bool BoidNeighbours;
 
-    /// <summary>Ячейки раскладки соседей.</summary>
-    public static bool BoidCells;
+    // ── пространственная сетка ────────────────────────────────────────────────────
+
+    /// <summary>Занятые клетки раскладки по месту.</summary>
+    public static bool SpatialCells;
+
+    /// <summary>Численность в клетке числом поверх неё.</summary>
+    public static bool SpatialCounts;
+
+    /// <summary>Какая из раскладок показывается: подвижные либо уязвимые.</summary>
+    public static bool SpatialTargets;
 
     // ── замеры ────────────────────────────────────────────────────────────────────
 
@@ -59,10 +67,18 @@ public static class DebugFlags
     /// </summary>
     public static bool Profile;
 
+    /// <summary>
+    /// Сверять кэшированное положение сущностей с положением их узлов. Стоит обращения
+    /// к движку на сущность за кадр — см. <see cref="EntityAudit"/>.
+    /// </summary>
+    public static bool EntityAudit;
+
     /// <summary>Рисовать ли хоть что-нибудь из навигационного растра.</summary>
     public static bool AnyNav => NavBlocked || NavClearance || NavComponents || Footprints;
 
     public static bool AnyPath => Paths || PathsAll || PathsExpanded;
 
-    public static bool AnyBoid => BoidForces || BoidRadii || BoidNeighbours || BoidCells;
+    public static bool AnyBoid => BoidForces || BoidRadii || BoidNeighbours;
+
+    public static bool AnySpatial => SpatialCells || SpatialCounts;
 }

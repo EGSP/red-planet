@@ -59,6 +59,8 @@ public partial class CommandSystem : GameSystem
     private NavGridOverlay _navigation;
     private PathOverlay _paths;
     private BoidsOverlay _boids;
+
+    private SpatialOverlay _spatial;
     private DebugDraw _debugDraw;
 
     private readonly List<IOrderable> _selected = new();
@@ -1591,6 +1593,9 @@ public partial class CommandSystem : GameSystem
 
         if (_boids == null || !IsInstanceValid(_boids))
             _boids = GM.Playground.Add(WorldLayer.Overlay, new BoidsOverlay());
+
+        if (_spatial == null || !IsInstanceValid(_spatial))
+            _spatial = GM.Playground.Add(WorldLayer.Overlay, new SpatialOverlay());
 
         // Произвольные маркеры — поверх доменных оверлеев; доступ из кода через DebugDraw.Current.
         if (_debugDraw == null || !IsInstanceValid(_debugDraw))

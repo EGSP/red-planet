@@ -1,8 +1,9 @@
 using Godot;
 
 /// <summary>
-/// Локальный слой движения поверх мира: силы, радиусы, учитываемые соседи и раскладка
-/// по ячейкам.
+/// Локальный слой движения поверх мира: силы, радиусы и учитываемые соседи. Раскладку
+/// по клеткам рисует <see cref="SpatialOverlay"/>: она перестала принадлежать движению
+/// и обслуживает теперь весь мир.
 ///
 /// Отрисовка здесь не роскошь. Коэффициенты обхода настраиваются подбором, и без стрелок,
 /// длина которых пропорциональна величине силы, подбор ведётся вслепую: по одному лишь
@@ -33,9 +34,6 @@ public partial class BoidsOverlay : Node2D
             return;
 
         var movement = gm.System<MovementSystem>();
-
-        if (DebugFlags.BoidCells && movement != null)
-            DrawCells(movement);
 
         foreach (var mobile in Watched(gm))
             DrawActor(mobile, movement);
@@ -99,21 +97,6 @@ public partial class BoidsOverlay : Node2D
                 continue;
 
             ShapeDraw.Line(this, at, ToLocal(other.GlobalPosition), style);
-        }
-    }
-
-    private void DrawCells(MovementSystem movement)
-    {
-        float side = movement.BucketSize;
-        var style = DrawTheme.Line(VizKind.BoidCells);
-
-        foreach (var pair in movement.Buckets)
-        {
-            if (pair.Value.Count == 0)
-                continue;
-
-            var corner = new Vector2(pair.Key.X * side, pair.Key.Y * side);
-            ShapeDraw.Rect(this, new Rect2(ToLocal(corner), side, side), style);
         }
     }
 

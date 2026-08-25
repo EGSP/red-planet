@@ -71,6 +71,12 @@ public partial class GameManager : Node
     public Index Index { get; } = new();
 
     /// <summary>
+    /// Раскладки мира по месту. Отвечают на вопрос «кто рядом» обходом окрестности вместо
+    /// обхода всех — см. <see cref="WorldSpace"/>.
+    /// </summary>
+    public WorldSpace Space { get; }
+
+    /// <summary>
     /// Занятое место в непрерывных координатах. Заменило сетку застройки: истина о том,
     /// где стоит здание, принадлежит самому зданию, а не клеткам под ним.
     /// </summary>
@@ -110,12 +116,6 @@ public partial class GameManager : Node
     internal bool SystemsLinked { get; private set; }
 
     /// <summary>
-    /// Цели, разложенные по сторонам. Самый горячий разрез в игре: в него смотрит
-    /// каждый ствол на каждом выстреле и каждый снаряд на каждом кадре полёта.
-    /// </summary>
-    public KeySlice<Faction, IDamageable> Targets { get; private set; }
-
-    /// <summary>
     /// Подвижные сущности, разложенные по сторонам. Нужен потому, что после слияния классов
     /// тип узла о стороне больше ничего не говорит: и армия игрока в терроре, и объём
     /// давления противника считаются по одному и тому же классу Unit и различаются только
@@ -125,6 +125,12 @@ public partial class GameManager : Node
     public KeySlice<Faction, Unit> Units { get; private set; }
 
     private int _lastEntityId;
+
+    /// <summary>
+    /// Раскладки по месту заводятся здесь, а не полем: им нужен индекс, а на него в поле
+    /// сослаться нельзя.
+    /// </summary>
+    public GameManager() => Space = new WorldSpace(Index);
 
     public int NewId() => ++_lastEntityId;
 
@@ -160,7 +166,6 @@ public partial class GameManager : Node
 
         // Постоянные разрезы заводим здесь же, где и проекции: состав производного
         // состояния должен быть виден в одном месте, а не всплывать по коду систем
-        Targets = Index.SliceBy<IDamageable, Faction>(target => target.Faction);
         Units = Index.SliceBy<Unit, Faction>(unit => unit.Faction);
 
         // Порядок держим явным: если проекция читает другую, зависимость идёт раньше.
@@ -218,6 +223,10 @@ public partial class GameManager : Node
     {
         FrameTraceMarks.BeginPhysics();
 
+        // Раскладки по месту собраны для прошлого шага: помечаем устаревшими до систем,
+        // а пересоберёт их первый же спрос
+        Space.Invalidate();
+
         try
         {
             Scheduler.RunCycle(UpdateCycle.PhysicsProcess, dt);
@@ -228,6 +237,13 @@ public partial class GameManager : Node
             Index.Sweep();
 
             Events.ClearTransient();
+
+            // Положение и угол за шаг правились в полях; здесь они одним проходом уходят
+            // в узлы — см. Entity. Проход идёт после уборки индекса: выбывшим писать нечего
+            Entity.Flush();
+
+            if (DebugFlags.EntityAudit)
+                EntityAudit.Check(this);
         }
         finally
         {
@@ -242,6 +258,10 @@ public partial class GameManager : Node
         try
         {
             Scheduler.RunCycle(UpdateCycle.Process, dt);
+
+            // Графические системы тоже вправе двигать сущности, и узлы должны быть
+            // согласованы до отрисовки
+            Entity.Flush();
         }
         finally
         {

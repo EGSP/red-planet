@@ -125,7 +125,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     {
         Id = id;
         Definition = def;
-        Position = center;
+        GlobalPosition = center;
         BodyFacing = facing;
         Health = new Health(def.FrameHealth * Const.BlueprintHealthFactor);
 
@@ -319,7 +319,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
         Bequeath(heir);
 
-        Retire();
+        Dismantle();
     }
 
     /// <summary>
@@ -366,10 +366,13 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     }
 
     /// <summary>Каркас разбит: вывести из игры. Место и EntityStore освобождает Spawner.</summary>
-    public void OnDestroyed() => Retire();
+    public void OnDestroyed() => Dismantle();
 
-    /// <summary>Выводим узел из игры до удаления, чтобы по нему не прошёл ещё один кадр.</summary>
-    private void Retire()
+    /// <summary>
+    /// Что каркас обязан отпустить, уходя из мира: исполнителей, ветку приказов и очередь
+    /// производства. Сам уход — общий для всех сущностей порядок <see cref="Entity.Retire"/>.
+    /// </summary>
+    private void Dismantle()
     {
         ReleaseWorkers();
 
@@ -379,9 +382,7 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
 
         _production.Clear();
         _rush.Clear();
-        SetProcess(false);
-        Visible = false;
-        QueueFree();
+        Retire();
     }
 
     /// <summary>

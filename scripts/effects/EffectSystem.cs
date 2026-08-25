@@ -300,8 +300,18 @@ public partial class EffectSystem : GameSystem
         if (!Alive.Is(node) || trail.Owner is not Node2D carrier || !Alive.Is(carrier))
             return;
 
-        node.GlobalPosition = carrier.ToGlobal(trail.Offset);
-        node.GlobalRotation = carrier.GlobalRotation + trail.Angle;
+        // Преобразование считается по кэшированным полям сущности, а не узлом: внутри шага
+        // узел ещё показывает положение конца прошлого шага — см. Entity
+        if (carrier is Entity placed)
+        {
+            node.GlobalPosition = placed.ToWorld(trail.Offset);
+            node.GlobalRotation = placed.Rotation + trail.Angle;
+        }
+        else
+        {
+            node.GlobalPosition = carrier.ToGlobal(trail.Offset);
+            node.GlobalRotation = carrier.GlobalRotation + trail.Angle;
+        }
 
         float speed = trail.Owner.Movement?.Velocity.Length() ?? 0f;
         float span = Mathf.Max(node.FullSpeed - node.MinSpeed, 1f);

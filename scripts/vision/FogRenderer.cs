@@ -15,6 +15,11 @@ using Godot;
 /// ПЕРЕРИСОВКА РЕДКАЯ. Содержимое текстуры меняется без перерисовки холста, поэтому
 /// QueueRedraw зовётся только тогда, когда изменились границы мира, — то есть при правке
 /// настроек в редакторе.
+///
+/// ПОКАЗЫВАЕТСЯ НЕ СОБРАННЫЙ РАСТР, А ДОГОНЯЮЩИЙ ЕГО. Пересборка идёт реже, чем выводятся
+/// кадры, и собранный растр менялся бы скачками. Сглаживанием занят сам растр
+/// (<see cref="VisionField.Approach"/>), а сюда попадает уже готовое поле — поэтому текстура
+/// обновляется каждый кадр, а не по номеру пересборки.
 /// </summary>
 public partial class FogRenderer : Node2D
 {
@@ -31,7 +36,6 @@ public partial class FogRenderer : Node2D
     private ImageTexture _texture;
     private ShaderMaterial _material;
 
-    private int _shownRevision = -1;
     private Rect2 _shownArea;
 
     public override void _Ready()
@@ -109,7 +113,7 @@ public partial class FogRenderer : Node2D
     private void Refresh()
     {
         int width = Field.Width;
-        var values = Field.Values;
+        var values = Field.Shown;
 
         if (values.Length != width * width)
             return;
@@ -118,19 +122,16 @@ public partial class FogRenderer : Node2D
         {
             _image = Image.CreateFromData(width, width, false, Image.Format.L8, values);
             _texture = ImageTexture.CreateFromImage(_image);
-            _shownRevision = Field.Revision;
             _shownArea = Area();
 
             QueueRedraw();
             return;
         }
 
-        if (_shownRevision != Field.Revision)
-        {
-            _shownRevision = Field.Revision;
-            _image.SetData(width, width, false, Image.Format.L8, values);
-            _texture.Update(_image);
-        }
+        // Растр сглаживается каждый кадр, поэтому и выгружается каждый кадр: сверять номер
+        // пересборки здесь больше не с чем
+        _image.SetData(width, width, false, Image.Format.L8, values);
+        _texture.Update(_image);
 
         // Границы мира правятся в редакторе на ходу, а размер растра при этом мог и не
         // измениться — например, когда поле осталось прежним, а сместился его край

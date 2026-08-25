@@ -127,6 +127,14 @@ public static class Reach
     {
         switch (target)
         {
+            // Сущность мира стоит первой намеренно: у неё положение лежит в поле, тогда как
+            // ветвь Node2D спросила бы его у движка. Разбор идёт по порядку, и переставленные
+            // местами ветви вернули бы сюда ту самую стоимость, ради устранения которой
+            // положение и кэшируется — см. Entity
+            case Entity entity:
+                center = entity.GlobalPosition;
+                return true;
+
             case Node2D node:
                 center = node.GlobalPosition;
                 return true;

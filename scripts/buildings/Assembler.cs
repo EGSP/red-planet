@@ -182,7 +182,11 @@ public partial class Assembler : Building, IWorker
         base.OnDestroyed();
     }
 
-    public override void _ExitTree() => Detach();
+    public override void _ExitTree()
+    {
+        Detach();
+        base._ExitTree();
+    }
 
     /// <summary>
     /// Луч работы и манипулятор башни. Рисуются вместе с полосой прочности поверх корпуса,

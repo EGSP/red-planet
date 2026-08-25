@@ -18,7 +18,7 @@
 /// файл из двух. Из этого следует и правило для систем: сторону надо спрашивать у сущности,
 /// а не выводить из того, в каком разрезе она нашлась.
 /// </summary>
-public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
+public partial class Unit : Entity, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
     IRepairable, IOrderable, IWorker, IMobile
 {
     /// <summary>
@@ -1327,7 +1327,11 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Orders.DropAllFor(node);
     }
 
-    public override void _ExitTree() => Detach();
+    public override void _ExitTree()
+    {
+        Detach();
+        base._ExitTree();
+    }
 
     /// <summary>Прочность кончилась: отпустить узел работы. EntityStore снимает Spawner.</summary>
     public virtual void OnDestroyed()
@@ -1335,11 +1339,8 @@ public partial class Unit : Node2D, IFacing, IDamageable, IArmed, IEconomyActor,
         Detach();
         Orders.Clear();
 
-        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем.
-        // Реестр по id чистит подписка Spawner на выбытие из индекса.
-        SetProcess(false);
-        Visible = false;
-        QueueFree();
+        // Реестр по id чистит подписка Spawner на выбытие из индекса
+        Retire();
     }
 
     public override void _Draw()

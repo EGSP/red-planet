@@ -11,7 +11,7 @@ using Godot;
 /// Попадание ищется по отрезку за кадр, а не по конечной точке: на скорости
 /// пятнадцати пикселей за кадр проскочить цель насквозь несложно.
 /// </summary>
-public partial class Projectile : Node2D
+public partial class Projectile : Entity
 {
     public Vector2 Velocity;
 
@@ -48,6 +48,12 @@ public partial class Projectile : Node2D
     public bool SplashFriendlyFire;
 
     public Color Tint = new(1f, 0.9f, 0.4f);
+
+    /// <summary>
+    /// Место под кандидатов на попадание. Одно на все снаряды: полёт считается в один поток,
+    /// и заводить список на каждый снаряд каждый кадр значило бы мусорить впустую.
+    /// </summary>
+    private static readonly System.Collections.Generic.List<IDamageable> _candidates = new();
 
     public override void _Process(double delta) => QueueRedraw();
 
@@ -97,15 +103,33 @@ public partial class Projectile : Node2D
         Retire();
     }
 
+    /// <summary>
+    /// Кого задел отрезок полёта за этот кадр.
+    ///
+    /// Кандидаты берутся из раскладки по месту, а не обходом всех целей стороны: снарядов
+    /// в бою десятки, целей сотни, и полный обход у каждого снаряда каждый кадр давал
+    /// произведение численностей. Окрестность отсчитывается от середины отрезка: за кадр
+    /// снаряд пролетает малую долю клетки, поэтому клеток выходит немного.
+    ///
+    /// Запас к радиусу — на габарит цели. Крупная постройка лежит во всех клетках своего
+    /// прямоугольника и потому находится и без запаса; запас нужен юнитам, чья середина
+    /// может оказаться в соседней клетке.
+    /// </summary>
     private IDamageable FindHit(Vector2 from, Vector2 to)
     {
         IDamageable best = null;
         float bestDistance = float.MaxValue;
 
-        // Разрез уже отсеял и чужую сторону, и всё, чего в мире больше нет
-        foreach (var target in GameManager.I.Targets[TargetSide])
+        var nearby = GameManager.I.Space.ReadyTargets();
+        nearby.Collect((from + to) * 0.5f,
+            from.DistanceTo(to) * 0.5f + Radius + Const.Unit, _candidates);
+
+        foreach (var target in _candidates)
         {
-            if (target.Health.IsDead)
+            // Раскладка собрана в начале шага, и кто-то из неё мог погибнуть за этот же шаг:
+            // проверка живости здесь обязательна, тогда как разрез индекса делал её сам
+            if (target.Faction != TargetSide || target.Health.IsDead
+                || target is ILive { Live: false })
                 continue;
 
             var center = target.GlobalPosition;
@@ -127,12 +151,7 @@ public partial class Projectile : Node2D
         return best;
     }
 
-    private void Retire()
-    {
-        SetProcess(false);
-        Visible = false;
-        QueueFree();
-    }
+
 
     public override void _Draw()
     {

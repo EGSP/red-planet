@@ -13,7 +13,7 @@ using Godot;
 /// от её вращения шевелиться не должен. Поэтому угол корпуса — отдельное число,
 /// а поворот при отрисовке применяется правкой трансформа канвы.
 /// </summary>
-public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVision, IRepairable,
+public partial class Building : Entity, IFacing, IDamageable, IEconomyActor, IVision, IRepairable,
     IOrderable, IObstacle
 {
     public int Id { get; private set; }
@@ -122,7 +122,7 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     {
         Id = id;
         Definition = def;
-        Position = center;
+        GlobalPosition = center;
         BodyFacing = facing;
         Health = new Health(def.MaxHealth);
 
@@ -303,12 +303,9 @@ public partial class Building : Node2D, IFacing, IDamageable, IEconomyActor, IVi
     /// <summary>Постройку снесли: вывести из игры. Место и EntityStore освобождает Spawner.</summary>
     public virtual void OnDestroyed()
     {
-        // Выводим из игры до удаления, чтобы по ноде не прошёл ещё один кадр систем.
-        // Из разрезов индекса нода выпадает сама, как только помечена на удаление;
-        // карту препятствий и реестр по id чистит подписка Spawner на выбытие из индекса.
-        SetProcess(false);
-        Visible = false;
-        QueueFree();
+        // Из разрезов индекса сущность выпадает сама, объявив себя выбывшей;
+        // карту препятствий и реестр по id чистит подписка Spawner на выбытие из индекса
+        Retire();
     }
 
     public override void _Draw()

@@ -16,12 +16,36 @@ using Godot;
 /// </summary>
 public partial class WeaponSystem : GameSystem
 {
+    /// <summary>
+    /// На сколько групп разнесено переигрывание выбора цели. При шестидесяти шагах в секунду
+    /// восемь групп означают, что каждый носитель переигрывает выбор примерно семь раз
+    /// в секунду, а стоимость поиска в кадре делится на восемь.
+    ///
+    /// ПОЧЕМУ РАЗНОСИТЬ ВООБЩЕ МОЖНО. Выбор цели переносит задержку: цель, выбранная
+    /// восьмую долю секунды назад, остаётся верной — за это время ни расстановка,
+    /// ни состав заметно не меняются. Так можно не со всякой работой: расталкивание,
+    /// например, пропуска шага не терпит, потому что за пропущенный шаг сущности успевают
+    /// влезть друг в друга.
+    ///
+    /// ЧИСЛО НЕ ДОЛЖНО ДЕЛИТЬ ЧАСТОТУ ШАГА НАЦЕЛО без остатка по другим ритмам игры:
+    /// восемь выбрано степенью двойки ради равномерности остатка при любом числе носителей.
+    /// </summary>
+    private const int Groups = 8;
+
     private readonly RandomNumberGenerator _rng = new();
+
+    /// <summary>Чья очередь переигрывать выбор в этом шаге.</summary>
+    private int _turn;
+
+    /// <summary>Сколько номеров групп уже роздано. По нему назначается очередной.</summary>
+    private int _assigned;
 
     protected override void OnRegister() => _rng.Randomize();
 
     public override void Step(double dt)
     {
+        _turn = (_turn + 1) % Groups;
+
         // Снарядам нужен слой в мире: без площадки стрелять попросту некуда
         if (GM.Playground == null)
             return;
@@ -109,13 +133,36 @@ public partial class WeaponSystem : GameSystem
     /// </summary>
     private IDamageable AcquireTarget(IArmed armed, WeaponDefinition weapon)
     {
+        var rig = armed.Aim;
+
+        if (rig.Group < 0)
+            rig.Group = _assigned++ % Groups;
+
         var own = armed.FireTarget;
+
         if (own != null && Targeting.IsValid(own as GodotObject))
-            return Spotted(armed, own) ? own : null;
+        {
+            // Разведка спрашивается в свою очередь, как и сам выбор: обход носителей обзора
+            // квадратичен по численности, и цель, назначенная приказом, от этого не избавлена.
+            // Смена цели переспрашивает разведку тем же шагом — иначе новая цель наследовала бы
+            // ответ, полученный о прежней
+            if (rig.Group == _turn || !ReferenceEquals(rig.Target, own))
+            {
+                rig.Target = own;
+                rig.Spotted = Spotted(armed, own);
+            }
+
+            return rig.Spotted ? own : null;
+        }
 
         float reach = weapon.RangePx;
         if (reach <= 0f)
             return null;
+
+        // Своя очередь настала не у всех: переигрывание разнесено по группам — см. Groups.
+        // Вне очереди носитель бьёт по той цели, которую выбрал прежде, пока она годна
+        if (rig.Group != _turn)
+            return Held(armed, rig, reach);
 
         // Разведка спрашивается у одной цели, уже выбранной, а не у каждой из перебираемых:
         // обход источников обзора на каждого кандидата стоил бы произведения численностей,
@@ -124,7 +171,37 @@ public partial class WeaponSystem : GameSystem
         // сам собой на следующей переигровке выбора
         var target = Targeting.NearestInReach(armed.GlobalPosition, armed.Faction.Opposite(), reach);
 
-        return target != null && Spotted(armed, target) ? target : null;
+        rig.Target = target;
+        rig.Spotted = target != null && Spotted(armed, target);
+
+        return rig.Spotted ? target : null;
+    }
+
+    /// <summary>
+    /// Цель, выбранная в прошлую свою очередь. Годность проверяется каждый шаг — цель могла
+    /// погибнуть, уйти за предел дальности или укрыться в корпусе завода, — а вот разведка
+    /// и сам выбор остаются теми, что получены в очередь.
+    ///
+    /// Негодная цель забывается сразу, но новая ищется не здесь: иначе носитель, у которого
+    /// цель погибла, тем же шагом запускал бы полный поиск, и разнесение по группам теряло бы
+    /// смысл ровно в тот миг, когда оно нужнее всего — в разгар боя.
+    /// </summary>
+    private static IDamageable Held(IArmed armed, AimRig rig, float reach)
+    {
+        var target = rig.Target;
+
+        if (target == null)
+            return null;
+
+        if (!Targeting.IsValid(target as GodotObject)
+            || !Reach.Within(armed.GlobalPosition, target, reach))
+        {
+            rig.Target = null;
+            rig.Spotted = false;
+            return null;
+        }
+
+        return rig.Spotted ? target : null;
     }
 
     /// <summary>Разведана ли цель стороной стрелка. Свой обзор проверяется первым.</summary>

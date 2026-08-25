@@ -49,6 +49,7 @@ public partial class VisionSystem : GameSystem
     {
         EnsureNodes();
         UpdateField(dt);
+        Smooth(dt);
         ApplyVisibility();
     }
 
@@ -96,6 +97,13 @@ public partial class VisionSystem : GameSystem
 
         Field.Rebuild(GM.Index.All<IVision>(), Faction.Player);
     }
+
+    /// <summary>
+    /// Подвинуть показываемый растр к собранному. Идёт каждый кадр независимо от того,
+    /// пересобирался ли растр: пересборка задаёт цель, а это движение к ней — см.
+    /// <see cref="VisionField.Approach"/>.
+    /// </summary>
+    private void Smooth(double dt) => Field.Approach(dt, Settings.CatchUp);
 
     /// <summary>
     /// Скрыть противника вне поля зрения. Проход делается и в том шаге, когда скрытие

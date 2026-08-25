@@ -16,15 +16,38 @@ using Godot;
 /// которые владеют циклом сами. Пишете свой foreach — пишите обычное условие, оно и понятнее,
 /// и не стоит вызова делегата на каждом шаге.
 /// </summary>
+/// <summary>
+/// Элемент разреза: сам объект и его признак живости, взятый один раз при укладке.
+///
+/// ЗАЧЕМ ХРАНИТЬ ПРИЗНАК РЯДОМ. Живость спрашивается на каждом элементе каждого обхода,
+/// а объявляет её интерфейс <see cref="ILive"/>. Приведение к интерфейсу стоит проверки
+/// таблицы типов, и по замеру одно только это приведение занимало пять процентов
+/// собственного времени главного потока. Приведение делается один раз — при попадании
+/// в разрез, — а обход читает готовую ссылку.
+/// </summary>
+public readonly struct Member<T> where T : class
+{
+    public readonly T Item;
+
+    /// <summary>Признак живости объекта либо null, если объект его не несёт.</summary>
+    public readonly ILive Live;
+
+    public Member(T item)
+    {
+        Item = item;
+        Live = item as ILive;
+    }
+}
+
 public readonly struct Slice<T> where T : class
 {
-    private static readonly List<T> Nothing = new();
+    private static readonly List<Member<T>> Nothing = new();
 
-    private readonly List<T> _items;
+    private readonly List<Member<T>> _items;
     private readonly Index _index;
     private readonly Func<T, bool> _filter;
 
-    internal Slice(List<T> items, Index index, Func<T, bool> filter = null)
+    internal Slice(List<Member<T>> items, Index index, Func<T, bool> filter = null)
     {
         _items = items ?? Nothing;
         _index = index;
@@ -117,12 +140,12 @@ public readonly struct Slice<T> where T : class
     /// </summary>
     public struct Enumerator
     {
-        private readonly List<T> _items;
+        private readonly List<Member<T>> _items;
         private readonly Index _index;
         private readonly Func<T, bool> _filter;
         private int _at;
 
-        internal Enumerator(List<T> items, Index index, Func<T, bool> filter)
+        internal Enumerator(List<Member<T>> items, Index index, Func<T, bool> filter)
         {
             _items = items;
             _index = index;
@@ -140,10 +163,21 @@ public readonly struct Slice<T> where T : class
 
             while (++_at < _items.Count)
             {
-                var item = _items[_at];
+                var member = _items[_at];
 
-                if (!_index.IsLive(item))
+                // Признак живости взят при укладке; спрашивать индекс приходится лишь
+                // о тех, кто его не несёт, — а таких в разрезах почти нет
+                if (member.Live != null)
+                {
+                    if (!member.Live.Live)
+                        continue;
+                }
+                else if (!_index.IsLive(member.Item))
+                {
                     continue;
+                }
+
+                var item = member.Item;
 
                 if (_filter != null && !_filter(item))
                     continue;
@@ -173,7 +207,7 @@ public sealed class KeySlice<TKey, T> : Index.IKeySlice where T : class
 {
     private readonly Index _index;
     private readonly Func<T, TKey> _key;
-    private readonly Dictionary<TKey, List<T>> _byKey = new();
+    private readonly Dictionary<TKey, List<Member<T>>> _byKey = new();
 
     private bool _stale = true;
 
@@ -221,9 +255,9 @@ public sealed class KeySlice<TKey, T> : Index.IKeySlice where T : class
             var key = _key(item);
 
             if (!_byKey.TryGetValue(key, out var items))
-                _byKey[key] = items = new List<T>();
+                _byKey[key] = items = new List<Member<T>>();
 
-            items.Add(item);
+            items.Add(new Member<T>(item));
         }
     }
 }

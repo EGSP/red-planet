@@ -18,14 +18,14 @@ using Godot;
 /// и на ней ещё предстоит построить. Запрет ставить на неё что попало живёт в правиле
 /// постановки (<see cref="Placement.CanPlace"/>), а не в занятости.
 /// </summary>
-public partial class MetalSpot : Node2D
+public partial class MetalSpot : Entity
 {
     public int Id { get; private set; }
 
     public void Init(int id, Vector2 position)
     {
         Id = id;
-        Position = position;
+        GlobalPosition = position;
     }
 
     /// <summary>

@@ -14,12 +14,16 @@ using Godot;
 /// следует, — гибель, взрыв, запись в показатели — принадлежит разбору <c>DamageDealt</c>
 /// и повторяться здесь не должно.
 ///
-/// СТОИМОСТЬ. Обход идёт по разрезу целей одной стороны, то есть по тому же составу,
-/// в который смотрит выбор цели у стрельбы. Отдельного пространственного разбиения под
-/// взрывы нет намеренно: взрывов за кадр единицы, тогда как выстрелов и полётов сотни.
+/// СТОИМОСТЬ. Кандидаты берутся из общей раскладки мира по клеткам — той же, по которой
+/// идут выбор цели и поиск попаданий. Прежде здесь стоял обход всех целей стороны с оговоркой,
+/// что взрывов за кадр единицы; оговорка верна, но раскладка уже собрана, и пользоваться ею
+/// дешевле, чем обходить состав.
 /// </summary>
 public partial class SplashSystem : GameSystem
 {
+    /// <summary>Место под кандидатов. Одно на систему: взрывы разбираются по очереди.</summary>
+    private readonly System.Collections.Generic.List<IDamageable> _candidates = new();
+
     public override void Step(double dt)
     {
         foreach (var request in GM.Events.Stream<SplashRequested>().Records)
@@ -46,9 +50,15 @@ public partial class SplashSystem : GameSystem
     /// </summary>
     private void Spread(in SplashRequested request, Faction side)
     {
-        foreach (var target in GM.Targets[side])
+        // Кандидаты берутся из раскладки по месту: взрыв задевает окрестность, а обход всех
+        // целей стороны стоил бы полного прохода на каждое требование. Запас к радиусу —
+        // на габарит цели, чья середина может лежать в соседней клетке
+        GM.Space.ReadyTargets().Collect(request.Pos, request.Radius + Const.Unit, _candidates);
+
+        foreach (var target in _candidates)
         {
-            if (target.Health.IsDead || Targeting.Leaving(target))
+            if (target.Faction != side || target.Health.IsDead || Targeting.Leaving(target)
+                || target is ILive { Live: false })
                 continue;
 
             // Прямая цель уже получила полный урон снаряда — см. SplashRequested.DirectId

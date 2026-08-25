@@ -34,9 +34,6 @@ using Godot;
 /// </summary>
 public partial class MovementSystem : GameSystem
 {
-    /// <summary>Сторона ячейки поиска соседей. Вдвое больше клетки: 3×3 покрывает радиус чутья.</summary>
-    private const int BucketPx = Const.Unit * 2;
-
     /// <summary>Во сколько радиусов сущность замечает соседей.</summary>
     [Export] public float SenseFactor = 3.5f;
 
@@ -79,8 +76,7 @@ public partial class MovementSystem : GameSystem
     [Export] public float ExitTimeout = 5f;
 
     private readonly List<IMobile> _actors = new();
-    private readonly Dictionary<Vector2I, List<int>> _buckets = new();
-    private readonly List<int> _nearby = new();
+    private readonly List<IMobile> _nearby = new();
     private readonly List<Obb> _walls = new();
     private readonly BoidSalt _salt = new();
 
@@ -137,18 +133,28 @@ public partial class MovementSystem : GameSystem
         }
     }
 
-    /// <summary>Список подвижных и раскладка по ячейкам. Пересобирается каждый кадр.</summary>
+    /// <summary>
+    /// Список подвижных в порядке обхода. Пересобирается каждый кадр.
+    ///
+    /// Раскладку по клеткам система больше не ведёт: она общая на весь мир и живёт
+    /// в <see cref="WorldSpace"/> — тем же вопросом «кто рядом» пользуется выбор цели.
+    /// Здесь остаётся лишь порядковый номер, по которому пара сущностей расталкивается
+    /// один раз, а не дважды.
+    /// </summary>
     private void Collect()
     {
         _actors.Clear();
-
-        foreach (var bucket in _buckets.Values)
-            bucket.Clear();
+        GM.Space.ReadyMobiles();
 
         foreach (var mobile in GM.Index.All<IMobile>())
         {
             if (mobile.Definition == null)
+            {
+                // Без определения сущность в обходе не участвует: у неё нет ни скорости,
+                // ни габарита. Отрицательный номер выводит её и из соседства
+                mobile.Movement.Slot = -1;
                 continue;
+            }
 
             // Слот соли назначается при первом появлении, а не при рождении сущности:
             // порядок раздачи от этого не меняется, зато о соли не нужно помнить ни заводу,
@@ -156,9 +162,8 @@ public partial class MovementSystem : GameSystem
             if (mobile.Movement.Salt < 0)
                 mobile.Movement.Salt = _salted++ % BoidSalt.Slots;
 
-            int at = _actors.Count;
+            mobile.Movement.Slot = _actors.Count;
             _actors.Add(mobile);
-            Bucket(ToBucket(mobile.GlobalPosition)).Add(at);
         }
     }
 
@@ -207,7 +212,7 @@ public partial class MovementSystem : GameSystem
                            || remaining <= 0f
                            || Circling(mobile, definition, position, movement, remaining)
                            || Exhausted(handle, position, radius)
-                           || Crowded(index, mobile, position, radius, movement.Goal);
+                           || Crowded(mobile, position, radius, movement.Goal);
 
         if (movement.Settled)
         {
@@ -223,7 +228,7 @@ public partial class MovementSystem : GameSystem
             return;
         }
 
-        Neighbours(index, position, radius * SenseFactor);
+        Neighbours(mobile, position, radius * SenseFactor);
 
         var avoid = Avoidance(mobile, movement, position, seek, radius * SenseFactor);
         var align = Alignment(mobile, position, radius * SenseFactor);
@@ -536,7 +541,7 @@ public partial class MovementSystem : GameSystem
     /// хватает места нескольким юнитам, и ранняя остановка из‑за союзника ближе к точке
     /// оставляла бы помощника и стрелка за пределами досягаемости.
     /// </summary>
-    private bool Crowded(int self, IMobile mobile, Vector2 position, float radius, Vector2 target)
+    private bool Crowded(IMobile mobile, Vector2 position, float radius, Vector2 target)
     {
         var movement = mobile.Movement;
         float remaining = position.DistanceTo(target);
@@ -547,11 +552,10 @@ public partial class MovementSystem : GameSystem
         if (remaining - movement.StopDistance > radius * 3f)
             return false;
 
-        Neighbours(self, position, radius * 2.5f);
+        Neighbours(mobile, position, radius * 2.5f);
 
-        foreach (int index in _nearby)
+        foreach (var other in _nearby)
         {
-            var other = _actors[index];
 
             if (other.Faction != mobile.Faction)
                 continue;
@@ -589,9 +593,8 @@ public partial class MovementSystem : GameSystem
         float strongest = 0f;
         int side = 0;
 
-        foreach (int index in _nearby)
+        foreach (var other in _nearby)
         {
-            var other = _actors[index];
 
             if (other.Faction == mobile.Faction && !other.Movement.HoldGround)
                 continue;
@@ -775,9 +778,8 @@ public partial class MovementSystem : GameSystem
         var sum = Vector2.Zero;
         int count = 0;
 
-        foreach (int index in _nearby)
+        foreach (var other in _nearby)
         {
-            var other = _actors[index];
 
             if (other.Faction != mobile.Faction || !other.Movement.Active)
                 continue;
@@ -806,9 +808,8 @@ public partial class MovementSystem : GameSystem
     {
         float scale = 1f;
 
-        foreach (int index in _nearby)
+        foreach (var other in _nearby)
         {
-            var other = _actors[index];
 
             float contact = radius + other.HitRadius + radius * 0.5f;
             var delta = other.GlobalPosition - position;
@@ -898,13 +899,12 @@ public partial class MovementSystem : GameSystem
             float radius = mobile.HitRadius;
             var position = mobile.GlobalPosition;
 
-            Neighbours(i, position, radius * 2f);
+            Neighbours(mobile, position, radius * 2f);
 
-            foreach (int index in _nearby)
+            foreach (var other in _nearby)
             {
-                var other = _actors[index];
-
-                if (index <= i)
+                // Пара расталкивается один раз: работу делает тот, чей номер меньше
+                if (other.Movement.Slot <= i)
                     continue;
 
                 var delta = other.GlobalPosition - position;
@@ -993,43 +993,18 @@ public partial class MovementSystem : GameSystem
 
     // ── раскладка соседей ─────────────────────────────────────────────────────────
 
-    /// <summary>Номера сущностей в окрестности, кроме самой спрашивающей.</summary>
-    private void Neighbours(int self, Vector2 position, float sense)
+    /// <summary>
+    /// Соседи в окрестности, кроме самой спрашивающей. Берутся из общей раскладки мира;
+    /// оставшиеся без номера в обход не входят — см. <see cref="Collect"/>.
+    /// </summary>
+    private void Neighbours(IMobile self, Vector2 position, float sense)
     {
-        _nearby.Clear();
+        GM.Space.ReadyMobiles().Collect(position, sense, _nearby, self);
 
-        var center = ToBucket(position);
-        int span = Mathf.Max(1, Mathf.CeilToInt(sense / BucketPx));
-
-        for (int dy = -span; dy <= span; dy++)
-        {
-            for (int dx = -span; dx <= span; dx++)
-            {
-                var cell = new Vector2I(center.X + dx, center.Y + dy);
-
-                if (!_buckets.TryGetValue(cell, out var bucket))
-                    continue;
-
-                foreach (int index in bucket)
-                    if (index != self)
-                        _nearby.Add(index);
-            }
-        }
+        for (int i = _nearby.Count - 1; i >= 0; i--)
+            if (_nearby[i].Movement.Slot < 0)
+                _nearby.RemoveAt(i);
     }
-
-    private List<int> Bucket(Vector2I cell)
-    {
-        if (_buckets.TryGetValue(cell, out var bucket))
-            return bucket;
-
-        bucket = new List<int>();
-        _buckets[cell] = bucket;
-        return bucket;
-    }
-
-    private static Vector2I ToBucket(Vector2 position) => new(
-        Mathf.FloorToInt(position.X / BucketPx),
-        Mathf.FloorToInt(position.Y / BucketPx));
 
     /// <summary>Сколько подвижных сущностей обслужено в прошлом кадре. Читает панель отладки.</summary>
     public int Tracked => _actors.Count;
@@ -1042,11 +1017,10 @@ public partial class MovementSystem : GameSystem
         data["blocked"] = _blocked;
         data["leaving"] = _leaving;
         data["resolve_passes"] = ResolvePasses;
-        data["bucket_size"] = BucketSize;
+        data["cell_px"] = GM.Space.Mobiles.CellPx;
     }
 
     /// <summary>Раскладка по ячейкам — рисует отладка.</summary>
-    public IReadOnlyDictionary<Vector2I, List<int>> Buckets => _buckets;
-
-    public int BucketSize => BucketPx;
+    /// <summary>Сколько соседей учитывала последняя спрошенная сущность. Читает панель отладки.</summary>
+    public int LastNeighbours => _nearby.Count;
 }

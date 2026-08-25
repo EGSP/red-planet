@@ -25,7 +25,7 @@ using Godot;
 /// Отказ игрока от приказа, отделение части отряда и гибель исполнителя означают здесь
 /// одно и то же: исполнять размеченное больше некому.
 /// </summary>
-public partial class BuildPlan : Node2D, IWorkSite, IFacing, IFootprint
+public partial class BuildPlan : Entity, IWorkSite, IFacing, IFootprint
 {
     public int Id { get; set; }
 
@@ -74,7 +74,7 @@ public partial class BuildPlan : Node2D, IWorkSite, IFacing, IFootprint
     {
         Id = id;
         Definition = def;
-        Position = center;
+        GlobalPosition = center;
         BodyFacing = facing;
         FrameScene = frame;
     }
@@ -113,7 +113,7 @@ public partial class BuildPlan : Node2D, IWorkSite, IFacing, IFootprint
                 Pos = GlobalPosition,
             });
 
-            Retire();
+            Spend();
             return;
         }
 
@@ -129,7 +129,7 @@ public partial class BuildPlan : Node2D, IWorkSite, IFacing, IFootprint
 
         Superseded?.Invoke(frame);
 
-        Retire();
+        Spend();
     }
 
     /// <summary>
@@ -156,7 +156,7 @@ public partial class BuildPlan : Node2D, IWorkSite, IFacing, IFootprint
             });
         }
 
-        Retire();
+        Spend();
     }
 
     /// <summary>
@@ -213,12 +213,10 @@ public partial class BuildPlan : Node2D, IWorkSite, IFacing, IFootprint
     /// План уходит из игры. Приказы на него станут невыполнимы сами: цели больше нет,
     /// и <see cref="OrderQueue.DropInvalid"/> снимет их с головы очередей.
     /// </summary>
-    private void Retire()
+    private void Spend()
     {
         _spent = true;
-        SetProcess(false);
-        Visible = false;
-        QueueFree();
+        Retire();
     }
 
     /// <summary>

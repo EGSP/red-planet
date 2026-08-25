@@ -51,6 +51,21 @@ public sealed class VisionField
 
     private byte[] _values = new byte[1];
 
+    /// <summary>
+    /// Растр, который показывается, — он догоняет собранный, а не совпадает с ним.
+    ///
+    /// ЗАЧЕМ ОТДЕЛЬНЫЙ. Собранный растр меняется скачком: пересборка идёт двадцать раз
+    /// в секунду, и граница видимого прыгала бы вслед за юнитами ступенями. Показываемый же
+    /// каждый кадр смещается к собранному на долю оставшейся разницы, отчего граница
+    /// движется непрерывно. Скорость догона задаётся настройкой.
+    ///
+    /// СГЛАЖИВАТЬ МОЖНО ИМЕННО ЭТИ ЗНАЧЕНИЯ. В ячейке лежит расстояние до границы, а не
+    /// признак видимости, поэтому среднее двух состояний само есть расстояние, и граница
+    /// у него проходит между прежней и новой. Со двоичной маской такое сглаживание дало бы
+    /// полупрозрачную кашу вместо движения границы.
+    /// </summary>
+    private byte[] _shown = new byte[1];
+
     /// <summary>Ячейка растра, пикселей. Меняется настройкой отображения.</summary>
     public int Cell => _cell;
 
@@ -64,6 +79,9 @@ public sealed class VisionField
     /// целиком, и копия на каждое обновление была бы напрасной работой.
     /// </summary>
     public byte[] Values => _values;
+
+    /// <summary>Растр для отрисовки: догоняет собранный со скоростью из настроек.</summary>
+    public byte[] Shown => _shown;
 
     /// <summary>Сколько раз растр пересобирался. По нему отрисовка узнаёт, что пора обновить текстуру.</summary>
     public int Revision { get; private set; }
@@ -94,6 +112,7 @@ public sealed class VisionField
             return false;
 
         _values = new byte[Area];
+        _shown = new byte[Area];
         return true;
     }
 
@@ -129,75 +148,163 @@ public sealed class VisionField
     /// Наложить круг обзора. Значения складываются взятием наибольшего: расстояние до
     /// ближайшей границы объединения и есть наибольшее из расстояний до границ кругов.
     ///
-    /// Глубоко внутри круга значение упирается в потолок шкалы, и там расстояние не считается
-    /// вовсе — строка заполняется целиком. Корень извлекается только в полосе вокруг границы,
-    /// то есть там, где значение вообще меняется.
+    /// КРУГ БЕРЁТСЯ ГОТОВЫМ. Прежде значение каждой ячейки считалось на месте, с извлечением
+    /// корня в полосе вокруг границы; при трёх сотнях источников на одну пересборку уходило
+    /// свыше тридцати миллисекунд, то есть два кадра. Между тем круг зависит только
+    /// от радиуса, а радиусов в игре ровно столько, сколько их в справочниках, — единицы.
+    /// Поэтому круг считается один раз и дальше накладывается сравнением байтов.
+    ///
+    /// ЦЕНА ЗАГОТОВКИ — ПРИВЯЗКА К СЕТКЕ. Готовый круг можно положить только по целым
+    /// ячейкам, поэтому источник округляется до ячейки, в которой стоит. Граница видимого
+    /// смещается на половину ячейки, то есть на восемь пикселей при нынешней настройке;
+    /// величина эта меньше ширины полосы сглаживания и глазом не различается.
     /// </summary>
     public void Stamp(Vector2 world, float radiusPx)
     {
         if (radiusPx <= 0f)
             return;
 
+        var mask = MaskFor(radiusPx, out int span);
+
+        if (mask == null)
+            return;
+
         int width = Width;
-        float cell = _cell;
+        int side = 2 * span + 1;
 
-        float cx = (world.X - World.Min.X) / cell;
-        float cy = (world.Y - World.Min.Y) / cell;
+        int ix = Mathf.FloorToInt((world.X - World.Min.X) / _cell);
+        int iy = Mathf.FloorToInt((world.Y - World.Min.Y) / _cell);
 
-        float radius = radiusPx / cell;
-        float range = RangePx / cell;
-
-        // Снаружи значение падает до нуля через ту же полосу, поэтому штамп шире круга
-        float outer = radius + range;
-        float inner = Mathf.Max(radius - range, 0f);
-
-        int minY = Mathf.Max(0, Mathf.FloorToInt(cy - outer));
-        int maxY = Mathf.Min(width - 1, Mathf.CeilToInt(cy + outer));
+        int minY = Mathf.Max(0, iy - span);
+        int maxY = Mathf.Min(width - 1, iy + span);
+        int minX = Mathf.Max(0, ix - span);
+        int maxX = Mathf.Min(width - 1, ix + span);
 
         for (int y = minY; y <= maxY; y++)
         {
-            float dy = y + 0.5f - cy;
-            float span = outer * outer - dy * dy;
+            int at = y * width + minX;
+            int from = (y - iy + span) * side + (minX - ix + span);
 
-            if (span <= 0f)
-                continue;
-
-            span = Mathf.Sqrt(span);
-
-            int minX = Mathf.Max(0, Mathf.FloorToInt(cx - span));
-            int maxX = Mathf.Min(width - 1, Mathf.CeilToInt(cx + span));
-
-            // Половина ширины строки, целиком лежащей в области потолка шкалы
-            float innerSpan = inner * inner - dy * dy;
-            innerSpan = innerSpan > 0f ? Mathf.Sqrt(innerSpan) : -1f;
-
-            int row = y * width;
-
-            for (int x = minX; x <= maxX; x++)
+            for (int x = minX; x <= maxX; x++, at++, from++)
             {
-                float dx = x + 0.5f - cx;
-                byte value;
-
-                if (innerSpan > 0f && Mathf.Abs(dx) <= innerSpan)
-                {
-                    value = byte.MaxValue;
-                }
-                else
-                {
-                    float distance = Mathf.Sqrt(dx * dx + dy * dy);
-                    float level = 0.5f + (radius - distance) / (2f * range);
-
-                    if (level <= 0f)
-                        continue;
-
-                    value = (byte)(Mathf.Min(level, 1f) * byte.MaxValue);
-                }
-
-                int at = row + x;
+                byte value = mask[from];
 
                 if (_values[at] < value)
                     _values[at] = value;
             }
+        }
+    }
+
+    /// <summary>
+    /// Заготовки кругов по радиусам. Ключ — радиус в целых пикселях: радиусы приходят
+    /// из справочников и потому повторяются у всех сущностей одного вида.
+    /// </summary>
+    private readonly System.Collections.Generic.Dictionary<int, byte[]> _masks = new();
+
+    /// <summary>Полуширина заготовки в ячейках, по тому же ключу.</summary>
+    private readonly System.Collections.Generic.Dictionary<int, int> _maskSpans = new();
+
+    /// <summary>При каком размере ячейки заготовлены круги. Смена размера обесценивает их все.</summary>
+    private int _maskCell;
+
+    /// <summary>
+    /// Заготовка круга указанного радиуса: значения шкалы для квадрата со стороной
+    /// <c>2·span+1</c> ячеек, где середина квадрата есть ячейка источника.
+    /// </summary>
+    private byte[] MaskFor(float radiusPx, out int span)
+    {
+        if (_maskCell != _cell)
+        {
+            _maskCell = _cell;
+            _masks.Clear();
+            _maskSpans.Clear();
+        }
+
+        int key = Mathf.RoundToInt(radiusPx);
+
+        if (_masks.TryGetValue(key, out var found))
+        {
+            span = _maskSpans[key];
+            return found;
+        }
+
+        float cell = _cell;
+        float radius = key / cell;
+        float range = RangePx / cell;
+
+        // Снаружи значение падает до нуля через ту же полосу, поэтому заготовка шире круга
+        span = Mathf.CeilToInt(radius + range);
+
+        int side = 2 * span + 1;
+        var mask = new byte[side * side];
+
+        for (int y = 0; y < side; y++)
+        {
+            float dy = y - span;
+
+            for (int x = 0; x < side; x++)
+            {
+                float dx = x - span;
+                float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                float level = 0.5f + (radius - distance) / (2f * range);
+
+                if (level <= 0f)
+                    continue;
+
+                mask[y * side + x] = (byte)(Mathf.Min(level, 1f) * byte.MaxValue);
+            }
+        }
+
+        _masks[key] = mask;
+        _maskSpans[key] = span;
+
+        return mask;
+    }
+
+    /// <summary>
+    /// Сместить показываемый растр к собранному. Зовётся каждый кадр, а не каждую пересборку:
+    /// в этом и состоит сглаживание.
+    ///
+    /// Доля смещения выведена из показательного закона, поэтому она не зависит от частоты
+    /// кадров: <paramref name="rate"/> есть скорость догона за секунду, и при любом делении
+    /// секунды на кадры за секунду проходится одна и та же доля пути.
+    ///
+    /// ШАГ НЕ МЕНЬШЕ ЕДИНИЦЫ ШКАЛЫ. Значения целые, и доля от разницы в единицу округляется
+    /// в ноль: без этого правила остаток разницы не сходился бы никогда, а граница замирала
+    /// бы в пикселе от нужного места.
+    /// </summary>
+    public void Approach(double dt, float rate)
+    {
+        if (_shown.Length != _values.Length)
+        {
+            _shown = new byte[_values.Length];
+            System.Array.Copy(_values, _shown, _values.Length);
+            return;
+        }
+
+        // Нулевая скорость означает показ без сглаживания
+        if (rate <= 0f)
+        {
+            System.Array.Copy(_values, _shown, _values.Length);
+            return;
+        }
+
+        float part = 1f - Mathf.Exp(-rate * (float)dt);
+
+        for (int i = 0; i < _shown.Length; i++)
+        {
+            int target = _values[i];
+            int now = _shown[i];
+
+            if (target == now)
+                continue;
+
+            int step = (int)((target - now) * part);
+
+            if (step == 0)
+                step = target > now ? 1 : -1;
+
+            _shown[i] = (byte)(now + step);
         }
     }
 

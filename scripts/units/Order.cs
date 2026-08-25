@@ -281,6 +281,11 @@ public sealed class Order
     {
         get
         {
+            // Сущность мира отдаёт положение полем; ветвь Node2D осталась тем, у кого
+            // своего поля нет, и читает его у движка — см. Entity
+            if (Target is global::Entity placed && placed.Live)
+                return placed.GlobalPosition;
+
             if (Target is Node2D site && Alive.Is(site))
                 return site.GlobalPosition;
 

@@ -296,6 +296,16 @@ public static class GameSnapshotCapture
             ["nav_build_pending"] = gm.Nav.BuildPending,
             ["nav_last_build_ms"] = gm.Nav.LastBuildMs,
             ["nav_last_rebuilt_tiles"] = gm.Nav.LastRebuiltTiles,
+
+            // Работа пространственной раскладки за шаг. Ради этих трёх чисел счётчики
+            // и заведены: по времени кадра удачный обход от обхода всей карты не отличить
+            ["space_target_cells"] = gm.Space.Targets.FilledAt.Count,
+            ["space_target_queries"] = gm.Space.Targets.Queries,
+            ["space_target_visited"] = gm.Space.Targets.Visited,
+            ["space_target_scanned"] = gm.Space.Targets.Scanned,
+            ["space_mobile_cells"] = gm.Space.Mobiles.FilledAt.Count,
+            ["space_mobile_queries"] = gm.Space.Mobiles.Queries,
+            ["space_mobile_scanned"] = gm.Space.Mobiles.Scanned,
         };
 
         var systems = new JsonObject();

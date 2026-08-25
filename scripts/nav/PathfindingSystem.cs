@@ -227,8 +227,14 @@ public partial class PathfindingSystem : GameSystem
     /// у него спрашивается единственным допустимым способом — через общий признак
     /// подвижной сущности, и только если ключ им оказался.
     /// </summary>
-    private static Vector2 From(object key, PathHandle handle) =>
-        key is Node2D node && Alive.Is(node) ? node.GlobalPosition : handle.Target;
+    private static Vector2 From(object key, PathHandle handle) => key switch
+    {
+        // Сущность мира спрашивается первой: у неё положение лежит в поле и внутри шага
+        // верно, тогда как узел показывает конец прошлого шага
+        Entity entity when entity.Live => entity.GlobalPosition,
+        Node2D node when Alive.Is(node) => node.GlobalPosition,
+        _ => handle.Target,
+    };
 
     private void Solve(object key, PathHandle handle, Vector2 from)
     {
