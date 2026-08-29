@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://uw81365s8t4f"
+path="res://.godot/imported/vision_smooth.glsl-b100f3041ced4bf575d883458308096c.res"
+
+[deps]
+
+source_file="res://resources/shaders/vision_smooth.glsl"
+dest_files=["res://.godot/imported/vision_smooth.glsl-b100f3041ced4bf575d883458308096c.res"]
+
+[params]
+

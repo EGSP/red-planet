@@ -1336,21 +1336,19 @@ public partial class DebugPanel : ToolPanel
         return text.ToString();
     }
 
-    /// <summary>Состояние растра видимости: размер, источники и стоимость пересборки.</summary>
+    /// <summary>Состояние поля видимости: размер, источники и стоимость сбора.</summary>
     private static string Vision(VisionSystem vision)
     {
         if (vision == null)
             return "система зрения не в сцене";
 
-        var field = vision.Field;
-
         string rate = vision.Settings.EveryFrame
             ? "каждый кадр"
             : $"{vision.Settings.UpdateHz:0} раз в секунду";
 
-        return $"поле {field.Width}×{field.Width} по {field.CellPx} px\n" +
-               $"источников {field.Sources}   скрыто {vision.Hidden}\n" +
-               $"последняя пересборка {field.LastBuildMs:0.00} мс, {rate}";
+        return $"поле {vision.Width}×{vision.Width} по {vision.CellPx} px, на видеокарте\n" +
+               $"источников {vision.Sources} в {vision.Batches} партиях   скрыто {vision.Hidden}\n" +
+               $"сбор источников {vision.LastBuildMs:0.00} мс, {rate}";
     }
 
     /// <summary>

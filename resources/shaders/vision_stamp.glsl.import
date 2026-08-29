@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dkkq77g8i4o00"
+path="res://.godot/imported/vision_stamp.glsl-34c1fabb4e66fd6700fe55941055e698.res"
+
+[deps]
+
+source_file="res://resources/shaders/vision_stamp.glsl"
+dest_files=["res://.godot/imported/vision_stamp.glsl-34c1fabb4e66fd6700fe55941055e698.res"]
+
+[params]
+

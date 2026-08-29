@@ -3,58 +3,56 @@ using Godot;
 /// <summary>
 /// Отрисовка тумана войны: закрытая часть карты и обводка по границе поля зрения.
 ///
-/// РИСУЕТСЯ ОДНИМ ПРЯМОУГОЛЬНИКОМ. Растр видимости выгружается в текстуру, а всю работу
-/// по цвету и границе делает шейдер <c>fog.gdshader</c>. Отсюда и стоимость отрисовки:
-/// один вызов на кадр независимо от того, сколько на карте источников зрения.
+/// РИСУЕТСЯ ОДНИМ ПРЯМОУГОЛЬНИКОМ. Поле расстояний приходит текстурой из памяти видеокарты,
+/// а всю работу по цвету и границе делает шейдер <c>fog.gdshader</c>. Отсюда и стоимость
+/// отрисовки: один вызов на кадр независимо от того, сколько на карте источников зрения.
 ///
 /// ПРЯМОУГОЛЬНИК БОЛЬШЕ КАРТЫ. Камера отъезжает за край мира, и туман, обрезанный по краю,
 /// оставлял бы там светлую рамку. Поэтому прямоугольник расширен, а шейдеру передан
-/// пересчёт координат: за пределами растра выборка повторяет краевое значение, то есть
+/// пересчёт координат: за пределами поля выборка повторяет краевое значение, то есть
 /// закрытую область.
 ///
-/// ПЕРЕРИСОВКА РЕДКАЯ. Содержимое текстуры меняется без перерисовки холста, поэтому
+/// ПЕРЕРИСОВКА РЕДКАЯ. Содержимое поля меняется на видеокарте без участия холста, поэтому
 /// QueueRedraw зовётся только тогда, когда изменились границы мира, — то есть при правке
 /// настроек в редакторе.
 ///
-/// ПОКАЗЫВАЕТСЯ НЕ СОБРАННЫЙ РАСТР, А ДОГОНЯЮЩИЙ ЕГО. Пересборка идёт реже, чем выводятся
-/// кадры, и собранный растр менялся бы скачками. Сглаживанием занят сам растр
-/// (<see cref="VisionField.Approach"/>), а сюда попадает уже готовое поле — поэтому текстура
-/// обновляется каждый кадр, а не по номеру пересборки.
+/// ЗАЧЕМ ЕДИНИЧНАЯ ТЕКСТУРА. Поле передано шейдеру отдельной величиной, а не текстурой
+/// холста, поскольку живёт оно в <see cref="Texture2Drd"/> и подчиняется своим правилам
+/// выборки. Прямоугольник же нужно чем-то нарисовать, и рисуется он белым пикселем: от него
+/// требуется только задать области координаты от нуля до единицы, по которым шейдер и берёт
+/// значение поля.
 /// </summary>
 public partial class FogRenderer : Node2D
 {
     /// <summary>Насколько прямоугольник тумана выходит за край карты, долей стороны мира.</summary>
     private const float MarginFactor = 0.5f;
 
-    /// <summary>Растр видимости. Ставит система зрения сразу после создания узла.</summary>
-    public VisionField Field;
+    /// <summary>Поле расстояний. Ставит система зрения каждый кадр; null — поле ещё не готово.</summary>
+    public Texture2D Source;
 
     /// <summary>Настройки отображения. Читаются каждый кадр: их правят по ходу партии.</summary>
     public FogSettings Settings;
 
-    private Image _image;
-    private ImageTexture _texture;
     private ShaderMaterial _material;
+    private ImageTexture _blank;
 
     private Rect2 _shownArea;
 
     public override void _Ready()
     {
-        // Линейная фильтрация обязательна: по градиенту значения шейдер находит границу,
-        // а «ближайший сосед» превратил бы её в ступеньки по ячейкам растра
-        TextureFilter = TextureFilterEnum.Linear;
-
         _material = new ShaderMaterial
         {
             Shader = GD.Load<Shader>("res://resources/shaders/fog.gdshader"),
         };
 
         Material = _material;
+
+        _blank = ImageTexture.CreateFromImage(Filled());
     }
 
     public override void _Process(double delta)
     {
-        if (Field == null || Settings == null)
+        if (Source == null || Settings == null)
         {
             Visible = false;
             return;
@@ -66,15 +64,21 @@ public partial class FogRenderer : Node2D
             return;
 
         Apply();
-        Refresh();
+
+        // Границы мира правятся в редакторе на ходу, и прямоугольник отрисовки за ними следует
+        var area = Area();
+
+        if (_shownArea != area)
+        {
+            _shownArea = area;
+            QueueRedraw();
+        }
     }
 
     public override void _Draw()
     {
-        if (_texture == null)
-            return;
-
-        DrawTextureRect(_texture, Area(), false);
+        if (_blank != null)
+            DrawTextureRect(_blank, Area(), false);
     }
 
     /// <summary>Прямоугольник отрисовки: карта плюс запас за её краем.</summary>
@@ -84,63 +88,34 @@ public partial class FogRenderer : Node2D
         return World.Bounds.Grow(margin);
     }
 
-    /// <summary>Передать шейдеру настройки и пересчёт координат прямоугольника в координаты растра.</summary>
+    private static Image Filled()
+    {
+        var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+        image.SetPixel(0, 0, Colors.White);
+        return image;
+    }
+
+    /// <summary>Передать шейдеру поле, настройки и пересчёт координат прямоугольника в координаты поля.</summary>
     private void Apply()
     {
+        _material.SetShaderParameter("field", Source);
         _material.SetShaderParameter("fog_color", Settings.FogColor);
         _material.SetShaderParameter("outline_color", Settings.OutlineColor);
         _material.SetShaderParameter("outline_width", Settings.OutlineWidthPx);
         _material.SetShaderParameter("softness", Settings.SoftnessPx);
         _material.SetShaderParameter("fog_on", Settings.Fog);
         _material.SetShaderParameter("outline_on", Settings.Outline);
-        _material.SetShaderParameter("sdf_range", VisionField.RangePx);
+        _material.SetShaderParameter("sdf_range", VisionSystem.RangePx);
 
         float size = World.SizePx;
 
         _material.SetShaderParameter("field_size", size);
+
         float margin = size * MarginFactor;
         float scale = (size + margin * 2f) / size;
         float offset = -margin / size;
 
         _material.SetShaderParameter("field_scale", new Vector2(scale, scale));
         _material.SetShaderParameter("field_offset", new Vector2(offset, offset));
-    }
-
-    /// <summary>
-    /// Обновить текстуру по растру. Пересоздаётся она только при изменении размера мира:
-    /// размер изображения задан при создании, и подогнать его на месте нельзя.
-    /// </summary>
-    private void Refresh()
-    {
-        int width = Field.Width;
-        var values = Field.Shown;
-
-        if (values.Length != width * width)
-            return;
-
-        if (_image == null || _image.GetWidth() != width)
-        {
-            _image = Image.CreateFromData(width, width, false, Image.Format.L8, values);
-            _texture = ImageTexture.CreateFromImage(_image);
-            _shownArea = Area();
-
-            QueueRedraw();
-            return;
-        }
-
-        // Растр сглаживается каждый кадр, поэтому и выгружается каждый кадр: сверять номер
-        // пересборки здесь больше не с чем
-        _image.SetData(width, width, false, Image.Format.L8, values);
-        _texture.Update(_image);
-
-        // Границы мира правятся в редакторе на ходу, а размер растра при этом мог и не
-        // измениться — например, когда поле осталось прежним, а сместился его край
-        var area = Area();
-
-        if (_shownArea != area)
-        {
-            _shownArea = area;
-            QueueRedraw();
-        }
     }
 }
