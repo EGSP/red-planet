@@ -86,6 +86,18 @@ public partial class EffectSystem : GameSystem
 
         /// <summary>Сколько секунд носитель стоит. Гасит выдачу по <c>StopDelay</c>.</summary>
         public float Idle;
+
+        /// <summary>
+        /// Что уже записано в узел: место, угол и доля выдачи. Стоящая машина получает
+        /// одни и те же значения кадр за кадром, а Godot сравнивает их у себя, то есть
+        /// уже после перехода границы C#↔Godot. Первая запись проходит сама собой:
+        /// значения начинаются с NaN, который не равен ничему, в том числе себе.
+        /// </summary>
+        public Vector2 Spot = new(float.NaN, float.NaN);
+
+        public float Facing = float.NaN;
+
+        public float Ratio = float.NaN;
     }
 
     /// <summary>Вспышка выстрела, найденная у части-инструмента, с ключом её инструмента.</summary>
@@ -202,14 +214,17 @@ public partial class EffectSystem : GameSystem
         GM.Index.Watch<IDamageable>(OnDeadlyAdded, OnDeadlyRetired, this);
     }
 
+    /// <summary>
+    /// Разбор документов шага. Остаётся в физическом цикле по единственной причине:
+    /// транзиентные документы живут один шаг — <c>Events.ClearTransient</c> опустошает
+    /// потоки в конце каждого, — и разбирать их раз в кадр значило бы терять вспышки
+    /// и взрывы всех шагов кадра, кроме последнего.
+    ///
+    /// <see cref="Track"/> тоже принадлежит шагу: снимок преобразования носителя нужен
+    /// <see cref="Blast"/> того же шага, а к следующему кадру носитель уже выметен из мира.
+    /// </summary>
     public override void Step(double dt)
     {
-        foreach (var trails in _trails.Values)
-            foreach (var trail in trails)
-                Advance(trail, dt);
-
-        Fade(dt);
-
         foreach (var shot in GM.Events.Stream<WeaponFired>().Records)
             Flare(shot);
 
@@ -220,12 +235,27 @@ public partial class EffectSystem : GameSystem
             Burst(blast);
 
         Track();
-        Await(dt);
 
         foreach (var death in GM.Events.Stream<EntityDestroyed>().Records)
             Blast(death);
 
         Close();
+    }
+
+    /// <summary>
+    /// Ведение уже созданных эффектов: пыль под корпусом, догорание осиротевших узлов,
+    /// отложенные взрывы. Всё это влияет на одну лишь картинку, поэтому идёт раз в кадр,
+    /// а не раз в шаг, — см. <see cref="GameSystem.Present"/>. Отсчёты ведутся по <c>dt</c>
+    /// кадра и потому остаются верны по времени, а не по числу вызовов.
+    /// </summary>
+    public override void Present(double dt)
+    {
+        foreach (var trails in _trails.Values)
+            foreach (var trail in trails)
+                Advance(trail, dt);
+
+        Fade(dt);
+        Await(dt);
     }
 
     // ── ход: пыль из-под корпуса ──────────────────────────────────────────────────
@@ -300,24 +330,43 @@ public partial class EffectSystem : GameSystem
         if (!Alive.Is(node) || trail.Owner is not Node2D carrier || !Alive.Is(carrier))
             return;
 
-        // Преобразование считается по кэшированным полям сущности, а не узлом: внутри шага
-        // узел ещё показывает положение конца прошлого шага — см. Entity
+        // Преобразование считается по кэшированным полям сущности, а не узлом: чтение поля
+        // не переходит границу C#↔Godot — см. Entity
+        Vector2 spot;
+        float facing;
+
         if (carrier is Entity placed)
         {
-            node.GlobalPosition = placed.ToWorld(trail.Offset);
-            node.GlobalRotation = placed.Rotation + trail.Angle;
+            spot = placed.ToWorld(trail.Offset);
+            facing = placed.Rotation + trail.Angle;
         }
         else
         {
-            node.GlobalPosition = carrier.ToGlobal(trail.Offset);
-            node.GlobalRotation = carrier.GlobalRotation + trail.Angle;
+            spot = carrier.ToGlobal(trail.Offset);
+            facing = carrier.GlobalRotation + trail.Angle;
+        }
+
+        if (trail.Spot != spot)
+        {
+            trail.Spot = spot;
+            node.GlobalPosition = spot;
+        }
+
+        if (trail.Facing != facing)
+        {
+            trail.Facing = facing;
+            node.GlobalRotation = facing;
         }
 
         float speed = trail.Owner.Movement?.Velocity.Length() ?? 0f;
         float span = Mathf.Max(node.FullSpeed - node.MinSpeed, 1f);
         float ratio = Mathf.Clamp((speed - node.MinSpeed) / span, 0f, 1f);
 
-        node.AmountRatio = ratio;
+        if (trail.Ratio != ratio)
+        {
+            trail.Ratio = ratio;
+            node.AmountRatio = ratio;
+        }
 
         if (ratio > 0f)
         {

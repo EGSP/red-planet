@@ -75,6 +75,9 @@ public abstract partial class Entity : Node2D, ILive
     private float _facing;
     private bool _dropped;
 
+    /// <summary>Показ узла, каким его знает управляемый код, — см. <see cref="Visible"/>.</summary>
+    private bool _shown = true;
+
     /// <summary>Сущность уже стоит в очереди на запись — второй раз добавлять её не нужно.</summary>
     private bool _queued;
 
@@ -118,6 +121,34 @@ public abstract partial class Entity : Node2D, ILive
             _spot = value;
             _spotDirty = true;
             Queue();
+        }
+    }
+
+    /// <summary>
+    /// Показ сущности. Скрывает одноимённое свойство узла по той же причине, что положение:
+    /// <see cref="VisionSystem"/> назначает показ каждому противнику и каждому его снаряду
+    /// раз в кадр, и почти всегда назначает то же самое значение, какое уже стоит. Проверку
+    /// на совпадение Godot делает у себя, то есть уже после того, как переход границы
+    /// C#↔Godot оплачен, а по замеру на эти записи уходило 7 % времени главного потока.
+    ///
+    /// ЗАПИСЬ НЕ ОТКЛАДЫВАЕТСЯ, в отличие от положения: показ меняется редко и по одному
+    /// разу за шаг, откладывать здесь нечего. Поэтому узел всегда согласован с полем,
+    /// и начальное значение просто перечитывается при входе в дерево.
+    ///
+    /// ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ. Гасить сущность через ссылку типа <see cref="CanvasItem"/>
+    /// в обход этого класса: поле разойдётся с узлом, и следующая запись того же значения
+    /// будет отброшена как излишняя. Расхождение ловит <see cref="EntityAudit"/>.
+    /// </summary>
+    public new bool Visible
+    {
+        get => _shown;
+        set
+        {
+            if (_shown == value)
+                return;
+
+            _shown = value;
+            base.Visible = value;
         }
     }
 
@@ -221,6 +252,11 @@ public abstract partial class Entity : Node2D, ILive
         _plainParent = GetParent() is not Node2D parent
                        || parent.GlobalTransform == Transform2D.Identity;
 
+        // Показ пишется сразу, поэтому узел здесь верней поля: сущность из сцены могла быть
+        // погашена редактором, а набор готовых экземпляров возвращает узел в том виде,
+        // в каком его оставил прошлый выстрел
+        _shown = base.Visible;
+
         if (_spotDirty || _facingDirty)
             WriteBack();
         else
@@ -263,4 +299,10 @@ public abstract partial class Entity : Node2D, ILive
 
     /// <summary>Положение узла — то, что видит движок. Нужно одной лишь сверке.</summary>
     internal Vector2 NodeSpot => base.GlobalPosition;
+
+    /// <summary>Показ узла — то, что видит движок. Нужно одной лишь сверке.</summary>
+    internal bool NodeShown => base.Visible;
+
+    /// <summary>Перечитать показ у узла. Нужно сверке отладки при найденном расхождении.</summary>
+    internal void SyncShown() => _shown = base.Visible;
 }

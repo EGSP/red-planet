@@ -3,9 +3,9 @@ using Godot;
 /// <summary>
 /// Сверка кэшированного положения сущностей с положением их узлов.
 ///
-/// ЗАЧЕМ. <see cref="Entity"/> держит положение полем и пишет его в узел сам. Порядок этот
-/// нарушается ровно двумя способами: записью через ссылку типа <see cref="Node2D"/> в обход
-/// класса и движением родительского слоя. Оба дают расхождение, которое в игре читается
+/// ЗАЧЕМ. <see cref="Entity"/> держит положение и показ полями и пишет их в узел сам.
+/// Порядок этот нарушается ровно двумя способами: записью через ссылку типа
+/// <see cref="Node2D"/> в обход класса и движением родительского слоя. Оба дают расхождение, которое в игре читается
 /// как дрожание сущности либо как выстрел мимо цели, и оба ищутся долго, потому что видимое
 /// следствие отстоит от причины.
 ///
@@ -31,6 +31,17 @@ public static class EntityAudit
 
         foreach (var entity in gm.Index.All<Entity>())
         {
+            if (entity.Visible != entity.NodeShown)
+            {
+                if (++found > Reported)
+                    break;
+
+                GD.PushWarning($"[EntityAudit] {entity.Name}: поле {entity.Visible}, " +
+                               $"узел {entity.NodeShown} — показ гасили мимо Entity");
+
+                entity.SyncShown();
+            }
+
             var cached = entity.GlobalPosition;
             var actual = entity.NodeSpot;
 

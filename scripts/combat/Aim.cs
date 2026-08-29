@@ -25,7 +25,22 @@ public sealed class ToolMount
     /// либо в ней не нашлось части с таким идентификатором: тогда инструмент существует
     /// только в расчёте, а выстрел показывается из центра носителя.
     /// </summary>
-    public ModelTool Part { get; set; }
+    public ModelTool Part
+    {
+        get => _part;
+        set
+        {
+            _part = value;
+
+            // Новая часть о разосланном прежде угле не знает — см. <see cref="Push"/>
+            _pushed = float.NaN;
+        }
+    }
+
+    private ModelTool _part;
+
+    /// <summary>Угол, уже записанный в часть изображения. NaN означает «ещё не записывали».</summary>
+    private float _pushed = float.NaN;
 
     /// <summary>Перезарядка. Есть у любого места, но читается только у ствола.</summary>
     public WeaponState Gun { get; } = new();
@@ -52,6 +67,25 @@ public sealed class ToolMount
     public WeaponDefinition Weapon => Tool as WeaponDefinition;
 
     public WorkToolDefinition Work => Tool as WorkToolDefinition;
+
+    /// <summary>
+    /// Записать угол в часть изображения, если он изменился с прошлой записи.
+    ///
+    /// ЗАЧЕМ СРАВНЕНИЕ. Угол рассылается каждый кадр каждому месту каждого носителя,
+    /// а меняется он только при довороте: наведённый на неподвижную цель ствол и ствол,
+    /// упёршийся в край сектора, кадр за кадром получают одно и то же значение. Godot
+    /// сравнивает значения у себя, то есть уже после перехода границы C#↔Godot, и запись
+    /// без изменения обходится в полную пометку преобразования устаревшим с обходом
+    /// поддерева части. По замеру на эти записи уходило 4.5 % времени главного потока.
+    /// </summary>
+    internal void Push()
+    {
+        if (_pushed == Local || Part == null || !Alive.Is(Part) || !Part.FollowsAim)
+            return;
+
+        _pushed = Local;
+        Part.Rotation = Local;
+    }
 
     /// <summary>Мировая ось инструмента при заданной оси корпуса.</summary>
     public float World(float bodyFacing) => bodyFacing + Local;
@@ -494,7 +528,6 @@ public sealed class AimRig
     public void Apply()
     {
         foreach (var mount in _mounts)
-            if (mount.Part != null && Alive.Is(mount.Part) && mount.Part.FollowsAim)
-                mount.Part.Rotation = mount.Local;
+            mount.Push();
     }
 }

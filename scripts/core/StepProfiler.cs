@@ -55,11 +55,20 @@ public sealed class StepProfiler
     private static readonly double MsPerTick = 1000.0 / Stopwatch.Frequency;
 
     /// <summary>
-    /// Ключ — сама система, сравнение по ссылке: обёртки движка переопределяют сравнение,
-    /// и у освобождённого узла оно небезопасно. Тот же приём применён в Index и Scheduler.
+    /// Ряды по циклам обновления, ключ внутри цикла — сама система, сравнение по ссылке:
+    /// обёртки движка переопределяют сравнение, и у освобождённого узла оно небезопасно.
+    /// Тот же приём применён в Index и Scheduler.
+    ///
+    /// Циклов два, потому что одна и та же система попадает в оба: шаг идёт в физическом,
+    /// проход показа — в графическом (<see cref="GameSystem.Present"/>). Складывать
+    /// их в один ряд нельзя: у них разная частота, и общая медиана не отвечала бы ни тому,
+    /// ни другому.
     /// </summary>
-    private readonly Dictionary<GameSystem, Track> _bySystem =
-        new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<GameSystem, Track>[] _bySystem =
+    {
+        new(ReferenceEqualityComparer.Instance),
+        new(ReferenceEqualityComparer.Instance),
+    };
 
     private readonly List<Track> _order = new();
 
@@ -114,13 +123,18 @@ public sealed class StepProfiler
         Generation++;
     }
 
-    /// <summary>Учесть один шаг системы. Время передаётся тактами, перевод — здесь.</summary>
-    public void Record(GameSystem system, long ticks)
+    /// <summary>
+    /// Учесть один проход системы в названном цикле обновления. Время передаётся тактами,
+    /// перевод — здесь.
+    /// </summary>
+    public void Record(GameSystem system, UpdateCycle cycle, long ticks)
     {
-        if (!_bySystem.TryGetValue(system, out var track))
+        var tracks = _bySystem[(int)cycle];
+
+        if (!tracks.TryGetValue(system, out var track))
         {
-            track = new Track(system);
-            _bySystem[system] = track;
+            track = new Track(system, cycle);
+            tracks[system] = track;
             _order.Add(track);
         }
 
@@ -133,7 +147,9 @@ public sealed class StepProfiler
     /// </summary>
     public void Reset()
     {
-        _bySystem.Clear();
+        foreach (var tracks in _bySystem)
+            tracks.Clear();
+
         _order.Clear();
         _running = false;
         Generation++;
@@ -150,10 +166,10 @@ public sealed class StepProfiler
         private int _count;
         private int _head;
 
-        internal Track(GameSystem system)
+        internal Track(GameSystem system, UpdateCycle cycle)
         {
             Name = system.GetType().Name;
-            Cycle = system.UpdateCycle;
+            Cycle = cycle;
         }
 
         public string Name { get; }

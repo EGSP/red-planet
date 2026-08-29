@@ -108,7 +108,11 @@ public sealed class Scheduler
 
     /// <summary>
     /// Прогон систем выбранного цикла обновления. Порядок внутри цикла — по фазе
-    /// и <see cref="GameSystem.StepOrder"/>; системы другого цикла пропускаются.
+    /// и <see cref="GameSystem.StepOrder"/>.
+    ///
+    /// В графическом цикле, помимо шага своих систем, идёт проход показа систем физического
+    /// цикла — тех из них, что его объявили (<see cref="GameSystem.Present"/>).
+    /// Порядок между теми и другими общий, поскольку выводится из одной сортировки.
     /// </summary>
     public void RunCycle(UpdateCycle cycle, double dt)
     {
@@ -137,18 +141,32 @@ public sealed class Scheduler
 
         foreach (var system in _systems)
         {
-            if (system.UpdateCycle != cycle)
+            // Своя очередь системы — обычный шаг; система физического цикла получает
+            // в графическом второй проход, готовящий показ (см. GameSystem.Present)
+            bool own = system.UpdateCycle == cycle;
+            bool presenting = !own && cycle == UpdateCycle.Process && system.Presents;
+
+            if (!own && !presenting)
                 continue;
 
             if (!profiling)
             {
-                system.Step(dt);
+                if (own)
+                    system.Step(dt);
+                else
+                    system.Present(dt);
+
                 continue;
             }
 
             long started = Stopwatch.GetTimestamp();
-            system.Step(dt);
-            Profiler.Record(system, Stopwatch.GetTimestamp() - started);
+
+            if (own)
+                system.Step(dt);
+            else
+                system.Present(dt);
+
+            Profiler.Record(system, cycle, Stopwatch.GetTimestamp() - started);
         }
     }
 
