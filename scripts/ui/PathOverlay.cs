@@ -2,7 +2,7 @@ using Godot;
 
 /// <summary>
 /// Пути поверх мира: ломаная от сущности к цели, пройденная часть отдельно от предстоящей,
-/// и узлы, раскрытые последним поиском.
+/// узлы, раскрытые последним поиском, и полоса макро-поиска, которой поиск был ограничен.
 ///
 /// Кого показывать, решает выделение — то же самое, по которому рисуются очереди приказов.
 /// Отдельный признак «все» существует затем, чтобы поймать случай, где странно ведёт себя
@@ -44,7 +44,9 @@ public partial class PathOverlay : Node2D
             return;
         }
 
-        if (!DebugFlags.Paths || gm.Command == null)
+        // Полоса макро-поиска хранится у пути, поэтому показывается вместе с выделением
+        // даже тогда, когда сами ломаные показывать не просили
+        if ((!DebugFlags.Paths && !DebugFlags.PathMacro) || gm.Command == null)
             return;
 
         foreach (var actor in gm.Command.Selected)
@@ -58,12 +60,52 @@ public partial class PathOverlay : Node2D
         if (!DebugFlags.PathsExpanded || pathfinding.Expanded == null)
             return;
 
-        float half = NavGrid.Cell * 0.5f;
+        float half = NavGrid.CellPx * 0.5f;
         var style = DrawTheme.Fill(VizKind.PathVisited, 0.22f);
 
         foreach (var point in pathfinding.Expanded)
             ShapeDraw.Rect(this, new Rect2(ToLocal(point) - new Vector2(half, half),
-                NavGrid.Cell, NavGrid.Cell), style);
+                NavGrid.CellPx, NavGrid.CellPx), style);
+    }
+
+    /// <summary>
+    /// Верхний уровень пути: области полосы макро-поиска кружками по их серединам
+    /// и цепочка от старта к цели ломаной по тем же серединам.
+    ///
+    /// Показано то, чем поиск ограничивал себя, когда считал ИМЕННО ЭТОТ путь: за пределы
+    /// полосы он ячейки не раскрывал, а по цепочке считал оценку расстояния. Полоса взята
+    /// у самого пути, поэтому показывается она для каждого выводимого юнита, а не для
+    /// последнего посчитанного запроса.
+    ///
+    /// Пустая полоса означает, что поиск шёл по всему растру: цель была видна напрямую,
+    /// слоя областей ещё нет либо полоса пути не дала и поиск повторился без ограничения.
+    /// </summary>
+    private void DrawBand(PathHandle handle)
+    {
+        if (!DebugFlags.PathMacro || handle.Band.Count == 0)
+            return;
+
+        var area = DrawTheme.Filled(VizKind.PathBand, 0.10f, 0.45f, 1.5f, WidthMode.MinScreen);
+        float radius = NavGrid.TilePx * 0.22f;
+
+        foreach (var center in handle.Band)
+            ShapeDraw.Circle(this, ToLocal(center), radius, area);
+
+        if (handle.Chain.Count == 0)
+            return;
+
+        var link = DrawTheme.Line(VizKind.PathMacro);
+        var node = DrawTheme.Filled(VizKind.PathMacro, 0.55f, 1f, 2f, WidthMode.Screen);
+
+        for (int i = 0; i < handle.Chain.Count; i++)
+        {
+            var at = ToLocal(handle.Chain[i]);
+
+            if (i > 0)
+                ShapeDraw.Line(this, ToLocal(handle.Chain[i - 1]), at, link);
+
+            ShapeDraw.Circle(this, at, 5f, node);
+        }
     }
 
     private void DrawPath(PathfindingSystem pathfinding, IMobile mobile)
@@ -71,6 +113,12 @@ public partial class PathOverlay : Node2D
         var handle = pathfinding.Peek(mobile);
 
         if (handle == null || handle.Points.Count == 0)
+            return;
+
+        // Полоса рисуется первой: ломаная пути должна лежать поверх неё, а не под
+        DrawBand(handle);
+
+        if (!DebugFlags.Paths && !DebugFlags.PathsAll)
             return;
 
         var kind = handle.Status == PathStatus.Unreachable || mobile.Movement.Blocked

@@ -11,9 +11,19 @@ public sealed class NavSnapshot : IClearanceField
     public readonly int TileSize;
     public readonly int TilesPerSide;
     public readonly NavTile[] Tiles;
-    public readonly Dictionary<int, int[]> Components;
+    /// <summary>
+    /// Слои областей по порогам клиренса: связность и верхний уровень поиска пути.
+    /// </summary>
+    public readonly Dictionary<int, NavRegionLayer> Regions;
     public readonly double BuildMs;
-    public readonly int RebuiltTiles;
+
+    /// <summary>
+    /// Номера тайлов, пересчитанных этим заданием. Нужны отмене путей: путь обесценивается
+    /// только тогда, когда пересчитан хоть один тайл, по которому он проложен.
+    /// </summary>
+    public readonly int[] RebuiltTileIndices;
+
+    public int RebuiltTiles => RebuiltTileIndices.Length;
 
     public NavSnapshot(
         int sourceRevision,
@@ -21,18 +31,18 @@ public sealed class NavSnapshot : IClearanceField
         int tileSize,
         int tilesPerSide,
         NavTile[] tiles,
-        Dictionary<int, int[]> components,
+        Dictionary<int, NavRegionLayer> regions,
         double buildMs,
-        int rebuiltTiles)
+        int[] rebuiltTileIndices)
     {
         SourceRevision = sourceRevision;
         Width = width;
         TileSize = tileSize;
         TilesPerSide = tilesPerSide;
         Tiles = tiles;
-        Components = components;
+        Regions = regions;
         BuildMs = buildMs;
-        RebuiltTiles = rebuiltTiles;
+        RebuiltTileIndices = rebuiltTileIndices ?? System.Array.Empty<int>();
     }
 
     public bool TryIndex(int cellIndex, out NavTile tile, out int local)
@@ -74,8 +84,11 @@ public sealed class NavSnapshot : IClearanceField
     int IClearanceField.Revision => SourceRevision;
 
     public int ComponentAt(int cellIndex, int required) =>
-        Components != null && Components.TryGetValue(required, out var labels) &&
-        (uint)cellIndex < (uint)labels.Length
-            ? labels[cellIndex]
+        Regions != null && Regions.TryGetValue(required, out var layer)
+            ? layer.ComponentAt(cellIndex)
             : 0;
+
+    /// <summary>Слой областей на пороге клиренса; null, если слой не строился.</summary>
+    public NavRegionLayer Layer(int required) =>
+        Regions != null && Regions.TryGetValue(required, out var layer) ? layer : null;
 }

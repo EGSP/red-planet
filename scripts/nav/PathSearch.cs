@@ -19,6 +19,18 @@ public sealed class PathSearch
 
     private const int Diagonal = 14;
 
+    /// <summary>
+    /// Насколько поправка по графу областей вправе превысить октильную оценку, в долях
+    /// от неё: одна восьмая.
+    ///
+    /// Ограничение подобрано замером (<c>scenes/tools/NavSelfCheck.tscn</c>). Без него
+    /// поправка переоценивает остаток в открытом поле, и расход узлов растёт: 9 154 → 13 049
+    /// на обходе гребёнки тупиков. С ограничением в одну восьмую расход падает во всех трёх
+    /// проверяемых положениях: 3 142 → 1 272 через стену, 9 154 → 8 464 мимо тупиков,
+    /// 3 096 → 1 912 внутрь плотной застройки.
+    /// </summary>
+    private const int GuidanceSlack = 8;
+
     private readonly NavGrid _grid;
 
     private readonly int[] _cost = new int[NavGrid.Area];
@@ -26,14 +38,44 @@ public sealed class PathSearch
     private readonly int[] _stamp = new int[NavGrid.Area];
     private readonly bool[] _closed = new bool[NavGrid.Area];
 
-    private readonly Heap _open = new(1024);
+    private readonly NavHeap _open = new(1024);
 
     private readonly List<Vector2> _raw = new();
+
+    /// <summary>
+    /// Обратный поиск по графу областей. Хранится у поиска, а не у запроса: соседние
+    /// запросы за кадр обычно идут к одной цели, и расстояния для них считаются один раз.
+    /// </summary>
+    private readonly NavMacroSearch _route = new();
+
+    /// <summary>Слой областей, по которому построена полоса текущего поиска.</summary>
+    private NavRegionLayer _layer;
+
+    /// <summary>Ограничивать ли раскрытие полосой. Снимается на повторе без ограничения.</summary>
+    private bool _banded;
+
+    /// <summary>Направлять ли оценку расстоянием по графу областей.</summary>
+    private bool _guided;
 
     private int _run;
 
     /// <summary>Сколько узлов раскрыл последний поиск. Показывает панель отладки.</summary>
     public int LastExpanded { get; private set; }
+
+    /// <summary>Сколько поисков прошло по полосе макро-поиска. Показывает панель отладки.</summary>
+    public int Bands { get; private set; }
+
+    /// <summary>Сколько раз полоса не дала пути и поиск повторялся без ограничения.</summary>
+    public int Fallbacks { get; private set; }
+
+    /// <summary>Областей в полосе последнего поиска.</summary>
+    public int LastBand { get; private set; }
+
+    /// <summary>Слой областей последнего поиска; null, если поиск шёл по всему растру.</summary>
+    public NavRegionLayer LastLayer => _banded ? _layer : null;
+
+    /// <summary>Полоса последнего поиска; null, если поиск шёл по всему растру.</summary>
+    public NavMacroSearch LastMacro => _banded ? _route : null;
 
     /// <summary>
     /// Раскрытые узлы последнего поиска — только для отрисовки, и только когда её просят:
@@ -42,6 +84,19 @@ public sealed class PathSearch
     public List<Vector2> Expanded { get; } = new();
 
     public bool RecordExpanded { get; set; }
+
+    /// <summary>
+    /// Ограничивать ли поиск полосой макро-поиска. Снимается только проверками и разбором:
+    /// сравнение расхода узлов с полосой и без неё — единственный способ судить о том,
+    /// что полоса даёт на конкретной карте.
+    /// </summary>
+    public bool UseBand { get; set; } = true;
+
+    /// <summary>
+    /// Направлять ли оценку расстоянием по графу областей. Признак отдельный от полосы,
+    /// поскольку приёмы независимы: полоса отсекает поле, оценка уводит от тупиков.
+    /// </summary>
+    public bool UseGuidance { get; set; } = true;
 
     public PathSearch(NavGrid grid) => _grid = grid;
 
@@ -57,9 +112,6 @@ public sealed class PathSearch
     {
         result.Clear();
         LastExpanded = 0;
-
-        if (RecordExpanded)
-            Expanded.Clear();
 
         _grid.Fresh();
 
@@ -108,8 +160,22 @@ public sealed class PathSearch
         if (!_grid.Connected(start, goal, radiusPx))
             return false;
 
+        bool restricted = Restrict(start, goal, radiusPx);
+
         if (!Search(start, goal, radiusPx, maxNodes))
-            return false;
+        {
+            // Полоса строится по снимку, который может отставать от источника, а сам граф
+            // не знает о временной маске непроходимости. Поэтому неудача в полосе есть
+            // не отсутствие пути, а повод повторить поиск по всему растру.
+            if (!restricted)
+                return false;
+
+            _banded = false;
+            Fallbacks++;
+
+            if (!Search(start, goal, radiusPx, maxNodes))
+                return false;
+        }
 
         Trace(start, goal, from, to);
         Smooth(radiusPx, result);
@@ -132,10 +198,52 @@ public sealed class PathSearch
         return _grid.NearestPassable(cell, radiusPx);
     }
 
+    /// <summary>
+    /// Подготовить полосу макро-поиска. Возвращает false, если поиск придётся вести
+    /// по всему растру: слоя нет, область старта или цели неизвестна либо спуск по графу
+    /// не дошёл до цели.
+    /// </summary>
+    private bool Restrict(Vector2I start, Vector2I goal, float radiusPx)
+    {
+        _banded = false;
+        _guided = false;
+        _layer = UseBand || UseGuidance ? _grid.Layer(radiusPx) : null;
+        LastBand = 0;
+
+        if (_layer == null)
+            return false;
+
+        int goalRegion = _layer.RegionAt(NavGrid.IndexOf(goal));
+        int startRegion = _layer.RegionAt(NavGrid.IndexOf(start));
+
+        if (goalRegion == 0 || startRegion == 0)
+            return false;
+
+        if (!_route.Matches(_layer, goalRegion))
+            _route.Build(_layer, goalRegion);
+
+        _guided = UseGuidance;
+
+        if (!UseBand || !_route.BuildBand(startRegion))
+            return _guided;
+
+        _banded = true;
+        LastBand = _route.LastBand;
+        Bands++;
+        return true;
+    }
+
     private bool Search(Vector2I start, Vector2I goal, float radiusPx, int maxNodes)
     {
         _run++;
         _open.Clear();
+
+        // Список раскрытых очищается здесь, а не при входе в запрос. Запрос, отвеченный
+        // прямой видимостью или отсеянный связностью, поиска не ведёт, и стирать показанное
+        // ему нечем: на открытой карте такие запросы составляют большинство, и отладочный
+        // слой оставался бы пустым всегда
+        if (RecordExpanded)
+            Expanded.Clear();
 
         int required = NavGrid.Required(radiusPx);
         int startIndex = NavGrid.IndexOf(start);
@@ -186,6 +294,13 @@ public sealed class PathSearch
                     if (_grid.DistanceAt(next) < required)
                         continue;
 
+                    // Область ячейки нужна дважды: полосой она отсекает лишнее поле,
+                    // а расстоянием до цели по графу направляет поиск в обход тупиков
+                    int region = _banded || _guided ? _layer.RegionAt(next) : 0;
+
+                    if (_banded && !_route.InBand(region))
+                        continue;
+
                     // Срезание углов запрещено: при зазоре в одну ячейку путь иначе
                     // протечёт по диагонали сквозь щель между двумя зданиями
                     if (dx != 0 && dy != 0 &&
@@ -205,7 +320,7 @@ public sealed class PathSearch
 
                     _cost[next] = cost;
                     _from[next] = at;
-                    _open.Push(next, cost + Estimate(new Vector2I(nx, ny), goal));
+                    _open.Push(next, cost + Guided(nx, ny, region, goal));
                 }
             }
         }
@@ -226,6 +341,46 @@ public sealed class PathSearch
         _cost[index] = int.MaxValue;
         _from[index] = -1;
         _closed[index] = false;
+    }
+
+    /// <summary>
+    /// Оценка с поправкой по графу областей: не меньше расстояния от области ячейки
+    /// до цели, посчитанного обратным поиском.
+    ///
+    /// ЗАЧЕМ. Октильная оценка о зданиях не знает, поэтому в тупике она тем меньше, чем
+    /// глубже туда зашёл поиск, — отсюда и брались тысячи раскрытых узлов. Расстояние
+    /// по графу у тупика велико, поскольку выйти из него можно только тем же путём,
+    /// каким вошли, и поиск туда не сворачивает.
+    ///
+    /// Оценка перестаёт быть нижней границей, а значит, найденный путь не обязан быть
+    /// кратчайшим. Это осознанный размен: на нашей карте разница в длине мала, а разница
+    /// в расходе узлов — на порядок.
+    /// </summary>
+    private int Guided(int nx, int ny, int region, Vector2I goal)
+    {
+        int value = Estimate(new Vector2I(nx, ny), goal);
+
+        if (!_guided || region == 0)
+            return value;
+
+        int distance = _route.Distance(region);
+
+        if (distance == int.MaxValue)
+            return value;
+
+        // Расстояния графа хранятся в пикселях, оценка поиска — в десятых долях шага.
+        // Добавка октильной оценки снимает плато: внутри одной области расстояние по графу
+        // постоянно, и без добавки порядок раскрытия внутри неё определялся бы только
+        // накопленной стоимостью, то есть вырождался бы в обход Дейкстры
+        int scaled = distance * Straight / NavGrid.CellPx + value / 64;
+
+        if (scaled <= value)
+            return value;
+
+        // Оценка ограничена сверху: неограниченная поправка в открытом поле переоценивает
+        // остаток в полтора раза и заставляет поиск обходить широким веером
+        int cap = value + value / GuidanceSlack;
+        return scaled < cap ? scaled : cap;
     }
 
     /// <summary>
@@ -318,85 +473,4 @@ public sealed class PathSearch
         return _grid.LineOfSight(a, b, radiusPx);
     }
 
-    /// <summary>
-    /// Двоичная куча минимума. Своя, потому что System.Collections.Generic.PriorityQueue
-    /// не даёт переиспользовать хранилище между поисками, а поисков за кадр несколько.
-    /// </summary>
-    private sealed class Heap
-    {
-        private int[] _items;
-        private int[] _keys;
-
-        public int Count { get; private set; }
-
-        public Heap(int capacity)
-        {
-            _items = new int[capacity];
-            _keys = new int[capacity];
-        }
-
-        public void Clear() => Count = 0;
-
-        public void Push(int item, int key)
-        {
-            if (Count == _items.Length)
-            {
-                System.Array.Resize(ref _items, Count * 2);
-                System.Array.Resize(ref _keys, Count * 2);
-            }
-
-            int at = Count++;
-            _items[at] = item;
-            _keys[at] = key;
-
-            while (at > 0)
-            {
-                int parent = (at - 1) / 2;
-
-                if (_keys[parent] <= _keys[at])
-                    break;
-
-                Swap(parent, at);
-                at = parent;
-            }
-        }
-
-        public int Pop()
-        {
-            int top = _items[0];
-
-            Count--;
-            _items[0] = _items[Count];
-            _keys[0] = _keys[Count];
-
-            int at = 0;
-
-            while (true)
-            {
-                int left = at * 2 + 1;
-                int right = left + 1;
-                int least = at;
-
-                if (left < Count && _keys[left] < _keys[least])
-                    least = left;
-
-                if (right < Count && _keys[right] < _keys[least])
-                    least = right;
-
-                if (least == at)
-                    break;
-
-                Swap(least, at);
-                at = least;
-            }
-
-            return top;
-        }
-
-        private void Swap(int a, int b)
-        {
-            (_items[a], _items[b]) = (_items[b], _items[a]);
-            (_keys[a], _keys[b]) = (_keys[b], _keys[a]);
-        }
-    }
 }

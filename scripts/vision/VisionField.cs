@@ -67,7 +67,7 @@ public sealed class VisionField
     private byte[] _shown = new byte[1];
 
     /// <summary>Ячейка растра, пикселей. Меняется настройкой отображения.</summary>
-    public int Cell => _cell;
+    public int CellPx => _cell;
 
     /// <summary>Ячеек по стороне. Выводится из размера мира и меняется вместе с ним.</summary>
     public int Width => Mathf.Max(1, World.SizePx / _cell);

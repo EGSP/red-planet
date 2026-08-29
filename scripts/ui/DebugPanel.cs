@@ -228,6 +228,13 @@ public partial class DebugPanel : ToolPanel
             "запуска поиска. Включайте, когда подозреваете, что застройка замуровала область.",
             () => DebugFlags.NavComponents, on => DebugFlags.NavComponents = on);
 
+        Check(box, "области тайлов",
+            "Из чего собран верхний уровень поиска: каждый тайл 32×32 ячейки разбит " +
+            "на области непрерывной проходимости, и каждая окрашена своим цветом. " +
+            "Здание, поставленное поперёк тайла, делит его область надвое — по картинке " +
+            "видно, где у поиска появляются новые переходы, а где он их потерял.",
+            () => DebugFlags.NavRegions, on => DebugFlags.NavRegions = on);
+
         Check(box, "габариты и зазоры",
             "Синим — прямоугольник, который здание занимает на самом деле. Жёлтым — " +
             "обязательный зазор вокруг него: поставить второе здание так, чтобы оно " +
@@ -256,6 +263,16 @@ public partial class DebugPanel : ToolPanel
             "узлов: широкое пятно означает, что поиск блуждал, узкая полоса — что шёл " +
             "прямо. Заполнение стоит памяти, поэтому ведётся только при включённом признаке.",
             () => DebugFlags.PathsExpanded, on => DebugFlags.PathsExpanded = on);
+
+        Check(box, "полоса макро-поиска",
+            "Чем поиск ограничивал себя, когда считал путь показываемого юнита. Фиолетовые " +
+            "кружки — области, внутри которых ему было позволено раскрывать ячейки; " +
+            "ломаная между ними — цепочка от старта к цели по графу областей, служащая " +
+            "оценкой расстояния. Полоса хранится у самого пути, поэтому показывается для " +
+            "каждого выделенного, а не для последнего посчитанного запроса. Пусто означает, " +
+            "что поиск шёл по всему растру: цель была видна напрямую либо полоса пути " +
+            "не дала. Вместе с «раскрытыми узлами» видно и позволенное, и понадобившееся.",
+            () => DebugFlags.PathMacro, on => DebugFlags.PathMacro = on);
 
         Section(box, "Растр", "Состояние навигационной карты.");
         _navigation = Readout(box,
@@ -306,7 +323,7 @@ public partial class DebugPanel : ToolPanel
         Check(box, "клетки",
             "Показывать занятые клетки. Сплошное пятно вокруг скоплений — норма; " +
             "одиночные клетки вдалеке означают, что кто-то забрёл за пределы поля.",
-            () => DebugFlags.SpatialCells, on => DebugFlags.SpatialCells = on);
+            () => DebugFlags.SpatialBuckets, on => DebugFlags.SpatialBuckets = on);
 
         Check(box, "численность в клетке",
             "Число сущностей в углу клетки. Десятки в одной клетке означают, что размер " +
@@ -1251,7 +1268,7 @@ public partial class DebugPanel : ToolPanel
                        $"потеряно {combat.LossesTaken}   урон коммандеру {damage:0}";
 
         _navigation.Text =
-            $"поле {NavGrid.Width}×{NavGrid.Width} по {NavGrid.Cell} px, зазор {Const.BuildMarginPx:0} px\n" +
+            $"поле {NavGrid.Width}×{NavGrid.Width} по {NavGrid.CellPx} px, зазор {Const.BuildMarginPx:0} px\n" +
             $"препятствий {gm.Obstacles.Count}   ревизия {gm.Nav.Revision} " +
             $"(снимок {gm.Nav.ActiveRevision}, ждут {gm.Nav.RequestedRevision})\n" +
             $"пересчёт {gm.Nav.LastBuildMs:0.00} мс, тайлов {gm.Nav.LastRebuiltTiles}" +
@@ -1331,7 +1348,7 @@ public partial class DebugPanel : ToolPanel
             ? "каждый кадр"
             : $"{vision.Settings.UpdateHz:0} раз в секунду";
 
-        return $"поле {field.Width}×{field.Width} по {field.Cell} px\n" +
+        return $"поле {field.Width}×{field.Width} по {field.CellPx} px\n" +
                $"источников {field.Sources}   скрыто {vision.Hidden}\n" +
                $"последняя пересборка {field.LastBuildMs:0.00} мс, {rate}";
     }
@@ -1481,7 +1498,7 @@ public partial class DebugPanel : ToolPanel
     private static int Destinations(GameManager gm, PathfindingSystem pathfinding)
     {
         var clusters = new List<Vector2>();
-        float tolerance = NavGrid.Cell * 2f;
+        float tolerance = NavGrid.CellPx * 2f;
 
         foreach (var pair in pathfinding.Paths)
         {

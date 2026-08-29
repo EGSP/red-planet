@@ -59,7 +59,7 @@ public partial class VisionSystem : GameSystem
         data["hide_enemies"] = Settings.HideEnemies;
         data["every_frame"] = Settings.EveryFrame;
         data["update_hz"] = Settings.UpdateHz;
-        data["cell_px"] = Field.Cell;
+        data["cell_px"] = Field.CellPx;
         data["width"] = Field.Width;
         data["area"] = Field.Area;
         data["sources"] = Field.Sources;

@@ -4,6 +4,9 @@
 /// </summary>
 public sealed class NavTile
 {
+    /// <summary>Ячеек по стороне тайла. Тайл есть единица пересчёта растра и узел графа регионов.</summary>
+    public const int Size = 32;
+
     public readonly int TileX;
     public readonly int TileY;
     public readonly bool[] Blocked;

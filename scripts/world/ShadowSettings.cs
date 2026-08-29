@@ -74,7 +74,7 @@ public partial class ShadowSettings : Resource
         get
         {
             int saturation = Mathf.Max(NavGrid.Settings?.MaxClearance ?? 12, NavGrid.Straight);
-            return (saturation / (float)NavGrid.Straight - 0.5f) * NavGrid.Cell;
+            return (saturation / (float)NavGrid.Straight - 0.5f) * NavGrid.CellPx;
         }
     }
 

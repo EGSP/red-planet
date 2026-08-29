@@ -35,6 +35,8 @@ public enum VizKind
     PathBehind,
     PathFailed,
     PathVisited,
+    PathBand,
+    PathMacro,
 
     Metal,
 
@@ -46,7 +48,7 @@ public enum VizKind
     BoidSense,
     BoidBody,
     BoidLink,
-    SpatialCells,
+    SpatialBuckets,
 
     NavBlocked,
     NavTight,
@@ -109,6 +111,11 @@ public static class DrawTheme
         VizKind.PathFailed => new(1.00f, 0.48f, 0.22f),
         VizKind.PathVisited => new(0.55f, 0.65f, 1.00f),
 
+        // Полоса — приглушённый фиолетовый, цепочка спуска — тот же тон в полную яркость:
+        // рядом с голубой ломаной пути и синими раскрытыми узлами они не сливаются
+        VizKind.PathBand => new(0.72f, 0.45f, 1.00f),
+        VizKind.PathMacro => new(0.85f, 0.35f, 1.00f),
+
         VizKind.Metal => new(0.92f, 0.48f, 0.18f),
 
         VizKind.BoidSeek => new(0.45f, 1.00f, 0.40f),
@@ -123,7 +130,7 @@ public static class DrawTheme
         VizKind.BoidSense => new(0.42f, 0.48f, 1.00f),
         VizKind.BoidBody => new(1.00f, 0.82f, 0.28f),
         VizKind.BoidLink => new(1.00f, 0.55f, 0.35f),
-        VizKind.SpatialCells => new(1.00f, 1.00f, 1.00f),
+        VizKind.SpatialBuckets => new(1.00f, 1.00f, 1.00f),
 
         VizKind.NavBlocked => new(1.00f, 0.25f, 0.20f),
         VizKind.NavTight => new(1.00f, 0.55f, 0.10f),
@@ -224,8 +231,9 @@ public static class DrawTheme
         VizKind.PathAhead => (0.85f, 2.0f, WidthMode.Screen),
         VizKind.PathBehind => (0.50f, 1.5f, WidthMode.MinScreen),
         VizKind.PathFailed => (0.90f, 2.0f, WidthMode.Screen),
+        VizKind.PathMacro => (0.85f, 3.0f, WidthMode.Screen),
         VizKind.BoidLink => (0.35f, 1.5f, WidthMode.MinScreen),
-        VizKind.SpatialCells => (0.10f, 1.0f, WidthMode.MinScreen),
+        VizKind.SpatialBuckets => (0.10f, 1.0f, WidthMode.MinScreen),
         VizKind.BoidSpeed => (0.80f, 2.0f, WidthMode.Screen),
         VizKind.GridLine => (0.06f, 1.0f, WidthMode.Screen),
         VizKind.GridAxis => (0.16f, 1.0f, WidthMode.Screen),

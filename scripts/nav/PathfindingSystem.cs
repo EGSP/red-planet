@@ -27,6 +27,20 @@ public partial class PathfindingSystem : GameSystem
     /// <summary>Потолок раскрытых узлов на поиск. Превышение считается недостижимостью.</summary>
     [Export] public int MaxNodesPerSearch = 4000;
 
+    /// <summary>
+    /// Потолок узлов на местную починку. Меньше основного намеренно: починка выгодна лишь
+    /// пока она дешевле полного поиска, а не найдя обхода за отведённое число узлов,
+    /// разумнее пересчитать путь целиком.
+    /// </summary>
+    [Export] public int MaxNodesPerRepair = 600;
+
+    /// <summary>
+    /// Во сколько раз обход вправе оказаться длиннее заменяемого участка. Починка местная
+    /// и об остальном маршруте не знает, поэтому слишком длинный обход означает, что дешевле
+    /// пересчитать путь целиком.
+    /// </summary>
+    [Export] public float RepairSlack = 1.5f;
+
     /// <summary>Через сколько секунд без обращения путь забывается.</summary>
     [Export] public float CacheTtl = 2f;
 
@@ -40,6 +54,10 @@ public partial class PathfindingSystem : GameSystem
     private readonly List<object> _queue = new();
     private readonly List<Vector2> _points = new();
     private readonly List<object> _expired = new();
+    private readonly List<Vector2> _repaired = new();
+    private readonly List<Vector2> _band = new();
+    private readonly List<Vector2> _chain = new();
+    private readonly List<int> _tiles = new();
 
     private PathSearch _search;
 
@@ -60,6 +78,21 @@ public partial class PathfindingSystem : GameSystem
     public int LastExpanded { get; private set; }
 
     public int WorstExpanded { get; private set; }
+
+    /// <summary>Сколько поисков прошло по полосе макро-поиска.</summary>
+    public int Bands => _search?.Bands ?? 0;
+
+    /// <summary>Сколько раз полоса не дала пути и поиск повторялся по всему растру.</summary>
+    public int Fallbacks => _search?.Fallbacks ?? 0;
+
+    /// <summary>Областей в полосе последнего поиска.</summary>
+    public int LastBand => _search?.LastBand ?? 0;
+
+    /// <summary>Сколько путей починено местным обходом за сессию.</summary>
+    public int Repairs { get; private set; }
+
+    /// <summary>Сколько раз починка не удалась и путь считался заново.</summary>
+    public int RepairMisses { get; private set; }
 
     private int _requests;
     private int _hits;
@@ -98,7 +131,12 @@ public partial class PathfindingSystem : GameSystem
         handle.Radius = radiusPx;
 
         bool moved = handle.Target.DistanceTo(to) > GoalTolerance;
-        bool stale = handle.Revision != GM.Nav.Revision;
+        bool stale = Stale(handle);
+
+        // Починка идёт до объявления пути грязным: она либо возвращает годную ломаную,
+        // либо отказывается, и тогда путь пересчитывается обычным порядком
+        if (stale && !moved && TryRepair(handle, from))
+            return handle;
 
         if (moved || stale)
         {
@@ -118,6 +156,98 @@ public partial class PathfindingSystem : GameSystem
             Enqueue(key, handle);
 
         return handle;
+    }
+
+    /// <summary>
+    /// Устарел ли путь. Готовая ломаная сверяется по тайлам, через которые проложена;
+    /// путь без ломаной — недостижимая цель либо ещё не посчитанный запрос — сверяется
+    /// по ревизии растра целиком, иначе он не пересчитался бы никогда.
+    /// </summary>
+    private bool Stale(PathHandle handle) =>
+        handle.Status == PathStatus.Ready && handle.Tiles.Count > 0
+            ? GM.Nav.Touched(handle.Tiles, handle.Revision)
+            : handle.Revision != GM.Nav.Revision;
+
+    /// <summary>
+    /// Починить путь местным обходом вместо полного пересчёта.
+    ///
+    /// ЗАЧЕМ. Постройка задевает один-четыре тайла, а прежде обесценивала весь маршрут.
+    /// Хвост ломаной за изменённой областью остаётся верным, поэтому пересчитывать
+    /// достаточно начало — от нынешнего положения до первой точки за этой областью.
+    ///
+    /// ГРАНИЦА УЧАСТКА БЕРЁТСЯ ИЗ САМОЙ ЛОМАНОЙ. Цепочка ячеек после сглаживания не хранится,
+    /// и восстанавливать её ради точных границ пришлось бы памятью на каждого идущего.
+    /// Точка перегиба за изменённой областью годится не хуже и уже есть.
+    ///
+    /// Возвращает false, когда починка неуместна: изменение задело последний участок пути,
+    /// обхода не нашлось за отведённые узлы либо он вышел заметно длиннее прежнего.
+    /// </summary>
+    private bool TryRepair(PathHandle handle, Vector2 from)
+    {
+        if (handle.Status != PathStatus.Ready || handle.Points.Count == 0)
+            return false;
+
+        var points = handle.Points;
+        int last = -1;
+
+        for (int i = handle.Cursor; i < points.Count; i++)
+        {
+            _tiles.Clear();
+            NavGrid.TilesAlong(i == handle.Cursor ? from : points[i - 1], points[i], _tiles);
+
+            if (GM.Nav.Touched(_tiles, handle.Revision))
+                last = i;
+        }
+
+        // Изменение осталось позади идущего: впереди ломаная по-прежнему верна, и всё,
+        // что требуется, — заново описать её покрытие
+        if (last < 0)
+        {
+            handle.Revision = GM.Nav.Revision;
+            Cover(handle, from);
+            return true;
+        }
+
+        // Задет последний участок: чинить нечего, обход и есть весь остаток пути
+        if (last >= points.Count - 1)
+            return false;
+
+        int join = last + 1;
+
+        if (_served >= MaxSearchesPerFrame)
+            return false;
+
+        _served++;
+
+        if (!_search.TryFind(from, points[join], handle.Radius, MaxNodesPerRepair, _points))
+        {
+            RepairMisses++;
+            return false;
+        }
+
+        float replaced = from.DistanceTo(points[handle.Cursor]);
+
+        for (int i = handle.Cursor; i < join; i++)
+            replaced += points[i].DistanceTo(points[i + 1]);
+
+        if (PolylineLength(from, _points) > Mathf.Max(replaced, 1f) * RepairSlack)
+        {
+            RepairMisses++;
+            return false;
+        }
+
+        _repaired.Clear();
+        _repaired.AddRange(_points);
+
+        for (int i = join + 1; i < points.Count; i++)
+            _repaired.Add(points[i]);
+
+        handle.Fill(_repaired, PathStatus.Ready);
+        handle.Revision = GM.Nav.Revision;
+        Cover(handle, from);
+        Macro(handle);
+        Repairs++;
+        return true;
     }
 
     /// <summary>Забыть путь. Звать не обязательно — невостребованное вычищается само.</summary>
@@ -192,6 +322,10 @@ public partial class PathfindingSystem : GameSystem
         data["worst_expanded"] = WorstExpanded;
         data["max_searches_per_frame"] = MaxSearchesPerFrame;
         data["max_nodes_per_search"] = MaxNodesPerSearch;
+        data["repairs"] = Repairs;
+        data["repair_misses"] = RepairMisses;
+        data["macro_bands"] = Bands;
+        data["macro_fallbacks"] = Fallbacks;
     }
 
     /// <summary>
@@ -246,9 +380,52 @@ public partial class PathfindingSystem : GameSystem
 
         handle.Fill(_points, found ? PathStatus.Ready : PathStatus.Unreachable);
         handle.Revision = GM.Nav.Revision;
+        Cover(handle, from);
+        Macro(handle);
 
         LastExpanded = _search.LastExpanded;
         WorstExpanded = Mathf.Max(WorstExpanded, LastExpanded);
+    }
+
+    /// <summary>
+    /// Запомнить тайлы, через которые прошла ломаная. Отправная точка входит в покрытие
+    /// наравне с ломаной: первый отрезок начинается там, где юнит стоял в момент расчёта.
+    /// </summary>
+    private static void Cover(PathHandle handle, Vector2 from)
+    {
+        handle.Tiles.Clear();
+
+        var previous = from;
+
+        foreach (var point in handle.Points)
+        {
+            NavGrid.TilesAlong(previous, point, handle.Tiles);
+            previous = point;
+        }
+    }
+
+    /// <summary>
+    /// Запомнить у пути полосу и цепочку макро-поиска, которыми он посчитан. Пустые списки
+    /// означают, что поиск шёл по всему растру: либо слоя областей нет, либо полоса не дала
+    /// пути и поиск повторился без ограничения.
+    /// </summary>
+    private void Macro(PathHandle handle)
+    {
+        _band.Clear();
+        _chain.Clear();
+
+        var macro = _search?.LastMacro;
+
+        if (macro != null)
+        {
+            foreach (int region in macro.Members)
+                _band.Add(macro.CenterOf(region));
+
+            foreach (int region in macro.Chain)
+                _chain.Add(macro.CenterOf(region));
+        }
+
+        handle.Trace(_band, _chain);
     }
 
     private void Enqueue(object key, PathHandle handle)

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Пространственная сетка: раскладка сущностей по клеткам ради вопроса «кто рядом».
+/// Пространственная сетка: раскладка сущностей по корзинам ради вопроса «кто рядом».
 ///
 /// ЗАЧЕМ. Поиск ближайшей цели перебирал всех живых противоположной стороны, а разведка —
 /// всех носителей обзора. Стоимость такого перебора есть произведение численностей, и при
@@ -16,16 +16,16 @@ using Godot;
 /// на фоне запросов не заметно.
 ///
 /// ЗАПРОС БЛИЖАЙШЕГО ИДЁТ КОЛЬЦАМИ, А НЕ КВАДРАТОМ. Обход квадратом со стороной по радиусу
-/// поиска не даёт выигрыша там, где радиус велик: дальность ствола покрывает десятки клеток,
+/// поиска не даёт выигрыша там, где радиус велик: дальность ствола покрывает десятки корзин,
 /// и в ответ пришла бы заметная часть карты. Кольцевой обход идёт от центра наружу и
 /// прекращается, как только найденное ближе, чем может оказаться что-либо в неосмотренных
-/// кольцах. Условие остановки не «нашли»: ближайший по клеткам не обязан быть ближайшим
+/// кольцах. Условие остановки не «нашли»: ближайший по корзинам не обязан быть ближайшим
 /// по расстоянию, поэтому после находки осматривается ещё одно кольцо — ровно то, в котором
 /// ещё может лежать что-то ближе.
 ///
-/// СВОДКА ПО КЛЕТКЕ. Клетка помнит, чьи сущности в ней лежат, и запрос по стороне пропускает
-/// чужие клетки целиком, не обходя содержимое. Вокруг стрелка почти все клетки заняты своими,
-/// поэтому пропуск экономит больше, чем сам обход колец. Счётчика численности клетка не
+/// СВОДКА ПО КЛЕТКЕ. Корзина помнит, чьи сущности в ней лежат, и запрос по стороне пропускает
+/// чужие корзины целиком, не обходя содержимое. Вокруг стрелка почти все корзины заняты своими,
+/// поэтому пропуск экономит больше, чем сам обход колец. Счётчика численности корзина не
 /// держит: он выводится из длины списка и отдельного ответа ни на один вопрос не даёт.
 ///
 /// ЧТО СЕТКА НЕ РЕШАЕТ. Вопрос «видит ли кто-нибудь эту точку»: радиус там принадлежит
@@ -34,12 +34,12 @@ using Godot;
 /// </summary>
 public sealed class SpatialGrid<T> where T : class
 {
-    /// <summary>Содержимое одной клетки: сущности и сводка о том, чьи они.</summary>
-    public sealed class Cell
+    /// <summary>Содержимое одной корзины: сущности и сводка о том, чьи они.</summary>
+    public sealed class Bucket
     {
         public readonly List<T> Items = new();
 
-        /// <summary>Стороны, чьи сущности лежат в клетке, битами по значению Faction.</summary>
+        /// <summary>Стороны, чьи сущности лежат в корзине, битами по значению Faction.</summary>
         public int Sides;
 
         public void Clear()
@@ -50,35 +50,35 @@ public sealed class SpatialGrid<T> where T : class
     }
 
     /// <summary>
-    /// Клетки полем, а не словарём.
+    /// Корзины полем, а не словарём.
     ///
-    /// ЗАЧЕМ. Кольцевой обход опрашивает клетки подряд, включая пустые, и на каждую тратил
+    /// ЗАЧЕМ. Кольцевой обход опрашивает корзины подряд, включая пустые, и на каждую тратил
     /// хеширование пары целых плюс сравнение ключа: по замеру около трёх процентов
-    /// собственного времени главного потока. Поле мира ограничено и невелико — при клетке
-    /// в 128 пикселей вся арена укладывается в несколько тысяч клеток, — поэтому обращение
+    /// собственного времени главного потока. Поле мира ограничено и невелико — при корзине
+    /// в 128 пикселей вся арена укладывается в несколько тысяч корзин, — поэтому обращение
     /// сводится к вычислению номера и чтению массива.
     ///
-    /// Пустые клетки хранятся как null: заводить объект под каждую клетку арены незачем,
+    /// Пустые корзины хранятся как null: заводить объект под каждую корзину арены незачем,
     /// занята из них в бою дай бог сотня.
     /// </summary>
-    private Cell[] _cells = System.Array.Empty<Cell>();
+    private Bucket[] _buckets = System.Array.Empty<Bucket>();
 
     private Vector2I _origin;
     private int _width;
     private int _height;
 
-    /// <summary>Клетки, в которые в этой пересборке что-то положили: по ним идут очистка и показ.</summary>
-    private readonly List<Cell> _filled = new();
+    /// <summary>Корзины, в которые в этой пересборке что-то положили: по ним идут очистка и показ.</summary>
+    private readonly List<Bucket> _filled = new();
 
     private readonly List<Vector2I> _filledAt = new();
 
     /// <summary>
-    /// Границы занятых клеток ПО КАЖДОЙ СТОРОНЕ отдельно, а не по раскладке целиком.
+    /// Границы занятых корзин ПО КАЖДОЙ СТОРОНЕ отдельно, а не по раскладке целиком.
     ///
     /// Общие границы для этого не годятся, и обошлось это дорого. Триста своих юнитов
     /// при полном отсутствии противника заставляли каждого из них обходить кольцами всю
-    /// занятую область — своими же клетками и занятую, — чтобы не найти ничего: сорок пять
-    /// тысяч осмотренных клеток за кадр при нуле просмотренных сущностей. По границам стороны
+    /// занятую область — своими же корзинами и занятую, — чтобы не найти ничего: сорок пять
+    /// тысяч осмотренных корзин за кадр при нуле просмотренных сущностей. По границам стороны
     /// такой обход прекращается сразу, а при пустой стороне не начинается вовсе.
     /// </summary>
     private readonly int[] _sideCount = new int[Sides];
@@ -87,10 +87,10 @@ public sealed class SpatialGrid<T> where T : class
     /// Состав каждой стороны списком. Нужен второму способу поиска — прямому перебору.
     ///
     /// ПОЧЕМУ СПОСОБОВ ДВА. Обход кольцами дешевле перебора, только пока искомых на карте
-    /// много: он платит за каждую осмотренную клетку, а клеток в круге дальности ствола
+    /// много: он платит за каждую осмотренную корзину, а корзин в круге дальности ствола
     /// выходит порядка сотни. Когда противника осталось три десятка, перебрать их все дешевле,
-    /// чем опросить сто клеток, большая часть которых к этой стороне отношения не имеет.
-    /// Замер показал ровно этот случай: двести запросов осматривали двадцать пять тысяч клеток
+    /// чем опросить сто корзин, большая часть которых к этой стороне отношения не имеет.
+    /// Замер показал ровно этот случай: двести запросов осматривали двадцать пять тысяч корзин
     /// и находили в них полтора десятка целей.
     ///
     /// Поэтому способ выбирается сравнением объёмов работы, а не назначается заранее.
@@ -107,7 +107,7 @@ public sealed class SpatialGrid<T> where T : class
     ///
     /// Нужно поиску досягаемых: предел там задан расстоянием до КРАЯ цели, а обход идёт
     /// по расстоянию до её середины, и разницу приходится закладывать в предел поиска.
-    /// Прежде здесь стояла постоянная в пять клеток «на самую крупную постройку», отчего
+    /// Прежде здесь стояла постоянная в пять корзин «на самую крупную постройку», отчего
     /// поиск ближайшего юнита расходился на пять колец там, где хватило бы одного.
     /// </summary>
     private readonly float[] _sideExtent = new float[Sides];
@@ -115,10 +115,10 @@ public sealed class SpatialGrid<T> where T : class
     /// <summary>Сколько сторон учитывается. Значение Faction служит номером в этих рядах.</summary>
     private const int Sides = 8;
 
-    public SpatialGrid(int cellPx) => CellPx = Mathf.Max(1, cellPx);
+    public SpatialGrid(int bucketPx) => BucketPx = Mathf.Max(1, bucketPx);
 
-    /// <summary>Сторона клетки в пикселях.</summary>
-    public int CellPx { get; }
+    /// <summary>Сторона корзины в пикселях.</summary>
+    public int BucketPx { get; }
 
     /// <summary>Сколько сущностей разложено в последнюю пересборку.</summary>
     public int Count { get; private set; }
@@ -130,7 +130,7 @@ public sealed class SpatialGrid<T> where T : class
     /// </summary>
     public int Queries { get; private set; }
 
-    /// <summary>Сколько клеток осмотрено запросами за шаг.</summary>
+    /// <summary>Сколько корзин осмотрено запросами за шаг.</summary>
     public int Visited { get; private set; }
 
     /// <summary>Сколько сущностей просмотрено запросами за шаг — то, что раньше было полным обходом.</summary>
@@ -144,13 +144,13 @@ public sealed class SpatialGrid<T> where T : class
         Scanned = 0;
     }
 
-    /// <summary>Занятые клетки. Нужно отладочной отрисовке и ей одной.</summary>
+    /// <summary>Занятые корзины. Нужно отладочной отрисовке и ей одной.</summary>
     public IReadOnlyList<Vector2I> FilledAt => _filledAt;
 
-    public Cell At(Vector2I cell)
+    public Bucket At(Vector2I bucket)
     {
-        int at = Offset(cell.X, cell.Y);
-        return at < 0 ? null : _cells[at];
+        int at = Offset(bucket.X, bucket.Y);
+        return at < 0 ? null : _buckets[at];
     }
 
     public void Clear()
@@ -158,7 +158,7 @@ public sealed class SpatialGrid<T> where T : class
         Fit();
 
         // Списки чистим, но словарь не выбрасываем: раскладка пересобирается каждый шаг,
-        // и заново выделять память под те же клетки было бы напрасной работой
+        // и заново выделять память под те же корзины было бы напрасной работой
         for (int i = 0; i < _filled.Count; i++)
             _filled[i].Clear();
 
@@ -185,28 +185,28 @@ public sealed class SpatialGrid<T> where T : class
     public float ExtentOf(Faction side) => _sideExtent[(int)side];
 
     /// <summary>
-    /// Положить сущность в клетку по её месту. <paramref name="extent"/> — насколько её
+    /// Положить сущность в корзину по её месту. <paramref name="extent"/> — насколько её
     /// поверхность отстоит от середины; по нему поиск досягаемых назначает предел обхода.
     /// </summary>
     public void Add(T item, Vector2 at, Faction side, float extent = 0f)
     {
-        Put(ToCell(at), item, side, extent);
+        Put(ToBucket(at), item, side, extent);
         Enlist(item, side);
         Count++;
     }
 
     /// <summary>
-    /// Положить сущность во все клетки, которые задевает её прямоугольник.
+    /// Положить сущность во все корзины, которые задевает её прямоугольник.
     ///
-    /// Постройка два на четыре занимает несколько клеток, и запись её в одну лишь клетку
+    /// Постройка два на четыре занимает несколько корзин, и запись её в одну лишь корзину
     /// центра означала бы, что с дальнего края она не находится: кольцевой обход дошёл бы
     /// до края постройки раньше, чем до её середины, и остановился, ничего не увидев.
     /// </summary>
     public void AddArea(T item, in Obb area, Faction side)
     {
         var bounds = area.Bounds;
-        var min = ToCell(bounds.Position);
-        var max = ToCell(bounds.End);
+        var min = ToBucket(bounds.Position);
+        var max = ToBucket(bounds.End);
 
         // Наибольшее удаление поверхности от середины у прямоугольника есть его полудиагональ
         float extent = area.Size.Length() * 0.5f;
@@ -248,9 +248,9 @@ public sealed class SpatialGrid<T> where T : class
         Queries++;
 
         int mask = 1 << (int)side;
-        var center = ToCell(from);
+        var center = ToBucket(from);
 
-        // Дальше этого кольца искать негде: либо предел запроса, либо край клеток ЭТОЙ стороны
+        // Дальше этого кольца искать негде: либо предел запроса, либо край корзин ЭТОЙ стороны
         var min = _sideMin[(int)side];
         var max = _sideMax[(int)side];
 
@@ -262,7 +262,7 @@ public sealed class SpatialGrid<T> where T : class
             return null;
 
         if (maxDistance < float.MaxValue)
-            rings = Mathf.Min(rings, Mathf.CeilToInt(maxDistance / CellPx) + 1);
+            rings = Mathf.Min(rings, Mathf.CeilToInt(maxDistance / BucketPx) + 1);
 
         float limit = maxDistance >= float.MaxValue
             ? float.MaxValue
@@ -272,11 +272,11 @@ public sealed class SpatialGrid<T> where T : class
         float bestDistance = limit;
         int bestId = int.MaxValue;
 
-        // Способ выбирается сравнением объёмов работы: клеток в квадрате обхода против
+        // Способ выбирается сравнением объёмов работы: корзин в квадрате обхода против
         // численности стороны — см. пояснение у _sideItems
-        long cells = (2L * rings + 1) * (2L * rings + 1);
+        long buckets = (2L * rings + 1) * (2L * rings + 1);
 
-        if (listed.Count <= cells)
+        if (listed.Count <= buckets)
         {
             Scanned += listed.Count;
             Scan(listed, from, position, accept, id, ref best, ref bestDistance, ref bestId);
@@ -286,9 +286,9 @@ public sealed class SpatialGrid<T> where T : class
         for (int ring = 0; ring <= rings; ring++)
         {
             // Всё, что лежит в неосмотренных кольцах, отстоит не ближе этой границы: от точки
-            // внутри центральной клетки до любой клетки кольца ring+1 не может быть меньше
-            // ring клеток. Отсюда и берётся запас в одно кольцо
-            float reachable = (float)ring * CellPx;
+            // внутри центральной корзины до любой корзины кольца ring+1 не может быть меньше
+            // ring корзин. Отсюда и берётся запас в одно кольцо
+            float reachable = (float)ring * BucketPx;
 
             if (best != null && bestDistance <= reachable * reachable)
                 break;
@@ -301,7 +301,7 @@ public sealed class SpatialGrid<T> where T : class
     }
 
     /// <summary>
-    /// Все сущности из клеток, которые задевает квадрат радиуса, в список вызывающего.
+    /// Все сущности из корзин, которые задевает квадрат радиуса, в список вызывающего.
     /// Для запроса «кто рядом», где нужны все: расталкивание, обход соседей, урон по области.
     ///
     /// Отбор по самому расстоянию здесь не делается: у спрашивающего он свой — у одного
@@ -317,18 +317,18 @@ public sealed class SpatialGrid<T> where T : class
 
         Queries++;
 
-        var min = ToCell(from - new Vector2(radius, radius));
-        var max = ToCell(from + new Vector2(radius, radius));
+        var min = ToBucket(from - new Vector2(radius, radius));
+        var max = ToBucket(from + new Vector2(radius, radius));
 
         for (int y = min.Y; y <= max.Y; y++)
             for (int x = min.X; x <= max.X; x++)
             {
                 int offset = Offset(x, y);
 
-                if (offset < 0 || _cells[offset] is not { } cell)
+                if (offset < 0 || _buckets[offset] is not { } bucket)
                     continue;
 
-                var items = cell.Items;
+                var items = bucket.Items;
                 Visited++;
                 Scanned += items.Count;
 
@@ -338,15 +338,15 @@ public sealed class SpatialGrid<T> where T : class
             }
     }
 
-    public Vector2I ToCell(Vector2 at) => new(
-        Mathf.FloorToInt(at.X / CellPx),
-        Mathf.FloorToInt(at.Y / CellPx));
+    public Vector2I ToBucket(Vector2 at) => new(
+        Mathf.FloorToInt(at.X / BucketPx),
+        Mathf.FloorToInt(at.Y / BucketPx));
 
     /// <summary>
-    /// Подогнать поле клеток под границы мира. Границы меняются только правкой настроек,
+    /// Подогнать поле корзин под границы мира. Границы меняются только правкой настроек,
     /// поэтому сравнение размеров почти всегда отвечает «то же самое» и ничего не делает.
     ///
-    /// Поле берётся с запасом в несколько клеток по каждой стороне: снаряд успевает вылететь
+    /// Поле берётся с запасом в несколько корзин по каждой стороне: снаряд успевает вылететь
     /// за границу арены до того, как его срок выйдет, а сущность за границей должна попадать
     /// в раскладку, а не теряться.
     /// </summary>
@@ -355,8 +355,8 @@ public sealed class SpatialGrid<T> where T : class
         const int Margin = 4;
 
         var bounds = World.ArenaBounds;
-        var min = ToCell(bounds.Position) - new Vector2I(Margin, Margin);
-        var max = ToCell(bounds.End) + new Vector2I(Margin, Margin);
+        var min = ToBucket(bounds.Position) - new Vector2I(Margin, Margin);
+        var max = ToBucket(bounds.End) + new Vector2I(Margin, Margin);
 
         int width = max.X - min.X + 1;
         int height = max.Y - min.Y + 1;
@@ -367,14 +367,14 @@ public sealed class SpatialGrid<T> where T : class
         _origin = min;
         _width = Mathf.Max(1, width);
         _height = Mathf.Max(1, height);
-        _cells = new Cell[_width * _height];
+        _buckets = new Bucket[_width * _height];
 
-        // Прежние клетки выброшены вместе с массивом, а список занятых на них ссылается
+        // Прежние корзины выброшены вместе с массивом, а список занятых на них ссылается
         _filled.Clear();
         _filledAt.Clear();
     }
 
-    /// <summary>Номер клетки в поле либо −1, если клетка лежит за его пределами.</summary>
+    /// <summary>Номер корзины в поле либо −1, если корзина лежит за его пределами.</summary>
     private int Offset(int x, int y)
     {
         x -= _origin.X;
@@ -383,12 +383,12 @@ public sealed class SpatialGrid<T> where T : class
         return x < 0 || y < 0 || x >= _width || y >= _height ? -1 : y * _width + x;
     }
 
-    /// <summary>Мировой угол клетки — им пользуется отладочная отрисовка.</summary>
-    public Vector2 Corner(Vector2I cell) => new(cell.X * CellPx, cell.Y * CellPx);
+    /// <summary>Мировой угол корзины — им пользуется отладочная отрисовка.</summary>
+    public Vector2 Corner(Vector2I bucket) => new(bucket.X * BucketPx, bucket.Y * BucketPx);
 
     private void Put(Vector2I at, T item, Faction side, float extent)
     {
-        // Сущность за краем поля кладётся в ближайшую крайнюю клетку: терять её нельзя,
+        // Сущность за краем поля кладётся в ближайшую крайнюю корзину: терять её нельзя,
         // а погрешность в этом случае игры не касается — там никого нет
         int offset = Offset(
             Mathf.Clamp(at.X, _origin.X, _origin.X + _width - 1),
@@ -397,16 +397,16 @@ public sealed class SpatialGrid<T> where T : class
         if (offset < 0)
             return;
 
-        var cell = _cells[offset] ??= new Cell();
+        var bucket = _buckets[offset] ??= new Bucket();
 
-        if (cell.Items.Count == 0)
+        if (bucket.Items.Count == 0)
         {
-            _filled.Add(cell);
+            _filled.Add(bucket);
             _filledAt.Add(at);
         }
 
-        cell.Items.Add(item);
-        cell.Sides |= 1 << (int)side;
+        bucket.Items.Add(item);
+        bucket.Sides |= 1 << (int)side;
 
         int number = (int)side;
 
@@ -427,7 +427,7 @@ public sealed class SpatialGrid<T> where T : class
             _sideExtent[number] = extent;
     }
 
-    /// <summary>Занести сущность в состав стороны — по одному разу, сколько бы клеток она ни заняла.</summary>
+    /// <summary>Занести сущность в состав стороны — по одному разу, сколько бы корзин она ни заняла.</summary>
     private void Enlist(T item, Faction side)
     {
         int number = (int)side;
@@ -436,7 +436,7 @@ public sealed class SpatialGrid<T> where T : class
         _sideItems[number].Add(item);
     }
 
-    /// <summary>Обойти одно кольцо клеток вокруг центра — рамку толщиной в клетку.</summary>
+    /// <summary>Обойти одно кольцо корзин вокруг центра — рамку толщиной в корзину.</summary>
     private void Ring(Vector2I center, int ring, Vector2 from, int mask,
         Func<T, Vector2> position, Func<T, bool> accept, Func<T, int> id,
         ref T best, ref float bestDistance, ref int bestId)
@@ -456,19 +456,19 @@ public sealed class SpatialGrid<T> where T : class
             {
                 int offset = Offset(x, y);
 
-                if (offset < 0 || _cells[offset] is not { } cell)
+                if (offset < 0 || _buckets[offset] is not { } bucket)
                     continue;
 
                 Visited++;
 
-                // Клетка без сущностей нужной стороны пропускается целиком — ради этого
+                // Корзина без сущностей нужной стороны пропускается целиком — ради этого
                 // сводка и ведётся
-                if ((cell.Sides & mask) == 0)
+                if ((bucket.Sides & mask) == 0)
                     continue;
 
-                Scanned += cell.Items.Count;
+                Scanned += bucket.Items.Count;
 
-                Scan(cell.Items, from, position, accept, id,
+                Scan(bucket.Items, from, position, accept, id,
                     ref best, ref bestDistance, ref bestId);
             }
         }

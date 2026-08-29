@@ -201,7 +201,7 @@ public partial class ShadowRenderer : Node2D
         _material.SetShaderParameter("ramp", _ramp);
         _material.SetShaderParameter("width_px", Mathf.Min(Settings.WidthPx, ShadowSettings.MaxWidthPx));
         _material.SetShaderParameter("falloff", Mathf.Max(Settings.Falloff, 0f));
-        _material.SetShaderParameter("cell_px", NavGrid.Cell);
+        _material.SetShaderParameter("cell_px", NavGrid.CellPx);
         _material.SetShaderParameter("steps_per_cell", NavGrid.Straight);
     }
 

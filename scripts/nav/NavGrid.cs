@@ -11,7 +11,7 @@ using Godot;
 /// из положений живых сущностей — то есть из <see cref="ObstacleMap"/>. Поэтому карта просто
 /// объект на композиционном корне.
 ///
-/// ТАЙЛЫ И ФОН. Поле делится на тайлы <see cref="NavBuilder.TileSize"/> ячеек. Пересчёт
+/// ТАЙЛЫ И ФОН. Поле делится на тайлы <see cref="NavTile.Size"/> ячеек. Пересчёт
 /// изменённой области и глобальная связность выполняются одним фоновым заданием; главный
 /// поток публикует готовый <see cref="NavSnapshot"/> по ревизии. Пока снимок не готов,
 /// добавленные препятствия учитываются временной маской непроходимости, а снятые остаются
@@ -24,7 +24,7 @@ using Godot;
 /// </summary>
 public sealed class NavGrid : IClearanceField
 {
-    public const int Cell = Const.NavCell;
+    public const int CellPx = Const.NavCell;
 
     /// <summary>
     /// Ячеек по стороне. Величина перестала быть константой вместе с тем, как размер мира
@@ -34,6 +34,14 @@ public sealed class NavGrid : IClearanceField
     public static int Width => World.NavWidth;
 
     public static int Area => Width * Width;
+
+    /// <summary>Тайлов по стороне поля.</summary>
+    public static int TilesPerSide => (Width + NavTile.Size - 1) / NavTile.Size;
+
+    /// <summary>Сторона тайла в пикселях.</summary>
+    public static int TilePx => NavTile.Size * CellPx;
+
+    public static int TileCount => TilesPerSide * TilesPerSide;
 
     /// <summary>Расстояние в третях ячейки: шаг по стороне.</summary>
     public const int Straight = NavBuilder.Straight;
@@ -54,6 +62,23 @@ public sealed class NavGrid : IClearanceField
     private int _pendingMaskObstacleRevision = int.MinValue;
     private int _pendingMaskActiveRevision = int.MinValue;
     private int _fittedWidth = -1;
+
+    /// <summary>
+    /// Когда тайл менялся последний раз: значение <see cref="Revision"/> на момент правки.
+    /// По этим меткам путь обесценивается выборочно — только если тронут тайл, через который
+    /// он проложен, — вместо прежней отмены всех путей при любой смене ревизии.
+    /// </summary>
+    private int[] _tileStamp = System.Array.Empty<int>();
+
+    /// <summary>Ревизия источника, до которой метки тайлов уже проставлены.</summary>
+    private int _stampedRevision = -1;
+
+    /// <summary>
+    /// Сколько порогов клиренса вошло в последнее запущенное задание. Порог добавляется
+    /// первым обращением юнита нового размера, и без пересборки слой областей на него
+    /// не появился бы до следующей постройки.
+    /// </summary>
+    private int _builtThresholds = -1;
 
     private Exception _backgroundError;
 
@@ -99,11 +124,11 @@ public sealed class NavGrid : IClearanceField
     // ── координаты ────────────────────────────────────────────────────────────────
 
     public static Vector2I ToCell(Vector2 world) => new(
-        Mathf.FloorToInt((world.X - World.Min.X) / Cell),
-        Mathf.FloorToInt((world.Y - World.Min.Y) / Cell));
+        Mathf.FloorToInt((world.X - World.Min.X) / CellPx),
+        Mathf.FloorToInt((world.Y - World.Min.Y) / CellPx));
 
     public static Vector2 ToWorld(Vector2I cell) =>
-        World.Min + new Vector2(cell.X + 0.5f, cell.Y + 0.5f) * Cell;
+        World.Min + new Vector2(cell.X + 0.5f, cell.Y + 0.5f) * CellPx;
 
     public static Vector2 ToWorld(int index) =>
         ToWorld(new Vector2I(index % Width, index / Width));
@@ -126,7 +151,7 @@ public sealed class NavGrid : IClearanceField
     public static int Required(float radiusPx)
     {
         float factor = Mathf.Max(Settings?.ClearanceFactor ?? 1f, 0.01f);
-        int required = Mathf.Max(1, Mathf.CeilToInt((radiusPx * factor / Cell + 0.5f) * Straight));
+        int required = Mathf.Max(1, Mathf.CeilToInt((radiusPx * factor / CellPx + 0.5f) * Straight));
         int cap = Mathf.Max(Settings?.MaxClearance ?? 12, Straight);
         return Mathf.Min(required, cap);
     }
@@ -145,7 +170,7 @@ public sealed class NavGrid : IClearanceField
         if (!InBounds(cell))
             return 0f;
 
-        return (DistanceOf(IndexOf(cell)) / (float)Straight - 0.5f) * Cell;
+        return (DistanceOf(IndexOf(cell)) / (float)Straight - 0.5f) * CellPx;
     }
 
     public bool Passable(Vector2I cell, float radiusPx)
@@ -174,7 +199,7 @@ public sealed class NavGrid : IClearanceField
         int required = Required(radiusPx);
         RememberThreshold(required);
 
-        if (_active.Components == null || !_active.Components.ContainsKey(required))
+        if (_active.Layer(required) == null)
             return true;
 
         int first = _active.ComponentAt(IndexOf(a), required);
@@ -264,6 +289,156 @@ public sealed class NavGrid : IClearanceField
     private bool PassableWithoutFresh(Vector2I cell, float radiusPx) =>
         InBounds(cell) && DistanceOf(IndexOf(cell)) >= Required(radiusPx);
 
+    // ── тайлы ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Номер тайла по ячейке. Отрицателен, если ячейка вне поля.</summary>
+    public static int TileOf(Vector2I cell) =>
+        InBounds(cell) ? cell.Y / NavTile.Size * TilesPerSide + cell.X / NavTile.Size : -1;
+
+    /// <summary>
+    /// Метка последней правки тайла. У неизвестного тайла метка равна текущей ревизии:
+    /// это худший случай, при котором путь считается устаревшим.
+    /// </summary>
+    public int TileStamp(int tile) =>
+        (uint)tile < (uint)_tileStamp.Length ? _tileStamp[tile] : Revision;
+
+    /// <summary>
+    /// Менялся ли хоть один из перечисленных тайлов после указанной ревизии.
+    /// Это и есть выборочная отмена путей: перестройка одного тайла не трогает пути,
+    /// проложенные в стороне от него.
+    /// </summary>
+    public bool Touched(List<int> tiles, int since)
+    {
+        if (tiles == null)
+            return true;
+
+        for (int i = 0; i < tiles.Count; i++)
+        {
+            if (TileStamp(tiles[i]) > since)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Тайлы, через которые проходит отрезок. Обход идёт по границам тайлов, а не выборкой
+    /// точек: пропуск тайла означал бы пропуск отмены пути, то есть движение по устаревшей
+    /// ломаной сквозь новое здание.
+    /// </summary>
+    public static void TilesAlong(Vector2 from, Vector2 to, List<int> into)
+    {
+        float size = TilePx;
+        float x0 = (from.X - World.Min.X) / size;
+        float y0 = (from.Y - World.Min.Y) / size;
+        float x1 = (to.X - World.Min.X) / size;
+        float y1 = (to.Y - World.Min.Y) / size;
+
+        int tx = Mathf.FloorToInt(x0);
+        int ty = Mathf.FloorToInt(y0);
+        int lastX = Mathf.FloorToInt(x1);
+        int lastY = Mathf.FloorToInt(y1);
+
+        AddTile(tx, ty, into);
+
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        int stepX = dx > 0f ? 1 : dx < 0f ? -1 : 0;
+        int stepY = dy > 0f ? 1 : dy < 0f ? -1 : 0;
+
+        float deltaX = stepX == 0 ? float.PositiveInfinity : 1f / Mathf.Abs(dx);
+        float deltaY = stepY == 0 ? float.PositiveInfinity : 1f / Mathf.Abs(dy);
+
+        float nextX = stepX == 0
+            ? float.PositiveInfinity
+            : (stepX > 0 ? tx + 1 - x0 : x0 - tx) / Mathf.Abs(dx);
+
+        float nextY = stepY == 0
+            ? float.PositiveInfinity
+            : (stepY > 0 ? ty + 1 - y0 : y0 - ty) / Mathf.Abs(dy);
+
+        // Предел обхода — периметр поля с запасом: отрезок за границей растра тайлов
+        // не задевает, а зацикливаться на вырожденных числах поиску незачем
+        int guard = TilesPerSide * 4 + 8;
+
+        while ((tx != lastX || ty != lastY) && guard-- > 0)
+        {
+            if (nextX < nextY)
+            {
+                tx += stepX;
+                nextX += deltaX;
+            }
+            else
+            {
+                ty += stepY;
+                nextY += deltaY;
+            }
+
+            AddTile(tx, ty, into);
+        }
+    }
+
+    private static void AddTile(int tx, int ty, List<int> into)
+    {
+        int per = TilesPerSide;
+
+        if (tx < 0 || ty < 0 || tx >= per || ty >= per)
+            return;
+
+        int index = ty * per + tx;
+
+        if (!into.Contains(index))
+            into.Add(index);
+    }
+
+    private void EnsureStamps()
+    {
+        if (_tileStamp.Length == TileCount)
+            return;
+
+        _tileStamp = new int[TileCount];
+        StampAll();
+    }
+
+    private void StampAll()
+    {
+        for (int i = 0; i < _tileStamp.Length; i++)
+            _tileStamp[i] = Revision;
+    }
+
+    /// <summary>
+    /// Пометить тайлы, задетые изменением области источника. Пустая область означает,
+    /// что состав правок неизвестен, и тогда помечаются все тайлы; область за пределами
+    /// поля не помечает ни одного, поскольку на растр она не влияет.
+    /// </summary>
+    private void StampArea(Rect2 area)
+    {
+        if (area.Size.X <= 0f || area.Size.Y <= 0f)
+        {
+            StampAll();
+            return;
+        }
+
+        int influence = NavBuilder.InfluenceCells(Mathf.Max(Settings?.MaxClearance ?? 12, Straight));
+
+        if (!NavBuilder.TileSpan(area, World.Min, CellPx, Width, NavTile.Size, influence,
+                out int tx0, out int ty0, out int tx1, out int ty1))
+            return;
+
+        int per = TilesPerSide;
+
+        for (int ty = ty0; ty <= ty1; ty++)
+        {
+            for (int tx = tx0; tx <= tx1; tx++)
+            {
+                int index = ty * per + tx;
+
+                if ((uint)index < (uint)_tileStamp.Length)
+                    _tileStamp[index] = Revision;
+            }
+        }
+    }
+
     // ── жизненный цикл ────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -276,6 +451,7 @@ public sealed class NavGrid : IClearanceField
     {
         ReportBackgroundError();
         Fit();
+        EnsureStamps();
         SyncRequest();
         CompleteTask();
         RefreshPendingMask();
@@ -323,6 +499,8 @@ public sealed class NavGrid : IClearanceField
         _pendingMaskObstacleRevision = int.MinValue;
         _pendingMaskActiveRevision = int.MinValue;
         Revision++;
+        _stampedRevision = -1;
+        StampAll();
     }
 
     private void SyncRequest()
@@ -334,6 +512,11 @@ public sealed class NavGrid : IClearanceField
 
         _requestedRevision = source;
         Revision++;
+
+        // Временная маска непроходимости уже действует, поэтому пути через изменённую
+        // область устаревают сразу, не дожидаясь публикации снимка
+        StampArea(_obstacles.ChangesSince(_stampedRevision));
+        _stampedRevision = source;
     }
 
     private void CompleteTask()
@@ -368,6 +551,11 @@ public sealed class NavGrid : IClearanceField
             return;
         }
 
+        // Пересборка на той же ревизии источника содержимого тайлов не меняет: она бывает
+        // только при появлении нового порога клиренса. Метки тайлов тогда не трогаем,
+        // иначе такой пересчёт обесценил бы все пути разом
+        bool sameSource = snapshot.SourceRevision == _activeSourceRevision;
+
         _active = snapshot;
         _activeSourceRevision = snapshot.SourceRevision;
         _buildingRevision = -1;
@@ -376,6 +564,23 @@ public sealed class NavGrid : IClearanceField
         _pendingMaskObstacleRevision = int.MinValue;
         _pendingMaskActiveRevision = int.MinValue;
         Revision++;
+
+        if (!sameSource)
+            StampTiles(snapshot.RebuiltTileIndices);
+    }
+
+    private void StampTiles(int[] tiles)
+    {
+        if (tiles == null)
+            return;
+
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            int index = tiles[i];
+
+            if ((uint)index < (uint)_tileStamp.Length)
+                _tileStamp[index] = Revision;
+        }
     }
 
     private void TryStartBuild()
@@ -383,10 +588,13 @@ public sealed class NavGrid : IClearanceField
         if (_task != null || _requestedRevision < 0)
             return;
 
-        if (_activeSourceRevision == _requestedRevision && _active != null && _active.Width == Width)
+        bool thresholdsGrew = _builtThresholds != _componentThresholds.Count;
+
+        if (_activeSourceRevision == _requestedRevision && _active != null &&
+            _active.Width == Width && !thresholdsGrew)
             return;
 
-        if (_buildingRevision == _requestedRevision)
+        if (_buildingRevision == _requestedRevision && !thresholdsGrew)
             return;
 
         StartBuild(_requestedRevision);
@@ -395,6 +603,7 @@ public sealed class NavGrid : IClearanceField
     private void StartBuild(int targetRevision)
     {
         _buildingRevision = targetRevision;
+        _builtThresholds = _componentThresholds.Count;
 
         var previous = _active;
         bool rebuildAll = previous == null || previous.Width != Width;
@@ -419,7 +628,7 @@ public sealed class NavGrid : IClearanceField
             SourceRevision = targetRevision,
             Width = Width,
             WorldMin = World.Min,
-            Cell = Cell,
+            CellPx = CellPx,
             MaxClearance = Mathf.Max(Settings?.MaxClearance ?? 12, Straight),
             Shapes = _obstacles.SnapshotShapes(),
             DirtyWorld = dirty,
@@ -490,8 +699,8 @@ public sealed class NavGrid : IClearanceField
     }
 
     private static Obb CellShape(int x, int y) => Obb.FromRect(new Rect2(
-        World.Min + new Vector2(x, y) * Cell,
-        new Vector2(Cell, Cell)));
+        World.Min + new Vector2(x, y) * CellPx,
+        new Vector2(CellPx, CellPx)));
 
     private void RememberThreshold(int required)
     {
@@ -539,6 +748,17 @@ public sealed class NavGrid : IClearanceField
     public bool BlockedAt(int index) => IsBlocked(index);
 
     public int DistanceAt(int index) => DistanceOf(index);
+
+    /// <summary>
+    /// Слой областей на пороге клиренса для радиуса. Null, если снимка ещё нет либо слой
+    /// на этот порог не строился: порог запоминается, и следующий пересчёт его добавит.
+    /// </summary>
+    public NavRegionLayer Layer(float radiusPx)
+    {
+        int required = Required(radiusPx);
+        RememberThreshold(required);
+        return _active?.Layer(required);
+    }
 
     /// <summary>Метка связной области для отрисовки. Порог берётся у типового юнита.</summary>
     public int ComponentAt(int index, float radiusPx)

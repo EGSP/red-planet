@@ -1,8 +1,8 @@
 using Godot;
 
 /// <summary>
-/// Растр навигации поверх земли: непроходимость, клиренс, связные области, а также
-/// прямоугольники строений с зазорами.
+/// Растр навигации поверх земли: непроходимость, клиренс, области тайлов, связные области,
+/// а также прямоугольники строений с зазорами.
 ///
 /// РИСУЕТСЯ ОДНОЙ ТЕКСТУРОЙ. Поле может содержать сотни тысяч ячеек, и вызывать DrawRect
 /// на каждую каждый кадр нельзя. Вместо этого поле собирается в изображение Width×Width
@@ -48,7 +48,8 @@ public partial class NavGridOverlay : Node2D
         if (gm == null || !DebugFlags.AnyNav)
             return;
 
-        if (DebugFlags.NavBlocked || DebugFlags.NavClearance || DebugFlags.NavComponents)
+        if (DebugFlags.NavBlocked || DebugFlags.NavClearance || DebugFlags.NavComponents ||
+            DebugFlags.NavRegions)
         {
             Refresh(gm);
             DrawTextureRect(_texture, World.Bounds, false);
@@ -91,25 +92,45 @@ public partial class NavGridOverlay : Node2D
     {
         int required = NavGrid.Required(SampleRadius);
         var snapshot = gm.Nav.Active;
+        var layer = DebugFlags.NavRegions ? gm.Nav.Layer(SampleRadius) : null;
 
         for (int y = 0; y < NavGrid.Width; y++)
         {
             for (int x = 0; x < NavGrid.Width; x++)
             {
                 int index = y * NavGrid.Width + x;
-                _image.SetPixel(x, y, Tint(gm, snapshot, index, required));
+                _image.SetPixel(x, y, Tint(gm, snapshot, layer, index, required));
             }
         }
 
         _texture.Update(_image);
     }
 
-    private static Color Tint(GameManager gm, NavSnapshot snapshot, int index, int required)
+    private static Color Tint(
+        GameManager gm,
+        NavSnapshot snapshot,
+        NavRegionLayer layer,
+        int index,
+        int required)
     {
         bool blocked = gm.Nav.BlockedAt(index);
 
         if (DebugFlags.NavBlocked && blocked)
             return new Color(DrawTheme.Hue(VizKind.NavBlocked), 0.55f);
+
+        // Области идут перед компонентами: они мельче, и когда включено и то и другое,
+        // показать разумнее подробное
+        if (DebugFlags.NavRegions)
+        {
+            int region = layer?.RegionAt(index) ?? 0;
+
+            if (region == 0)
+                return new Color(0f, 0f, 0f, 0f);
+
+            // Золотое сечение по кругу цветов: соседние области заведомо не сливаются
+            float tone = Mathf.PosMod(region * 0.618034f, 1f);
+            return Color.FromHsv(tone, 0.7f, 0.95f, 0.28f);
+        }
 
         if (DebugFlags.NavComponents)
         {
@@ -134,8 +155,11 @@ public partial class NavGridOverlay : Node2D
             if (distance <= 0)
                 return new Color(DrawTheme.Hue(VizKind.NavBlocked) * new Color(0.4f, 0f, 0f), 0.5f);
 
-            // Насыщаем на восьми ячейках: дальше от стен разница уже ничего не говорит
-            float depth = Mathf.Clamp(distance / (8f * 3f), 0f, 1f);
+            // Насыщаем на пределе самого поля расстояний: считать его до восьми ячеек,
+            // как было прежде, значит показывать открытое поле вполсилы — растр насыщается
+            // на NavSettings.MaxClearance, то есть на четырёх ячейках при значении 12
+            int saturation = Mathf.Max(NavGrid.Settings?.MaxClearance ?? 12, NavGrid.Straight);
+            float depth = Mathf.Clamp(distance / (float)saturation, 0f, 1f);
             bool tight = distance < required;
 
             if (tight)
@@ -153,7 +177,8 @@ public partial class NavGridOverlay : Node2D
     private static int Mode() =>
         (DebugFlags.NavBlocked ? 1 : 0) |
         (DebugFlags.NavClearance ? 2 : 0) |
-        (DebugFlags.NavComponents ? 4 : 0);
+        (DebugFlags.NavComponents ? 4 : 0) |
+        (DebugFlags.NavRegions ? 8 : 0);
 
     private void DrawFootprints(GameManager gm)
     {

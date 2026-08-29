@@ -23,6 +23,9 @@ public static class DebugFlags
     /// <summary>Связные области цветом. Разные цвета — пути между ними нет.</summary>
     public static bool NavComponents;
 
+    /// <summary>Области тайлов цветом: то, из чего собран верхний уровень поиска.</summary>
+    public static bool NavRegions;
+
     /// <summary>Прямоугольники строений и обязательные зазоры вокруг них.</summary>
     public static bool Footprints;
 
@@ -36,6 +39,9 @@ public static class DebugFlags
 
     /// <summary>Узлы, раскрытые последним поиском. Заполнение стоит памяти — только по спросу.</summary>
     public static bool PathsExpanded;
+
+    /// <summary>Полоса областей и цепочка спуска последнего поиска.</summary>
+    public static bool PathMacro;
 
     // ── boids ─────────────────────────────────────────────────────────────────────
 
@@ -51,7 +57,7 @@ public static class DebugFlags
     // ── пространственная сетка ────────────────────────────────────────────────────
 
     /// <summary>Занятые клетки раскладки по месту.</summary>
-    public static bool SpatialCells;
+    public static bool SpatialBuckets;
 
     /// <summary>Численность в клетке числом поверх неё.</summary>
     public static bool SpatialCounts;
@@ -74,11 +80,12 @@ public static class DebugFlags
     public static bool EntityAudit;
 
     /// <summary>Рисовать ли хоть что-нибудь из навигационного растра.</summary>
-    public static bool AnyNav => NavBlocked || NavClearance || NavComponents || Footprints;
+    public static bool AnyNav =>
+        NavBlocked || NavClearance || NavComponents || NavRegions || Footprints;
 
-    public static bool AnyPath => Paths || PathsAll || PathsExpanded;
+    public static bool AnyPath => Paths || PathsAll || PathsExpanded || PathMacro;
 
     public static bool AnyBoid => BoidForces || BoidRadii || BoidNeighbours;
 
-    public static bool AnySpatial => SpatialCells || SpatialCounts;
+    public static bool AnySpatial => SpatialBuckets || SpatialCounts;
 }

@@ -305,7 +305,7 @@ public partial class BuildingsPreview : Node2D
             SourceRevision = _revision,
             Width = width,
             WorldMin = World.Min,
-            Cell = NavGrid.Cell,
+            CellPx = NavGrid.CellPx,
             MaxClearance = Mathf.Max(NavGrid.Settings?.MaxClearance ?? 12, NavGrid.Straight),
             Shapes = _shapes.ToArray(),
             DirtyWorld = World.Bounds,

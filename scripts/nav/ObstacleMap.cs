@@ -24,7 +24,7 @@ using Godot;
 /// </summary>
 public sealed class ObstacleMap
 {
-    /// <summary>Сторона ячейки широкой фазы. Клетка застройки: здания крупнее неё редки.</summary>
+    /// <summary>Сторона корзины широкой фазы. Клетка застройки: здания крупнее неё редки.</summary>
     private const int BucketPx = Const.Unit;
 
     /// <summary>Сколько прошлых записей журнала держим, пока потребитель не догнал ревизию.</summary>
@@ -69,8 +69,8 @@ public sealed class ObstacleMap
         _items.Add(obstacle);
         _shapes[obstacle] = shape;
 
-        foreach (var cell in Cells(shape.Bounds))
-            Bucket(cell).Add(obstacle);
+        foreach (var at in Buckets(shape.Bounds))
+            Bucket(at).Add(obstacle);
 
         Touch(shape, added: true);
         _bornAt[obstacle] = Revision;
@@ -96,9 +96,9 @@ public sealed class ObstacleMap
             break;
         }
 
-        foreach (var cell in Cells(shape.Bounds))
+        foreach (var at in Buckets(shape.Bounds))
         {
-            if (_buckets.TryGetValue(cell, out var bucket))
+            if (_buckets.TryGetValue(at, out var bucket))
                 bucket.Remove(obstacle);
         }
 
@@ -114,9 +114,9 @@ public sealed class ObstacleMap
     /// </summary>
     public IObstacle Blocker(in Obb area, IObstacle except = null)
     {
-        foreach (var cell in Cells(area.Bounds))
+        foreach (var at in Buckets(area.Bounds))
         {
-            if (!_buckets.TryGetValue(cell, out var bucket))
+            if (!_buckets.TryGetValue(at, out var bucket))
                 continue;
 
             foreach (var obstacle in bucket)
@@ -135,9 +135,9 @@ public sealed class ObstacleMap
     /// <summary>Что накрывает точку. Нужен выбору цели под курсором.</summary>
     public IObstacle At(Vector2 point)
     {
-        var cell = ToBucket(point);
+        var at = ToBucket(point);
 
-        if (!_buckets.TryGetValue(cell, out var bucket))
+        if (!_buckets.TryGetValue(at, out var bucket))
             return null;
 
         foreach (var obstacle in bucket)
@@ -163,9 +163,9 @@ public sealed class ObstacleMap
         var probe = new Rect2(position - new Vector2(radius, radius),
             new Vector2(radius * 2f, radius * 2f));
 
-        foreach (var cell in Cells(probe))
+        foreach (var at in Buckets(probe))
         {
-            if (!_buckets.TryGetValue(cell, out var bucket))
+            if (!_buckets.TryGetValue(at, out var bucket))
                 continue;
 
             foreach (var obstacle in bucket)
@@ -200,9 +200,9 @@ public sealed class ObstacleMap
         var probe = new Rect2(position - new Vector2(radius, radius),
             new Vector2(radius * 2f, radius * 2f));
 
-        foreach (var cell in Cells(probe))
+        foreach (var at in Buckets(probe))
         {
-            if (!_buckets.TryGetValue(cell, out var bucket))
+            if (!_buckets.TryGetValue(at, out var bucket))
                 continue;
 
             foreach (var obstacle in bucket)
@@ -358,13 +358,13 @@ public sealed class ObstacleMap
             _journal.RemoveRange(0, _journal.Count - JournalKeep);
     }
 
-    private List<IObstacle> Bucket(Vector2I cell)
+    private List<IObstacle> Bucket(Vector2I at)
     {
-        if (_buckets.TryGetValue(cell, out var bucket))
+        if (_buckets.TryGetValue(at, out var bucket))
             return bucket;
 
         bucket = new List<IObstacle>();
-        _buckets[cell] = bucket;
+        _buckets[at] = bucket;
         return bucket;
     }
 
@@ -372,8 +372,8 @@ public sealed class ObstacleMap
         Mathf.FloorToInt(point.X / BucketPx),
         Mathf.FloorToInt(point.Y / BucketPx));
 
-    /// <summary>Ячейки широкой фазы, которые задевает прямоугольник.</summary>
-    private static IEnumerable<Vector2I> Cells(Rect2 rect)
+    /// <summary>Корзины широкой фазы, которые задевает прямоугольник.</summary>
+    private static IEnumerable<Vector2I> Buckets(Rect2 rect)
     {
         var min = ToBucket(rect.Position);
         var max = ToBucket(rect.End);

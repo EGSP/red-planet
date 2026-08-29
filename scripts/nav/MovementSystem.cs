@@ -525,7 +525,7 @@ public partial class MovementSystem : GameSystem
 
         // Точку считаем пройденной, не доходя до неё вплотную: ломаная идёт по центрам
         // ячеек, и требовать попадания в центр значило бы вилять на каждом повороте
-        handle.Advance(position, Mathf.Max(radius, NavGrid.Cell * 0.75f));
+        handle.Advance(position, Mathf.Max(radius, NavGrid.CellPx * 0.75f));
 
         return handle.Direction(position);
     }
@@ -1017,7 +1017,7 @@ public partial class MovementSystem : GameSystem
         data["blocked"] = _blocked;
         data["leaving"] = _leaving;
         data["resolve_passes"] = ResolvePasses;
-        data["cell_px"] = GM.Space.Mobiles.CellPx;
+        data["bucket_px"] = GM.Space.Mobiles.BucketPx;
     }
 
     /// <summary>Раскладка по ячейкам — рисует отладка.</summary>
