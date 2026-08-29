@@ -1,62 +1,74 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene format=3 uid="uid://bpyasapd68r8q"]
 
-[ext_resource type="Script" path="res://scripts/models/UnitModel.cs" id="1_model"]
-[ext_resource type="Script" path="res://scripts/models/ModelTool.cs" id="2_tool"]
-[ext_resource type="Script" path="res://scripts/models/ModelShade.cs" id="3_shade"]
-[ext_resource type="Texture2D" path="res://resources/units/enemies/shank/shank_body.png" id="4_body"]
-[ext_resource type="Texture2D" path="res://resources/units/enemies/shank/shank_gun.png" id="5_gun"]
-[ext_resource type="PackedScene" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
-[ext_resource type="PackedScene" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
-[ext_resource type="Material" path="res://resources/materials/enemy.tres" id="92_body"]
-[ext_resource type="Script" path="res://scripts/models/DeathEffect.cs" id="93_death"]
-[ext_resource type="Script" path="res://scripts/models/ImpactEffect.cs" id="95_impact"]
-[ext_resource type="PackedScene" path="res://resources/particles/explosion_tank.tscn" id="94_boom"]
+[ext_resource type="Script" uid="uid://t82bi6eupffg" path="res://scripts/models/UnitModel.cs" id="1_model"]
+[ext_resource type="Script" uid="uid://cukuju4hl6y1n" path="res://scripts/models/ModelTool.cs" id="2_tool"]
+[ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="3_shade"]
+[ext_resource type="Texture2D" uid="uid://2v6ptosdieci" path="res://resources/units/enemies/shank/shank_body.png" id="4_body"]
+[ext_resource type="Texture2D" uid="uid://8wwi5ldme8d1" path="res://resources/units/enemies/shank/shank_gun.png" id="5_gun"]
+[ext_resource type="PackedScene" uid="uid://bcwemggrliom3" path="res://resources/particles/movement_dust.tscn" id="90_dust"]
+[ext_resource type="PackedScene" uid="uid://basv063qj6fco" path="res://resources/particles/muzzle_flash.tscn" id="91_flash"]
+[ext_resource type="Material" uid="uid://cmmu2krp2tmsn" path="res://resources/materials/enemy.tres" id="92_body"]
+[ext_resource type="Script" uid="uid://b6yjtdjtrguev" path="res://scripts/models/DeathEffect.cs" id="93_death"]
+[ext_resource type="PackedScene" uid="uid://cd4gdqsbp5hmg" path="res://resources/particles/explosion_tank.tscn" id="94_boom"]
+[ext_resource type="Script" uid="uid://dt50x4exxyswc" path="res://scripts/models/ImpactEffect.cs" id="95_impact"]
+[ext_resource type="Script" path="res://scripts/models/ProjectileDeclaration.cs" id="96_shot"]
+[ext_resource type="PackedScene" path="res://resources/projectiles/projectile_tank.tscn" id="96_shot_scene"]
 
-[node name="ShankModel" type="Node2D" node_paths=PackedStringArray("Body")]
+[node name="ShankModel" type="Node2D" unique_id=754805975 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
 Body = NodePath("Body")
 
-[node name="Cast" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+[node name="Cast" type="Sprite2D" parent="." unique_id=1165940523 node_paths=PackedStringArray("Source")]
+self_modulate = Color(0.05, 0.04, 0.07, 0.4)
+texture_filter = 2
+position = Vector2(4.547544, 7.720197)
+rotation = 1.5707963
 script = ExtResource("3_shade")
 Source = NodePath("../Body")
 Kind = 0
 
-[node name="Contact" type="Sprite2D" parent="." node_paths=PackedStringArray("Source")]
+[node name="Contact" type="Sprite2D" parent="." unique_id=1006045725 node_paths=PackedStringArray("Source")]
+self_modulate = Color(0.05, 0.04, 0.07, 0.6)
+texture_filter = 2
+rotation = 1.5707963
 script = ExtResource("3_shade")
 Source = NodePath("../Body")
-Kind = 1
 
-[node name="Body" type="Sprite2D" parent="."]
+[node name="Body" type="Sprite2D" parent="." unique_id=2124162093]
 texture_filter = 1
 material = ExtResource("92_body")
 rotation = 1.5707963
 texture = ExtResource("4_body")
 
-[node name="Gun" type="Node2D" parent="." node_paths=PackedStringArray("Muzzle")]
+[node name="Gun" type="Node2D" parent="." unique_id=1964318715 node_paths=PackedStringArray("Muzzle")]
 z_index = 1
 script = ExtResource("2_tool")
 ToolId = "shank_cannon"
 Muzzle = NodePath("Muzzle")
 
-[node name="Sprite" type="Sprite2D" parent="Gun"]
+[node name="Sprite" type="Sprite2D" parent="Gun" unique_id=885684873]
 texture_filter = 1
 material = ExtResource("92_body")
 rotation = 1.5707963
 texture = ExtResource("5_gun")
 
-[node name="Muzzle" type="Marker2D" parent="Gun"]
+[node name="Muzzle" type="Marker2D" parent="Gun" unique_id=1697884716]
 position = Vector2(20, 0)
 
-[node name="Dust" parent="." instance=ExtResource("90_dust")]
+[node name="Flash" parent="Gun/Muzzle" unique_id=1539430594 instance=ExtResource("91_flash")]
 
-[node name="Flash" parent="Gun/Muzzle" instance=ExtResource("91_flash")]
-
-[node name="Impact" type="Node2D" parent="Gun/Muzzle"]
+[node name="Impact" type="Node2D" parent="Gun/Muzzle" unique_id=1356716684]
 script = ExtResource("95_impact")
 Effect = ExtResource("94_boom")
 Size = 0.85
 
-[node name="Death" type="Node2D" parent="."]
+[node name="Projectile" type="Node2D" parent="Gun/Muzzle"]
+script = ExtResource("96_shot")
+Effect = ExtResource("96_shot_scene")
+
+[node name="Dust" parent="." unique_id=793799415 instance=ExtResource("90_dust")]
+
+[node name="Death" type="Node2D" parent="." unique_id=1463185848]
 script = ExtResource("93_death")
 Effect = ExtResource("94_boom")
 Size = 0.85

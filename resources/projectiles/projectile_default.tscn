@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://dvm21a1ubkick"]
+
+[ext_resource type="Script" uid="uid://bi4a2uevalpqi" path="res://scripts/models/ProjectileModel.cs" id="1_model"]
+[ext_resource type="Texture2D" uid="uid://cacewcd684u7x" path="res://assets/textures/projectiles/P_arrow_#5318.png" id="2_arrow"]
+[ext_resource type="Shader" uid="uid://i1rili6y0yw8" path="res://resources/shaders/projectile.gdshader" id="3_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tracer"]
+shader = ExtResource("3_shader")
+shader_parameter/tint = Color(0.9542493, 0.42664, 0, 1)
+shader_parameter/energy = 1.40000002086168
+
+[node name="ProjectileDefault" type="Node2D" unique_id=106011485 node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Body" type="Sprite2D" parent="." unique_id=1784436887]
+material = SubResource("ShaderMaterial_tracer")
+scale = Vector2(0.11, 0.11)
+texture = ExtResource("2_arrow")

@@ -177,28 +177,52 @@ public sealed class Spawner
     /// Снаряд. Единственная сущность мира без EntityId: их за бой тысячи, они живут доли
     /// секунды, и ссылаться на снаряд из документа некому — попадание носит id стрелка и цели.
     /// В словарь регистрации не заносится: клеток и EntityStore у него нет.
+    ///
+    /// УЗЕЛ БЕРЁТСЯ ИЗ НАБОРА ГОТОВЫХ, а не создаётся: см. <see cref="ProjectileSystem"/>.
+    /// Точкой рождения при этом остаётся Spawner — всё, что появляется в мире, появляется
+    /// здесь, — но само создание узла принадлежит тому, кто владеет его сроком жизни.
+    /// Отсюда правило: КАЖДОЕ поле снаряда назначается ниже, поскольку узел достался
+    /// от прошлого выстрела и своих значений не забывает.
+    ///
+    /// <paramref name="part"/> — часть изображения того ствола, из которого стреляют.
+    /// Она объявляет вид снаряда; её отсутствие означает носителя без модели, и вид тогда
+    /// берётся общий.
     /// </summary>
-    public Projectile SpawnProjectile(WeaponDefinition weapon, IArmed shooter, Vector2 from, float angle)
+    public Projectile SpawnProjectile(WeaponDefinition weapon, IArmed shooter, Vector2 from,
+        float angle, ModelTool part = null)
     {
-        var direction = Heading.Forward(angle);
+        var pool = _gm.System<ProjectileSystem>();
 
-        var projectile = new Projectile
+        if (pool == null)
         {
-            GlobalPosition = from + direction * weapon.ProjectileRadiusPx * 2f,
-            Velocity = direction * weapon.SpeedPx,
-            Damage = weapon.Damage,
-            Radius = weapon.ProjectileRadiusPx,
-            Life = weapon.Lifetime,
-            SourceId = shooter.EntityId,
-            ToolId = weapon.Id,
-            TargetSide = shooter.Faction.Opposite(),
-            Tint = weapon.ProjectileColor,
-            SplashRadius = weapon.SplashRadiusPx,
-            SplashDamage = weapon.SplashDamage,
-            SplashFriendlyFire = weapon.SplashFriendlyFire,
-        };
+            GD.PushError("[Spawner] снаряд не выдан: в сессии нет ProjectileSystem");
+            return null;
+        }
 
-        _gm.Playground.Add(WorldLayer.Projectiles, projectile);
+        var direction = Heading.Forward(angle);
+        var declared = part != null && Alive.Is(part) ? part.Projectile : null;
+
+        var projectile = pool.Take(declared?.Effect);
+
+        projectile.GlobalPosition = from + direction * weapon.ProjectileRadiusPx * 2f;
+
+        // Угол назначается один раз, а не каждый кадр: полёт прямолинеен, и повернуть
+        // рисунок по вектору скорости достаточно при выдаче
+        projectile.Rotation = angle;
+
+        projectile.Velocity = direction * weapon.SpeedPx;
+        projectile.Damage = weapon.Damage;
+        projectile.Radius = weapon.ProjectileRadiusPx;
+        projectile.Life = weapon.Lifetime;
+        projectile.SourceId = shooter.EntityId;
+        projectile.ToolId = weapon.Id;
+        projectile.TargetSide = shooter.Faction.Opposite();
+        projectile.Tint = weapon.ProjectileColor;
+        projectile.SplashRadius = weapon.SplashRadiusPx;
+        projectile.SplashDamage = weapon.SplashDamage;
+        projectile.SplashFriendlyFire = weapon.SplashFriendlyFire;
+        projectile.Resize(declared?.Size ?? 1f);
+
         _gm.Index.Add(projectile);
 
         return projectile;

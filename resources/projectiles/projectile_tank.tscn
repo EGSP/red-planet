@@ -1,0 +1,32 @@
+[gd_scene format=3 uid="uid://2y3x6k4op1tw"]
+
+[ext_resource type="Script" uid="uid://bi4a2uevalpqi" path="res://scripts/models/ProjectileModel.cs" id="1_model"]
+[ext_resource type="Texture2D" uid="uid://cacewcd684u7x" path="res://assets/textures/projectiles/P_arrow_#5318.png" id="2_arrow"]
+[ext_resource type="Shader" uid="uid://i1rili6y0yw8" path="res://resources/shaders/projectile.gdshader" id="3_shader"]
+[ext_resource type="Texture2D" uid="uid://b335txkbwffko" path="res://assets/textures/projectiles/P_glow_09.png" id="4_2pdeq"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tank"]
+shader = ExtResource("3_shader")
+shader_parameter/tint = Color(0.5285825, 0.3471084, 0, 1)
+shader_parameter/energy = 1.6
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_2pdeq"]
+shader = ExtResource("3_shader")
+shader_parameter/tint = Color(0.9999997, 0.87146455, 0.5057674, 1)
+shader_parameter/energy = 0.5000000074506
+
+[node name="ProjectileTank" type="Node2D" unique_id=786240916 node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Body" type="Sprite2D" parent="." unique_id=1414801777]
+material = SubResource("ShaderMaterial_tank")
+position = Vector2(-2.9999995, 0)
+scale = Vector2(0.144375, 0.125)
+texture = ExtResource("2_arrow")
+
+[node name="Glow" type="Sprite2D" parent="." unique_id=623816941]
+material = SubResource("ShaderMaterial_2pdeq")
+position = Vector2(8.999999, 0)
+scale = Vector2(0.09375, 0.062499996)
+texture = ExtResource("4_2pdeq")

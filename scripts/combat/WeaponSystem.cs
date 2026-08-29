@@ -224,7 +224,7 @@ public partial class WeaponSystem : GameSystem
         float angle = Heading.AngleTo(muzzle, to)
                       + _rng.RandfRange(-weapon.Spread, weapon.Spread);
 
-        GM.Spawn.SpawnProjectile(weapon, armed, muzzle, angle);
+        GM.Spawn.SpawnProjectile(weapon, armed, muzzle, angle, mount.Part);
 
         // Факт выстрела публикуется отдельно от снаряда: на него откликаются показ и звук,
         // и отклик этот не должен зависеть от того, каким снарядом стреляли

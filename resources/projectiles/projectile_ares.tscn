@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://8amhrib74s7s"]
+
+[ext_resource type="Script" uid="uid://bi4a2uevalpqi" path="res://scripts/models/ProjectileModel.cs" id="1_model"]
+[ext_resource type="Texture2D" uid="uid://bytvwfj6oflih" path="res://assets/textures/projectiles/P_arrow.png" id="2_arrow"]
+[ext_resource type="Shader" uid="uid://i1rili6y0yw8" path="res://resources/shaders/projectile.gdshader" id="3_shader"]
+[ext_resource type="Texture2D" uid="uid://b335txkbwffko" path="res://assets/textures/projectiles/P_glow_09.png" id="4_ccqui"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ares"]
+shader = ExtResource("3_shader")
+shader_parameter/tint = Color(0.20999998, 0.26266658, 1, 1)
+shader_parameter/energy = 1.9
+
+[node name="ProjectileAres" type="Node2D" unique_id=1164479063 node_paths=PackedStringArray("Body")]
+script = ExtResource("1_model")
+Body = NodePath("Body")
+
+[node name="Body" type="Sprite2D" parent="." unique_id=1338790579]
+material = SubResource("ShaderMaterial_ares")
+position = Vector2(-24, 0)
+scale = Vector2(0.47204542, 0.60202897)
+texture = ExtResource("2_arrow")
+
+[node name="Glow" type="Sprite2D" parent="." unique_id=1617122961]
+material = SubResource("ShaderMaterial_ares")
+position = Vector2(5.999999, 0)
+scale = Vector2(0.34206194, 0.14965211)
+texture = ExtResource("4_ccqui")

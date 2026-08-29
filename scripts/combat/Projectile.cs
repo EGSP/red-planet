@@ -10,6 +10,15 @@ using Godot;
 ///
 /// Попадание ищется по отрезку за кадр, а не по конечной точке: на скорости
 /// пятнадцати пикселей за кадр проскочить цель насквозь несложно.
+///
+/// УЗЕЛ ПЕРЕЖИВАЕТ СВОЙ ВЫСТРЕЛ. Снарядов за бой тысячи, живут они доли секунды, и рождение
+/// узла с подвешенной к нему сценой изображения на каждый выстрел означало бы перестройку
+/// дерева десятки раз в секунду. Поэтому снаряд не освобождается, а возвращается в набор
+/// готовых экземпляров (<see cref="ProjectileSystem"/>): гаснет, выходит из индекса
+/// и ждёт следующего выстрела, оставаясь ребёнком своего слоя. Отсюда два правила:
+/// выбытие объявляется признаком <see cref="Spent"/>, а не <see cref="Entity.Retire"/>,
+/// и всякое поле снаряда обязано назначаться при выдаче — прошлый выстрел мог оставить
+/// в нём своё значение.
 /// </summary>
 public partial class Projectile : Entity
 {
@@ -47,7 +56,25 @@ public partial class Projectile : Entity
     /// <summary>Задевает ли взрыв своих.</summary>
     public bool SplashFriendlyFire;
 
+    /// <summary>
+    /// Цвет ЗАПАСНОЙ отрисовки — той, что действует у ствола без объявленной сцены снаряда.
+    /// Снаряд с моделью цветом справочника не красится: цвета принадлежат её спрайтам,
+    /// как и у корпусов, — см. <see cref="ProjectileModel"/>.
+    /// </summary>
     public Color Tint = new(1f, 0.9f, 0.4f);
+
+    /// <summary>
+    /// Снаряд отлетал своё: попал, вышел за срок либо был снят иначе. Признак читает
+    /// <see cref="ProjectileSystem"/> и возвращает узел в набор. Сам снаряд себя не убирает
+    /// именно потому, что узел его переживает — см. заголовок класса.
+    /// </summary>
+    public bool Spent { get; private set; }
+
+    /// <summary>Изображение снаряда. Null — модели у этого ствола нет, идёт запасная отрисовка.</summary>
+    public ProjectileModel Model { get; private set; }
+
+    /// <summary>Набор, из которого выдан узел. Ему же он и возвращается.</summary>
+    internal ProjectilePool Home;
 
     /// <summary>
     /// Место под кандидатов на попадание. Одно на все снаряды: полёт считается в один поток,
@@ -55,14 +82,87 @@ public partial class Projectile : Entity
     /// </summary>
     private static readonly System.Collections.Generic.List<IDamageable> _candidates = new();
 
+    /// <summary>
+    /// Перерисовка нужна только запасной отрисовке: та рисует хвост от вектора скорости
+    /// и потому обязана повторяться каждый кадр. Снаряд с моделью не рисует ничего сам,
+    /// и шаг у него снят вовсе — см. <see cref="Wake"/>.
+    /// </summary>
     public override void _Process(double delta) => QueueRedraw();
+
+    /// <summary>
+    /// Подвесить изображение. Зовётся один раз, при создании узла набором: сцена снаряда
+    /// принадлежит стволу, а набор заведён на каждую сцену свой.
+    /// </summary>
+    internal void Attach(ProjectileModel model)
+    {
+        Model = model;
+        AddChild(model);
+    }
+
+    /// <summary>
+    /// Выдать снаряд из набора. Поля выстрела назначает <see cref="Spawner"/> сразу после,
+    /// поэтому здесь снимается только то, что принадлежит самому узлу.
+    /// </summary>
+    internal void Wake()
+    {
+        Revive();
+        Spent = false;
+        Visible = true;
+        Model?.Show(true);
+
+        // Шаг нужен одной лишь запасной отрисовке: снаряд с моделью каждый кадр
+        // не перерисовывается вовсе, и это главная выгода перехода на сцены
+        SetProcess(Model == null);
+        Model?.StartTrail();
+    }
+
+    /// <summary>
+    /// Убрать снаряд из игры, не освобождая узла: гаснет показ, снимается шаг, объявляется
+    /// выбытие. След при этом только перестаёт пополняться — уже выпущенные частицы
+    /// догорают, и потому возврат в набор откладывается (см. <see cref="ProjectileModel.Linger"/>).
+    /// </summary>
+    internal void Park()
+    {
+        Drop();
+        Spent = true;
+        SetProcess(false);
+
+        if (Model == null)
+        {
+            Visible = false;
+            return;
+        }
+
+        // Узел остаётся видимым, гаснет один лишь рисунок: невидимость в Godot наследуется
+        // потомками, и погашенный целиком снаряд унёс бы с собой догорающий след.
+        // Сам узел гасит набор — см. <see cref="Sleep"/>
+        Model.Show(false);
+        Model.StopTrail();
+    }
+
+    /// <summary>
+    /// Уйти в набор совсем: след догорел, и держать узел видимым больше незачем. Зовёт
+    /// <see cref="ProjectileSystem"/> по истечении срока догорания.
+    /// </summary>
+    internal void Sleep() => Visible = false;
+
+    /// <summary>
+    /// Соразмерность рисунка. Множитель принадлежит объявлению у ствола, а набор заведён
+    /// на сцену, и два ствола с одной сценой вправе показывать её разной величины —
+    /// поэтому размер назначается при выдаче, а не при создании узла.
+    /// </summary>
+    internal void Resize(float size)
+    {
+        if (Model != null && Alive.Is(Model))
+            Model.Scale = Vector2.One * Mathf.Max(size, 0.01f);
+    }
 
     public void Step(double dt)
     {
         Life -= (float)dt;
         if (Life <= 0f)
         {
-            Retire();
+            Spent = true;
             return;
         }
 
@@ -100,7 +200,7 @@ public partial class Projectile : Entity
                 DirectId = hit.EntityId,
             });
 
-        Retire();
+        Spent = true;
     }
 
     /// <summary>
@@ -153,8 +253,15 @@ public partial class Projectile : Entity
 
 
 
+    /// <summary>
+    /// ЗАПАСНАЯ отрисовка — для ствола, у которого сцены снаряда ещё не нарисовали.
+    /// Снаряд с моделью сюда не заходит: шаг у него снят, и перерисовки не случается.
+    /// </summary>
     public override void _Draw()
     {
+        if (Model != null)
+            return;
+
         ShapeDraw.Circle(this, Vector2.Zero, Radius, ShapeStyle.Solid(Tint));
 
         // Короткий хвост назад по движению — очередь читается как очередь.

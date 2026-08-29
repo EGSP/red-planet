@@ -2,7 +2,7 @@
 
 [ext_resource type="Shader" uid="uid://yqc642yea0tk" path="res://resources/shaders/unit_body.gdshader" id="1_shader"]
 [ext_resource type="Texture2D" uid="uid://dmphfr6hpksg" path="res://assets/textures/metal_structure_04_diffuse.png" id="2_ydkie"]
-[ext_resource type="Texture2D" uid="uid://4i3qhi65d0y5" path="res://assets/textures/imperial_able_diffuse.png" id="3_ydkie"]
+[ext_resource type="Texture2D" uid="uid://xil1amrc11mh" path="res://assets/textures/P_noise_03-1.png" id="3_ydkie"]
 
 [resource]
 shader = ExtResource("1_shader")
@@ -11,13 +11,13 @@ shader_parameter/strength = 1.0
 shader_parameter/lift = 0.0
 shader_parameter/damage_tex = ExtResource("2_ydkie")
 shader_parameter/dissolve_tex = ExtResource("3_ydkie")
-shader_parameter/damage_scale = 1.145
-shader_parameter/dissolve_scale = 0.065
-shader_parameter/dissolve_contrast = 2.2710001078725
-shader_parameter/dissolve_brightness = 0.286000061085
-shader_parameter/health = 0.3310000157225
+shader_parameter/damage_scale = 2.95
+shader_parameter/dissolve_scale = 1.0
+shader_parameter/dissolve_contrast = 1.0
+shader_parameter/dissolve_brightness = 0.0
+shader_parameter/health = 0.5510000261725
 shader_parameter/damage_start = 0.7
 shader_parameter/damage_full = 0.0
-shader_parameter/damage_curve = 1.18000005279012
+shader_parameter/damage_curve = 1.0
 shader_parameter/edge_width = 0.034000001615
-shader_parameter/edge_color = Color(1, 0.6, 0.25, 1)
+shader_parameter/edge_color = Color(0.99999994, 0.91170114, 0.84866196, 1)

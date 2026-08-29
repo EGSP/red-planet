@@ -17,6 +17,7 @@
 [ext_resource type="Script" uid="uid://bs5pwbd0lbqxa" path="res://scripts/enemies/EnemyAiSystem.cs" id="12_enemyai"]
 [ext_resource type="Script" uid="uid://dotcigshtufxu" path="res://scripts/combat/WeaponSystem.cs" id="13_weapon"]
 [ext_resource type="Script" uid="uid://dhkbabtkukh50" path="res://scripts/combat/ProjectileSystem.cs" id="14_projectile"]
+[ext_resource type="PackedScene" path="res://resources/projectiles/projectile_default.tscn" id="14_projectile_default"]
 [ext_resource type="Script" uid="uid://dhy78rf5woxf3" path="res://scripts/combat/DamageSystem.cs" id="15_damage"]
 [ext_resource type="Script" path="res://scripts/combat/SplashSystem.cs" id="15_splash"]
 [ext_resource type="Resource" path="res://resources/tuning/combat.tres" id="15_combattuning"]
@@ -144,6 +145,7 @@ StepOrder = 70
 [node name="ProjectileSystem" type="Node" parent="Systems" unique_id=1335204124]
 script = ExtResource("14_projectile")
 StepOrder = 80
+DefaultModel = ExtResource("14_projectile_default")
 
 [node name="VisionSystem" type="Node" parent="Systems" unique_id=1799323356]
 script = ExtResource("41_vision")

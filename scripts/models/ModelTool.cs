@@ -67,6 +67,9 @@ public partial class ModelTool : Node2D
     private BeamVisual _beam;
     private bool _beamSought;
 
+    private ProjectileDeclaration _projectile;
+    private bool _projectileSought;
+
     /// <summary>
     /// Луч, объявленный внутри части. Null означает, что луча в модели нет и носитель
     /// покажет работу запасным отрезком.
@@ -82,21 +85,42 @@ public partial class ModelTool : Node2D
             if (!_beamSought)
             {
                 _beamSought = true;
-                _beam = Seek(this);
+                _beam = Seek<BeamVisual>(this);
             }
 
             return Alive.Is(_beam) ? _beam : null;
         }
     }
 
-    private static BeamVisual Seek(Node node)
+    /// <summary>
+    /// Объявление снаряда, лежащее внутри части. Null означает, что своего снаряда у ствола
+    /// нет и <see cref="ProjectileSystem"/> возьмёт общий.
+    ///
+    /// Ищется тем же однократным обходом, что и луч, и по той же причине: состав сцены
+    /// во время игры не меняется.
+    /// </summary>
+    public ProjectileDeclaration Projectile
+    {
+        get
+        {
+            if (!_projectileSought)
+            {
+                _projectileSought = true;
+                _projectile = Seek<ProjectileDeclaration>(this);
+            }
+
+            return Alive.Is(_projectile) ? _projectile : null;
+        }
+    }
+
+    private static T Seek<T>(Node node) where T : Node
     {
         foreach (var child in node.GetChildren())
         {
-            if (child is BeamVisual beam)
-                return beam;
+            if (child is T match)
+                return match;
 
-            if (Seek(child) is { } found)
+            if (Seek<T>(child) is { } found)
                 return found;
         }
 
