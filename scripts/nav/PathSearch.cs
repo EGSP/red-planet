@@ -57,6 +57,12 @@ public sealed class PathSearch
     /// <summary>Направлять ли оценку расстоянием по графу областей.</summary>
     private bool _guided;
 
+    /// <summary>
+    /// Последний поиск остановлен бюджетом узлов, а не исчерпанием очереди. Признак
+    /// различает две причины отказа: «в полосе пути нет» и «кончились узлы».
+    /// </summary>
+    private bool _exhausted;
+
     private int _run;
 
     /// <summary>Сколько узлов раскрыл последний поиск. Показывает панель отладки.</summary>
@@ -170,6 +176,12 @@ public sealed class PathSearch
             if (!restricted)
                 return false;
 
+            // Бюджет узлов исчерпан внутри полосы, то есть поиск не дошёл до её границ.
+            // Повтор по всему растру раскрыл бы те же узлы и остановился на том же пределе,
+            // удвоив расход самого дорогого случая. Отказ возвращаем сразу
+            if (_exhausted)
+                return false;
+
             _banded = false;
             Fallbacks++;
 
@@ -235,6 +247,7 @@ public sealed class PathSearch
 
     private bool Search(Vector2I start, Vector2I goal, float radiusPx, int maxNodes)
     {
+        _exhausted = false;
         _run++;
         _open.Clear();
 
@@ -271,7 +284,10 @@ public sealed class PathSearch
                 return true;
 
             if (LastExpanded > maxNodes)
+            {
+                _exhausted = true;
                 return false;
+            }
 
             int cx = at % NavGrid.Width;
             int cy = at / NavGrid.Width;

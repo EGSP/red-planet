@@ -50,7 +50,6 @@ public sealed class NavGrid : IClearanceField
     private readonly List<Obb> _pendingAdds = new();
     private readonly HashSet<int> _pendingBlocked = new();
     private readonly List<int> _componentThresholds = new();
-    private readonly object _exceptionLock = new();
 
     private NavSnapshot _active;
     private Task<NavSnapshot> _task;
@@ -79,8 +78,6 @@ public sealed class NavGrid : IClearanceField
     /// не появился бы до следующей постройки.
     /// </summary>
     private int _builtThresholds = -1;
-
-    private Exception _backgroundError;
 
     /// <summary>
     /// Ревизия эффективной карты для кеша путей: растёт при изменении препятствий
@@ -449,7 +446,6 @@ public sealed class NavGrid : IClearanceField
 
     public void Poll()
     {
-        ReportBackgroundError();
         Fit();
         EnsureStamps();
         SyncRequest();
@@ -535,8 +531,12 @@ public sealed class NavGrid : IClearanceField
 
         if (finished.IsFaulted)
         {
-            lock (_exceptionLock)
-                _backgroundError = finished.Exception?.GetBaseException();
+            // Разбор исключения делается здесь, а не отдельной проверкой в Poll: задание
+            // принимает главный поток, и хранить ошибку под блокировкой ради чтения тем же
+            // потоком незачем. Poll зовут из каждой проверки прямой видимости, поэтому
+            // любая работа на этом пути при отсутствии ошибки есть чистый накладной расход
+            GD.PushError("[NavGrid] фоновый пересчёт: " +
+                finished.Exception?.GetBaseException().Message);
 
             _buildingRevision = -1;
             return;
@@ -708,20 +708,6 @@ public sealed class NavGrid : IClearanceField
             return;
 
         _componentThresholds.Add(required);
-    }
-
-    private void ReportBackgroundError()
-    {
-        Exception error;
-
-        lock (_exceptionLock)
-        {
-            error = _backgroundError;
-            _backgroundError = null;
-        }
-
-        if (error != null)
-            GD.PushError($"[NavGrid] фоновый пересчёт: {error.Message}");
     }
 
     private bool IsBlocked(int index) =>
