@@ -62,7 +62,7 @@ public partial class ShadowRenderer : Node2D
     private ShaderMaterial _material;
     private GradientTexture1D _ramp;
 
-    /// <summary>Путь шейдера, который сейчас стоит на веществе. По нему видно смену подачи.</summary>
+    /// <summary>Путь шейдера, который сейчас стоит на материале. По нему видно смену подачи.</summary>
     private string _shaderPath;
 
     private Image _image;
@@ -74,8 +74,8 @@ public partial class ShadowRenderer : Node2D
 
     public override void _Ready()
     {
-        // Назначенное в сцене вещество берётся как есть. Иначе узел с атрибутом Tool
-        // создавал бы новое при каждой загрузке, а редактор сохранял бы его в сцену.
+        // Назначенный в сцене материал берётся как есть. Иначе узел с атрибутом Tool
+        // создавал бы новый при каждой загрузке, а редактор сохранял бы его в сцену.
         // Шейдер ставит Apply: он зависит от выбранной подачи и меняется по ходу правки
         if (Material is ShaderMaterial assigned)
         {
