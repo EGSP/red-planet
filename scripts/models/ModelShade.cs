@@ -86,14 +86,6 @@ public partial class ModelShade : Sprite2D
 	/// <summary>Мировой вектор отхода в местных единицах родителя. Ноль — отхода нет.</summary>
 	private Vector2 _shift;
 
-	/// <summary>
-	/// Слепок настроек, при которых слой собран. Отладочная панель правит поля ресурса
-	/// на ходу, поэтому расхождение слепка означает, что слой надо собрать заново. Сравнение
-	/// нескольких чисел обходится дешевле безусловной пересборки и позволяет видеть правку
-	/// сразу, не перезапуская партию.
-	/// </summary>
-	private (bool, float, float, float, Color)? _builtWith;
-
 	private static ShadingSettings Config => GraphicsSettings.Shade;
 
 	public override void _Ready()
@@ -107,34 +99,53 @@ public partial class ModelShade : Sprite2D
 
 	public override void _Process(double delta)
 	{
-		// В редакторе сцену правят прямо сейчас: и источник, и величины меняются на глазах,
-		// поэтому слой собирается заново каждый кадр
-		if (Engine.IsEditorHint())
+		// Узел живёт только в открытой сцене редактора, где и источник, и величины меняются
+		// на глазах, поэтому слой собирается заново каждый кадр. В игре узла нет вовсе:
+		// слой печётся в ModelBake и рисуется объектом отрисовки — см. ModelBaker
+		if (!Engine.IsEditorHint())
 		{
-			Rebuild();
+			SetProcess(false);
 			return;
 		}
 
-		if (_builtWith is not { } applied || !applied.Equals(Snapshot(Config)))
-			Rebuild();
-
-		// Отход задан в мировых осях и потому зависит от угла корпуса; изображение, цвет
-		// и масштаб от угла не зависят
-		if (_shift != Vector2.Zero)
-			Align();
+		Rebuild();
 	}
 
-	/// <summary>Величины настроек, влияющие на собранный слой.</summary>
-	private (bool, float, float, float, Color) Snapshot(ShadingSettings config) =>
-		(config.Enabled(Kind),
-			Density >= 0f ? Density : config.Opacity(Kind),
-			Blur >= 0f ? Blur : config.Blur(Kind),
-			Distance >= 0f ? Distance : config.Offset(Kind),
-			config.Shade);
+	/// <summary>
+	/// Изображение слоя: альфа источника, размытая по роли и радиусу. Общее для узла
+	/// в редакторе и для запекания, поэтому и живёт одним методом.
+	/// </summary>
+	public Texture2D Image(ShadingSettings config) => Source?.Texture == null
+		? null
+		: ModelShadeBaker.Bake(Source.Texture, Kind, Blur >= 0f ? Blur : config.Blur(Kind));
+
+	/// <summary>Цвет слоя: общий цвет тени с непрозрачностью этой роли.</summary>
+	public Color Tint(ShadingSettings config) => config.Shade with
+	{
+		A = Mathf.Clamp(Density >= 0f ? Density : config.Opacity(Kind), 0f, 1f),
+	};
 
 	/// <summary>
-	/// Собрать слой целиком: изображение, цвет, положение. Вызывается при вводе в дерево
-	/// и всякий раз, когда настройки разошлись со слепком.
+	/// Мировой вектор отхода, выраженный в единицах родителя. Величина берётся от меньшей
+	/// стороны текстуры и умножается на масштаб источника: отход задан долей рисунка,
+	/// а положение назначается в координатах родителя.
+	/// </summary>
+	public Vector2 Shift(ShadingSettings config)
+	{
+		float fraction = Distance >= 0f ? Distance : config.Offset(Kind);
+
+		if (fraction <= 0f || Source?.Texture == null)
+			return Vector2.Zero;
+
+		var size = Source.Texture.GetSize();
+		float side = Mathf.Min(size.X, size.Y) * Mathf.Abs(Source.Scale.X);
+
+		return Vector2.Right.Rotated(Mathf.DegToRad(config.LightAngleDegrees)) * side * fraction;
+	}
+
+	/// <summary>
+	/// Собрать слой целиком: изображение, цвет, положение. Зовётся при вводе в дерево
+	/// и каждый кадр правки сцены в редакторе.
 	/// </summary>
 	private void Rebuild()
 	{
@@ -142,12 +153,10 @@ public partial class ModelShade : Sprite2D
 		{
 			Texture = null;
 			Visible = false;
-			_builtWith = null;
 			return;
 		}
 
 		var config = Config;
-		_builtWith = Snapshot(config);
 
 		if (!config.Enabled(Kind))
 		{
@@ -157,16 +166,12 @@ public partial class ModelShade : Sprite2D
 
 		Visible = true;
 
-		float blur = Blur >= 0f ? Blur : config.Blur(Kind);
-		var baked = ModelShadeBaker.Bake(Source.Texture, Kind, blur);
+		var baked = Image(config);
 
 		if (Texture != baked)
 			Texture = baked;
 
-		SelfModulate = config.Shade with
-		{
-			A = Mathf.Clamp(Density >= 0f ? Density : config.Opacity(Kind), 0f, 1f),
-		};
+		SelfModulate = Tint(config);
 
 		// Изображение выведено из текстуры источника, поэтому и накладывается в его системе
 		// координат: любое расхождение поворота или масштаба развело бы тень с силуэтом
@@ -178,28 +183,9 @@ public partial class ModelShade : Sprite2D
 		FlipH = Source.FlipH;
 		FlipV = Source.FlipV;
 
-		_shift = ShiftOf(config);
+		_shift = Shift(config);
 		_alignedTo = float.NaN;
 		Align();
-	}
-
-	/// <summary>
-	/// Мировой вектор отхода, выраженный в единицах родителя. Величина берётся от меньшей
-	/// стороны текстуры и умножается на масштаб источника: отход задан долей рисунка,
-	/// а положение назначается в координатах родителя.
-	/// </summary>
-	private Vector2 ShiftOf(ShadingSettings config)
-	{
-		float fraction = Distance >= 0f ? Distance : config.Offset(Kind);
-
-		if (fraction <= 0f)
-			return Vector2.Zero;
-
-		var size = Source.Texture.GetSize();
-		float side = Mathf.Min(size.X, size.Y) * Mathf.Abs(Source.Scale.X);
-
-		return Vector2.Right.Rotated(Mathf.DegToRad(config.LightAngleDegrees))
-			   * side * fraction;
 	}
 
 	/// <summary>

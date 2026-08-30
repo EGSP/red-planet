@@ -144,7 +144,7 @@ public partial class Building : Entity, IFacing, IDamageable, IEconomyActor, IVi
     /// </summary>
     private void AttachModel()
     {
-        Model = ModelLibrary.Instantiate(Definition?.Model);
+        Model = UnitModel.Realize(ModelBake.For(Definition));
 
         if (Model == null)
             return;
@@ -155,7 +155,7 @@ public partial class Building : Entity, IFacing, IDamageable, IEconomyActor, IVi
         // Слой пометок добавляется ПОСЛЕ модели: полоса прочности, прогресс завода и
         // стрелки выездов обязаны лежать поверх корпуса, а собственные команды узла
         // выполняются до потомков — см. ModelLayer
-        _marks = ModelLayer.Attach(this, PaintMarks, "Marks");
+        _marks = ModelLayer.Attach(this, PaintMarks, "Marks", Playground.MarksZ);
 
         SyncModel();
     }

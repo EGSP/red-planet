@@ -418,62 +418,62 @@ public partial class DebugPanel : ToolPanel
             "Размытый силуэт, заметно отнесённый по направлению света и нарисованный " +
             "под корпусом. Отделяет сущность от поверхности сильнее контактной тени " +
             "и потому нужен там, где корпус поднят над грунтом.",
-            () => Ao().CastEnabled, on => Ao().CastEnabled = on);
+            () => Ao().CastEnabled, on => Ao(s => s.CastEnabled = on));
 
         Check(box, "контактная тень",
             "Узкая полоса под самым корпусом. Без неё изображение лежит с грунтом в одной " +
             "плоскости и читается как наклейка.",
-            () => Ao().ContactEnabled, on => Ao().ContactEnabled = on);
+            () => Ao().ContactEnabled, on => Ao(s => s.ContactEnabled = on));
 
         Check(box, "затемнение по кайме",
             "Полоса потемнения вдоль края внутри силуэта, нарисованная поверх корпуса. " +
             "Упрощённая имитация ambient occlusion: настоящее вычисление потребовало бы " +
             "данных о рельефе, которых у плоского изображения нет. Даёт объём самому корпусу.",
-            () => Ao().RimEnabled, on => Ao().RimEnabled = on);
+            () => Ao().RimEnabled, on => Ao(s => s.RimEnabled = on));
 
         Colour(box, "цвет затенения",
             "Общий цвет всех слоёв. Чистый чёрный на охристом грунте выглядит провалом, " +
             "поэтому по умолчанию взят слегка холодный тёмный тон.",
-            () => Ao().Shade, value => Ao().Shade = value);
+            () => Ao().Shade, value => Ao(s => s.Shade = value));
 
         Slide(box, "направление света", 0f, 360f, 1f,
             "Куда уходят тени, градусов от оси вправо по часовой стрелке. Направление " +
             "мировое: у повёрнутой сущности тень идёт в ту же сторону, что и у неповёрнутой.",
-            () => Ao().LightAngleDegrees, value => Ao().LightAngleDegrees = value);
+            () => Ao().LightAngleDegrees, value => Ao(s => s.LightAngleDegrees = value));
 
         Slide(box, "плотность отброшенной тени", 0f, 1f, 0.01f,
             "Непрозрачность тени, отброшенной корпусом на грунт.",
-            () => Ao().CastOpacity, value => Ao().CastOpacity = value);
+            () => Ao().CastOpacity, value => Ao(s => s.CastOpacity = value));
 
         Slide(box, "размытие отброшенной тени", 0f, 0.3f, 0.005f,
             "Радиус размытия, доля меньшей стороны текстуры.",
-            () => Ao().CastBlur, value => Ao().CastBlur = value);
+            () => Ao().CastBlur, value => Ao(s => s.CastBlur = value));
 
         Slide(box, "отход отброшенной тени", 0f, 0.5f, 0.005f,
             "Насколько тень отнесена от корпуса, доля меньшей стороны текстуры.",
-            () => Ao().CastOffset, value => Ao().CastOffset = value);
+            () => Ao().CastOffset, value => Ao(s => s.CastOffset = value));
 
         Slide(box, "плотность контактной тени", 0f, 1f, 0.01f,
             "Непрозрачность тени вплотную к корпусу.",
-            () => Ao().ContactOpacity, value => Ao().ContactOpacity = value);
+            () => Ao().ContactOpacity, value => Ao(s => s.ContactOpacity = value));
 
         Slide(box, "размытие контактной тени", 0f, 0.3f, 0.005f,
             "Радиус размытия, доля меньшей стороны текстуры. Доля, а не пиксели: рисунки " +
             "имеют разное разрешение, и постоянная в пикселях дала бы у крупного изображения " +
             "вдвое более узкую тень.",
-            () => Ao().ContactBlur, value => Ao().ContactBlur = value);
+            () => Ao().ContactBlur, value => Ao(s => s.ContactBlur = value));
 
         Slide(box, "отход контактной тени", 0f, 0.3f, 0.005f,
             "Насколько тень смещена от корпуса, доля меньшей стороны текстуры.",
-            () => Ao().ContactOffset, value => Ao().ContactOffset = value);
+            () => Ao().ContactOffset, value => Ao(s => s.ContactOffset = value));
 
         Slide(box, "плотность каймы", 0f, 1f, 0.01f,
             "Непрозрачность затемнения на самом краю силуэта.",
-            () => Ao().RimOpacity, value => Ao().RimOpacity = value);
+            () => Ao().RimOpacity, value => Ao(s => s.RimOpacity = value));
 
         Slide(box, "ширина каймы", 0f, 0.3f, 0.005f,
             "Ширина полосы затемнения внутрь от края, доля меньшей стороны текстуры.",
-            () => Ao().RimBlur, value => Ao().RimBlur = value);
+            () => Ao().RimBlur, value => Ao(s => s.RimBlur = value));
     }
 
     /// <summary>Вид каркаса строящейся постройки.</summary>
@@ -1129,6 +1129,20 @@ public partial class DebugPanel : ToolPanel
     /// </summary>
     /// <summary>Настройки затенения. Правки идут прямо в ресурс подсистемы.</summary>
     private static ShadingSettings Ao() => GraphicsSettings.Shade;
+
+    /// <summary>
+    /// Правка настроек затенения. Отдельным методом от чтения потому, что слои затенения
+    /// запечены из альфы спрайта: изменённая величина сама по себе картинку не меняет,
+    /// и модели надо испечь заново — см. <see cref="UnitModel.Rebake"/>.
+    ///
+    /// Выпечка идёт один раз на вид, а не на машину, поэтому вызов уместен прямо на ходу
+    /// ползунка.
+    /// </summary>
+    private static void Ao(System.Action<ShadingSettings> change)
+    {
+        change(GraphicsSettings.Shade);
+        UnitModel.Rebake();
+    }
 
     /// <summary>Настройки вида стройки.</summary>
     private static ConstructionSettings Site() => GraphicsSettings.Building;

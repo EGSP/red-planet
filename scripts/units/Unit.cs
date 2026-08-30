@@ -291,7 +291,7 @@ public partial class Unit : Entity, IFacing, IDamageable, IArmed, IEconomyActor,
     /// </summary>
     private void AttachModel()
     {
-        _model = ModelLibrary.Instantiate(Definition?.Model);
+        _model = UnitModel.Realize(ModelBake.For(Definition));
 
         if (_model == null)
             return;
@@ -300,7 +300,7 @@ public partial class Unit : Entity, IFacing, IDamageable, IArmed, IEconomyActor,
         _model.ApplyTeamColor(TeamPalette.Of(Faction));
 
         // Слой добавляется ПОСЛЕ модели: порядок отрисовки задан порядком в дереве
-        _marks = ModelLayer.Attach(this, PaintMarks, "Marks");
+        _marks = ModelLayer.Attach(this, PaintMarks, "Marks", Playground.MarksZ);
     }
 
     /// <summary>

@@ -104,6 +104,20 @@ public partial class ShadingSettings : Resource
     };
 
     /// <summary>
+    /// Слепок значений, влияющих на запечённые слои затенения. Расхождение слепка означает,
+    /// что отладочная панель изменила настройки на ходу и тени пора печь заново —
+    /// см. <see cref="ModelBake"/>.
+    ///
+    /// Числом, а не перечнем полей: сверка идёт у каждой модели, а перечислять четырнадцать
+    /// величин ради сравнения значило бы повторять здесь список настроек второй раз.
+    /// </summary>
+    public int Stamp() => System.HashCode.Combine(
+        System.HashCode.Combine(CastEnabled, ContactEnabled, RimEnabled, CastOpacity,
+            ContactOpacity, RimOpacity, CastBlur, ContactBlur),
+        System.HashCode.Combine(RimBlur, CastOffset, ContactOffset, Shade,
+            LightAngleDegrees));
+
+    /// <summary>
     /// Общий отход слоя этой роли от корпуса. У затемнения по кайме отхода нет по устройству:
     /// оно принадлежит самому корпусу, а не поверхности под ним.
     /// </summary>

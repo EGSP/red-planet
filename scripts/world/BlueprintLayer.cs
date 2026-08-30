@@ -46,6 +46,10 @@ public partial class BlueprintLayer : Node2D
             Name = slot == Slot.Hull ? "Hull" : "Marks",
             _owner = owner,
             _slot = slot,
+
+            // Пометки обязаны лежать выше корпуса, а корпус разложен по уровням ради
+            // объединения вызовов отрисовки: одного положения в дереве уже недостаточно
+            ZIndex = slot == Slot.Hull ? 0 : Playground.MarksZ,
         };
 
         owner.AddChild(layer);
@@ -66,7 +70,7 @@ public partial class BlueprintLayer : Node2D
         if (_slot != Slot.Hull || def is not { HasModel: true })
             return;
 
-        var model = ModelLibrary.Instantiate(def.Model);
+        var model = UnitModel.Realize(ModelBake.For(def));
 
         if (model == null)
             return;

@@ -6,7 +6,6 @@
 
 [resource]
 shader = ExtResource("1_shader")
-shader_parameter/team_color = Color(1, 1, 1, 1)
 shader_parameter/strength = 1.0
 shader_parameter/lift = 0.0
 shader_parameter/damage_tex = ExtResource("2_ydkie")
@@ -15,7 +14,6 @@ shader_parameter/damage_scale = 2.95
 shader_parameter/dissolve_scale = 1.0
 shader_parameter/dissolve_contrast = 1.0
 shader_parameter/dissolve_brightness = 0.0
-shader_parameter/health = 0.5510000261725
 shader_parameter/damage_start = 0.7
 shader_parameter/damage_full = 0.0
 shader_parameter/damage_curve = 1.0

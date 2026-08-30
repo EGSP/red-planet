@@ -152,7 +152,7 @@ public partial class ContentEditorPreview : Control
             var model = _models[id];
 
             if (Alive.Is(model) && wanted.TryGetValue(id, out string path)
-                                && model.SceneFilePath == path)
+                                && model.Source == path)
                 continue;
 
             if (Alive.Is(model))
@@ -166,7 +166,11 @@ public partial class ContentEditorPreview : Control
             if (_models.ContainsKey(id))
                 continue;
 
-            var model = ModelLibrary.Instantiate(path);
+            var model = UnitModel.Realize(ModelBake.Of(path));
+
+            // Вне мира уровни раскладки не значат ничего: холст общий с интерфейсом,
+            // и картинки машины легли бы поверх окружающих панелей
+            model?.Flatten();
 
             if (model == null)
                 continue;

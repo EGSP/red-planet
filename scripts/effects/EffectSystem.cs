@@ -144,25 +144,6 @@ public partial class EffectSystem : GameSystem
 
     private readonly Dictionary<object, Blow[]> _impacts = new(ByReference.Instance);
 
-    /// <summary>Один объявленный в модели взрыв, снятый в системе координат носителя.</summary>
-    private readonly struct Wreck
-    {
-        public readonly PackedScene Scene;
-        public readonly Vector2 Offset;
-        public readonly float Angle;
-        public readonly float Size;
-        public readonly float Delay;
-
-        public Wreck(PackedScene scene, Vector2 offset, float angle, float size, float delay)
-        {
-            Scene = scene;
-            Offset = offset;
-            Angle = angle;
-            Size = size;
-            Delay = delay;
-        }
-    }
-
     /// <summary>
     /// Всё, что нужно знать о гибели сущности, снятое заранее.
     ///
@@ -178,7 +159,7 @@ public partial class EffectSystem : GameSystem
         public int Id;
         public Node2D Carrier;
         public Transform2D Snapshot;
-        public Wreck[] Items;
+        public ModelBake.Wreck[] Items;
     }
 
     /// <summary>Взрыв, ждущий своей задержки. Место и поворот уже сосчитаны.</summary>
@@ -452,16 +433,12 @@ public partial class EffectSystem : GameSystem
             foreach (var burst in bursts)
                 (found ??= new List<Flash>()).Add(new Flash(mount.Weapon.Id, burst));
 
-            // Вспышка попадания объявлена внутри той же части — см. ImpactEffect.
-            // Собирается ссылкой: узел останется в модели, а играть эффект придётся
-            // на цели, до которой снаряду ещё лететь
-            var declared = new List<ImpactEffect>();
-            Collect(mount.Part, declared);
-
-            foreach (var item in declared)
-                if (item.Effect != null)
-                    (blows ??= new List<Blow>())
-                        .Add(new Blow(mount.Weapon.Id, item.Effect, item.Size));
+            // Вспышка попадания объявлена внутри той же части и снята запеканием —
+            // см. ImpactEffect. Берётся ссылкой на сцену: играть эффект придётся на цели,
+            // до которой снаряду ещё лететь
+            foreach (var item in mount.Part.Impacts)
+                (blows ??= new List<Blow>())
+                    .Add(new Blow(mount.Weapon.Id, item.Effect, item.Size));
         }
 
         if (found != null)
@@ -600,22 +577,14 @@ public partial class EffectSystem : GameSystem
         if (target is not Node2D carrier || !Alive.Is(carrier))
             return;
 
-        var found = new List<DeathEffect>();
-        Collect(carrier, found);
+        var found = Model(carrier)?.Bake?.Deaths;
 
-        if (found.Count == 0)
+        if (found == null || found.Length == 0)
             return;
 
-        var items = new Wreck[found.Count];
-        var inverse = carrier.GlobalTransform.AffineInverse();
-
-        for (int i = 0; i < found.Count; i++)
-        {
-            var local = inverse * found[i].GlobalTransform;
-
-            items[i] = new Wreck(found[i].Effect, local.Origin, local.Rotation,
-                found[i].Size, found[i].Delay);
-        }
+        // Взрывы берутся запечёнными как есть: место и поворот заданы в осях корпуса самим
+        // запеканием, и своего описания того же самого системе эффектов заводить незачем
+        var items = found;
 
         var burial = new Burial
         {
@@ -700,7 +669,7 @@ public partial class EffectSystem : GameSystem
             {
                 // Узел без своей сцены означает «взорваться здесь общим взрывом»:
                 // место и размер объявлены, а вида взрыва у этого юнита своего нет
-                var scene = item.Scene ?? Explosion;
+                var scene = item.Effect ?? Explosion;
                 var pos = burial.Snapshot * item.Offset;
                 float angle = burial.Snapshot.Rotation + item.Angle;
 
@@ -832,6 +801,19 @@ public partial class EffectSystem : GameSystem
         pool.Next = (pool.Next + 1) % pool.Items.Length;
 
         return Alive.Is(next) ? next : null;
+    }
+
+    /// <summary>
+    /// Модель сущности. Ищется однажды, при входе в мир: у носителя она одна и лежит
+    /// прямо под ним — см. <see cref="UnitModel"/>.
+    /// </summary>
+    private static UnitModel Model(Node carrier)
+    {
+        foreach (var child in carrier.GetChildren())
+            if (child is UnitModel model)
+                return model;
+
+        return null;
     }
 
     private static void Collect<T>(Node node, List<T> found) where T : Node

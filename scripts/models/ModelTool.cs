@@ -61,22 +61,56 @@ public partial class ModelTool : Node2D
     /// <summary>Показывать ли подсказки в редакторе. На игру не влияет.</summary>
     [Export] public bool ShowGizmo { get; set; } = true;
 
+    /// <summary>
+    /// Запечённые данные части: точка вылета, объявленные вспышка попадания и снаряд.
+    /// Раздаются при подъёме экземпляра — см. <see cref="UnitModel.Realize"/>. В открытой
+    /// сцене редактора их нет, и место вылета берётся из узла <see cref="Muzzle"/>.
+    /// </summary>
+    public ModelBake.Tool Baked { get; private set; }
+
+    /// <summary>
+    /// Принять запечённые данные. Зовётся один раз, при подъёме экземпляра. Роль,
+    /// идентификатор и признак доворота здесь не назначаются: копирование образца
+    /// переносит их само, и повторное назначение было бы вторым источником тех же величин.
+    /// </summary>
+    public void Adopt(ModelBake.Tool baked) => Baked = baked;
+
+    /// <summary>
+    /// Точка вылета в осях самой части. В игре она есть число из запечённой модели;
+    /// узел <see cref="Muzzle"/> существует только в открытой сцене редактора, где
+    /// художник двигает его мышью.
+    /// </summary>
+    public Vector2 MuzzleLocal => Baked?.Muzzle
+                                  ?? (Muzzle != null ? ToLocal(Muzzle.GlobalPosition)
+                                      : Vector2.Zero);
+
     /// <summary>Точка вылета в мировых координатах — с учётом поворота корпуса и наведения.</summary>
-    public Vector2 MuzzleGlobal => Muzzle != null ? Muzzle.GlobalPosition : GlobalPosition;
+    public Vector2 MuzzleGlobal => GlobalTransform * MuzzleLocal;
+
+    /// <summary>
+    /// Объявленные вспышки попадания. Пусто — попадание показывается общей вспышкой
+    /// из <see cref="EffectSystem"/>.
+    /// </summary>
+    public ModelBake.Declaration[] Impacts =>
+        Baked?.Impacts ?? System.Array.Empty<ModelBake.Declaration>();
+
+    /// <summary>
+    /// Объявленный снаряд. Null означает, что своего снаряда у ствола нет
+    /// и <see cref="ProjectileSystem"/> возьмёт общий.
+    /// </summary>
+    public ModelBake.Declaration Projectile => Baked?.Projectile;
 
     private BeamVisual _beam;
     private bool _beamSought;
-
-    private ProjectileDeclaration _projectile;
-    private bool _projectileSought;
 
     /// <summary>
     /// Луч, объявленный внутри части. Null означает, что луча в модели нет и носитель
     /// покажет работу запасным отрезком.
     ///
-    /// Ищется один раз при первом обращении: состав сцены во время игры не меняется.
-    /// Подписывать луч не нужно — он принадлежит той части, внутри которой лежит, ровно
-    /// как вспышка выстрела принадлежит своему стволу.
+    /// ЛУЧ ОСТАЛСЯ УЗЛОМ, в отличие от точки вылета и объявлений эффектов: он рисует себя
+    /// сам и ведёт собственное затухание, то есть в игре работает, а не хранит значение.
+    ///
+    /// Ищется один раз при первом обращении: состав узлов после запекания не меняется.
     /// </summary>
     public BeamVisual Beam
     {
@@ -89,27 +123,6 @@ public partial class ModelTool : Node2D
             }
 
             return Alive.Is(_beam) ? _beam : null;
-        }
-    }
-
-    /// <summary>
-    /// Объявление снаряда, лежащее внутри части. Null означает, что своего снаряда у ствола
-    /// нет и <see cref="ProjectileSystem"/> возьмёт общий.
-    ///
-    /// Ищется тем же однократным обходом, что и луч, и по той же причине: состав сцены
-    /// во время игры не меняется.
-    /// </summary>
-    public ProjectileDeclaration Projectile
-    {
-        get
-        {
-            if (!_projectileSought)
-            {
-                _projectileSought = true;
-                _projectile = Seek<ProjectileDeclaration>(this);
-            }
-
-            return Alive.Is(_projectile) ? _projectile : null;
         }
     }
 
@@ -176,10 +189,7 @@ public partial class ModelTool : Node2D
             string.IsNullOrEmpty(ToolId) ? $"<{Role}>" : ToolId,
             HorizontalAlignment.Left, -1, 10, color with { A = 0.85f });
 
-        if (Muzzle == null)
-            return;
-
-        var muzzle = canvas.ToLocal(Muzzle.GlobalPosition);
+        var muzzle = canvas.ToLocal(MuzzleGlobal);
 
         // Вынос точки вылета от оси вращения: по этому отрезку видно, насколько выстрел
         // сместится в сторону при довороте
@@ -189,7 +199,7 @@ public partial class ModelTool : Node2D
 
         // Направление выстрела показывается осью самой точки вылета: развернув её,
         // художник видит, куда пойдёт след, не запуская игру
-        float angle = Muzzle.GlobalRotation - canvas.GlobalRotation;
+        float angle = (Muzzle?.GlobalRotation ?? GlobalRotation) - canvas.GlobalRotation;
         ModelGizmo.Arrow(canvas, muzzle, angle, ModelGizmo.AxisLength * 0.6f, color);
     }
 }

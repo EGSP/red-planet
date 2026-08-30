@@ -13,6 +13,12 @@ using Godot;
 /// перетаскивание частей, точку отсчёта, порядок наложения через положение в дереве
 /// и <c>z_index</c>.
 ///
+/// ДВА СОСТОЯНИЯ ОДНОГО УЗЛА. В редакторе сцена открыта целиком: спрайты, точки вылета
+/// и объявления эффектов стоят узлами, и художник правит их мышью. В игре узел получается
+/// иначе — копированием образца из <see cref="ModelBake"/>, где от сцены остались только
+/// работающие узлы, а картинки стали объектами отрисовки сервера. Отсюда правило: всё, что
+/// относится к запечённой модели, спрашивает <see cref="Bake"/> и молчит, когда его нет.
+///
 /// ГРАНИЦА С СИМУЛЯЦИЕЙ. Модель не хранит ни одной игровой величины: прочность, дальность,
 /// скорость и стоимость принадлежат .toml. Единственное, что игровые системы у неё
 /// спрашивают, — точка вылета из <see cref="ModelTool"/>, и это выбор места, откуда
@@ -26,8 +32,8 @@ using Godot;
 public partial class UnitModel : Node2D
 {
     /// <summary>
-    /// Основной спрайт корпуса. Ссылка нужна коду, которому важна именно неподвижная часть,
-    /// а не всё дерево; на отрисовку не влияет — рисует себя сам узел.
+    /// Основной спрайт корпуса. Ссылка нужна слоям затенения, выводящим себя из его альфы;
+    /// в запечённой модели узла уже нет, и поле остаётся значимым только в редакторе.
     /// </summary>
     [Export] public Sprite2D Body { get; set; }
 
@@ -48,19 +54,335 @@ public partial class UnitModel : Node2D
     /// </summary>
     [Export(PropertyHint.Range, "2,24,2")] public int GridCells { get; set; } = 6;
 
+    /// <summary>Запечённая модель, из которой поднят экземпляр. Null в открытой сцене редактора.</summary>
+    public ModelBake Bake { get; private set; }
+
+    /// <summary>Путь к сцене модели. Служит признаком того, что вид сменился.</summary>
+    public string Source => Bake?.Source ?? SceneFilePath;
+
     private ModelTool[] _tools;
-    private ShaderMaterial[] _tinted;
     private float _health = float.NaN;
 
-    /// <summary>Имя параметра шейдера, через который передаётся цвет команды.</summary>
-    private const string TeamColorParameter = "team_color";
+    /// <summary>
+    /// Объекты отрисовки, принимающие величины сущности: те, чьё вещество объявляет параметр
+    /// экземпляра <see cref="InstanceParam.TeamColor"/>. Цвет команды и доля прочности
+    /// объявлены одним шейдером, поэтому перечень у них общий.
+    /// </summary>
+    private readonly List<Rid> _painted = new();
 
-    /// <summary>Имя параметра шейдера, через который передаётся доля прочности.</summary>
-    private const string HealthParameter = "health";
+    /// <summary>
+    /// Модели, введённые в дерево. Нужны пересборке теней: настройки затенения правит
+    /// отладочная панель, и обойти перечень тех, кого правка касается, дешевле, чем держать
+    /// обработку кадра у каждой машины ради сверки одного числа.
+    ///
+    /// Перечень статический потому, что правка приходит извне дерева сцены и адресована
+    /// сразу всем; в редакторе он не ведётся вовсе — там модель печётся заново при всяком
+    /// обращении.
+    /// </summary>
+    private static readonly List<UnitModel> Shown = new();
+
+    /// <summary>Объекты отрисовки, созданные под картинки. Освобождаются при выходе из дерева.</summary>
+    private readonly List<Rid> _items = new();
+
+    /// <summary>Картинки, зависящие от угла корпуса: слои затенения с отходом.</summary>
+    private readonly List<(Rid Item, ModelSprite Piece)> _shifted = new();
+
+    /// <summary>
+    /// Ключи картинок, на тех же местах, что и <see cref="_items"/>. Хранятся ради
+    /// переназначения уровней: раскладка пересобирается, когда разобран новый вид,
+    /// и номера уровней у прежних картинок сдвигаются — см. <see cref="Restack"/>.
+    /// </summary>
+    private readonly List<MaterialOrderBalancer.Key> _keys = new();
+
+    /// <summary>
+    /// Узлы, пережившие запекание и получившие собственный уровень. Ключ свой они помнят
+    /// пометкой <see cref="ModelBaker.LevelMeta"/>.
+    /// </summary>
+    private readonly List<CanvasItem> _staged = new();
+
+    /// <summary>Номер раскладки, по которой уровни назначались в последний раз.</summary>
+    private int _revision = -1;
+
+    /// <summary>
+    /// Свести изображение на один уровень. Нужно вне мира — иконке панели и полю редактора
+    /// контента: там холст общий с интерфейсом, а уровни раскладки заданы в мерах слоя мира
+    /// и вывели бы картинки машины поверх окружающих их панелей. Внутри одного уровня порядок
+    /// задан деревом, поэтому изображение остаётся правильным; объединение вызовов там
+    /// не нужно, поскольку иконок единицы.
+    /// </summary>
+    private bool _flat;
+
+    /// <summary>
+    /// Основание порядка отрисовки картинок. Всё, что осталось узлами, движок нумерует
+    /// от нуля вверх, поэтому картинки нумеруются ниже нуля.
+    /// </summary>
+    private const int DrawBase = -4096;
+
+    /// <summary>Угол корпуса, при котором отход теней считался в последний раз.</summary>
+    private float _aligned = float.NaN;
+
+    /// <summary>
+    /// Цвет команды, назначенный владельцем. Помнится потому, что вещества создаются заново
+    /// при всяком вводе в дерево, а окраску владелец назначает один раз при рождении.
+    /// </summary>
+    private Color _team = Colors.White;
+
+    /// <summary>Показывать ли слои затенения. Каркас строительства их не показывает.</summary>
+    private bool _shades = true;
+
+    /// <summary>Подчинены ли картинки веществу родителя. Нужно каркасу строительства.</summary>
+    private bool _shared;
+
+    /// <summary>
+    /// Поднять экземпляр по запечённой модели. Узел возвращается вне дерева: объекты
+    /// отрисовки создаются при вводе в дерево, когда у владельца уже есть холст.
+    /// </summary>
+    public static UnitModel Realize(ModelBake bake)
+    {
+        if (bake?.Template == null || !Alive.Is(bake.Template))
+            return null;
+
+        // Копирование БЕЗ повторного подъёма сцены: признак UseInstantiation вернул бы
+        // узлы из файла .tscn, то есть отменил бы запекание и вернул в дерево все спрайты
+        const int flags = (int)(DuplicateFlags.Signals | DuplicateFlags.Groups
+                                | DuplicateFlags.Scripts);
+
+        if (bake.Template.Duplicate(flags) is not UnitModel model)
+        {
+            GD.PushWarning($"[UnitModel] образец не скопирован: {bake.Source}");
+            return null;
+        }
+
+        model.Adopt(bake);
+
+        // Разбор нового вида пересобирает раскладку и сдвигает уровни у прежних картинок.
+        // Здесь и есть то место, где это становится известно: машина рождается сразу после
+        // того, как её вид испечён
+        Restack();
+
+        return model;
+    }
+
+    /// <summary>Принять запечённую модель: раздать частям их данные и запомнить её.</summary>
+    private void Adopt(ModelBake bake)
+    {
+        Bake = bake;
+
+        var parts = Tools;
+
+        if (parts.Length != bake.Tools.Length)
+        {
+            GD.PushWarning($"[UnitModel] частей в образце {parts.Length}, " +
+                           $"а в запечённой модели {bake.Tools.Length}: {bake.Source}");
+            return;
+        }
+
+        for (int i = 0; i < parts.Length; i++)
+            parts[i].Adopt(bake.Tools[i]);
+    }
+
+    public override void _EnterTree() => Build();
+
+    public override void _ExitTree() => Release();
+
+    /// <summary>
+    /// Создать объекты отрисовки под картинки запечённой модели.
+    ///
+    /// ПОЧЕМУ ЭТО НЕ УЗЛЫ. Спрайт после рождения ничего не решает: текстура, место и порядок
+    /// наложения заданы сценой и до гибели машины не меняются. Объект отрисовки сервера
+    /// заполняется один раз и наследует преобразование от владельца, поэтому движение машины
+    /// не стоит ни одной записи на картинку — сервер применяет преобразование сам.
+    ///
+    /// ВЛАДЕЛЕЦ КАРТИНКИ — корень модели либо часть-инструмент: поворот ствола обязан вести
+    /// за собой его изображение, а корпус к развороту ствола безразличен.
+    /// </summary>
+    private void Build()
+    {
+        if (Bake == null || _items.Count > 0)
+            return;
+
+        int index = 0;
+
+        foreach (var piece in Bake.Body)
+            Add(piece, GetCanvasItem(), ref index);
+
+        var parts = Tools;
+
+        for (int i = 0; i < Bake.Tools.Length && i < parts.Length; i++)
+        {
+            int inner = 0;
+
+            foreach (var piece in Bake.Tools[i].Pieces)
+                Add(piece, parts[i].GetCanvasItem(), ref inner);
+        }
+
+        // Узлы, пережившие запекание, — луч работы и частицы — принимают величины сущности
+        // тем же порядком: вещество у них общее со всеми носителями вида
+        CollectPainted(this);
+        CollectStaged(this);
+
+        _revision = ModelBaker.Revision;
+
+        _health = float.NaN;
+
+        ApplyTeamColor(_team);
+        _aligned = float.NaN;
+
+        Align();
+
+        // Обработка кадра остаётся только редактору, где узел ведёт подсказки. В игре модель
+        // за кадр не делает ничего: пересборку теней приносит UnitModel.Rebake
+        SetProcess(Engine.IsEditorHint());
+        SetNotifyTransform(_shifted.Count > 0);
+
+        if (!Engine.IsEditorHint())
+            Shown.Add(this);
+    }
+
+    /// <summary>Создать один объект отрисовки под картинку.</summary>
+    private void Add(in ModelSprite piece, Rid parent, ref int index)
+    {
+        if (piece.Shade && !_shades)
+            return;
+
+        var item = RenderingServer.CanvasItemCreate();
+        RenderingServer.CanvasItemSetParent(item, parent);
+        RenderingServer.CanvasItemSetTransform(item, piece.Local);
+
+        // Уровень, а не авторский z_index: одинаковые картинки всех машин обязаны лечь
+        // на общий уровень, иначе объединение вызовов отрисовки не работает —
+        // см. MaterialOrderBalancer
+        RenderingServer.CanvasItemSetZIndex(item, Depth(piece.Key));
+
+        // Порядок среди равных ZIndex. Отсчёт ведётся от отрицательного основания, потому
+        // что узлам, пережившим запекание, движок назначает порядковый номер по их месту
+        // в дереве, то есть неотрицательный: вспышка выстрела и луч работы обязаны лежать
+        // поверх картинок своей части, а не под ними
+        RenderingServer.CanvasItemSetDrawIndex(item, DrawBase + index++);
+
+        RenderingServer.CanvasItemSetDefaultTextureFilter(item,
+            (RenderingServer.CanvasItemTextureFilter)(int)piece.Filter);
+
+        if (_shared)
+        {
+            RenderingServer.CanvasItemSetUseParentMaterial(item, true);
+        }
+        else if (piece.Material != null)
+        {
+            // Вещество назначается ОБЩЕЕ: ресурс в сцене один на все экземпляры вида,
+            // и копия на машину отменила бы объединение вызовов отрисовки
+            RenderingServer.CanvasItemSetMaterial(item, piece.Material.GetRid());
+
+            if (InstanceParam.Declares(piece.Material, InstanceParam.TeamColor))
+                _painted.Add(item);
+        }
+
+        RenderingServer.CanvasItemAddTextureRect(item, piece.Rect, piece.Texture.GetRid(),
+            false, piece.Modulate);
+
+        _items.Add(item);
+        _keys.Add(piece.Key);
+
+        if (piece.Shift != Vector2.Zero)
+            _shifted.Add((item, piece));
+    }
+
+    /// <summary>Освободить объекты отрисовки. Сервер владеет ими сам, дерево сцены их не убирает.</summary>
+    private void Release()
+    {
+        foreach (var item in _items)
+            RenderingServer.FreeRid(item);
+
+        _items.Clear();
+        _keys.Clear();
+        _shifted.Clear();
+        _painted.Clear();
+        _staged.Clear();
+
+        Shown.Remove(this);
+    }
+
+    /// <summary>
+    /// Обработка кадра остаётся редактору, где подсказки следуют за правкой сцены.
+    /// В игре она выключена — см. <see cref="Build"/>.
+    /// </summary>
+    public override void _Process(double delta) => _gizmo?.QueueRedraw();
+
+    /// <summary>
+    /// Пересобрать слои затенения у всех показанных моделей. Зовётся отладочной панелью
+    /// после правки настроек затенения — см. <see cref="ShadingSettings"/>.
+    ///
+    /// ПОЧЕМУ ИЗВЕЩЕНИЕМ, А НЕ СВЕРКОЙ КАЖДЫЙ КАДР. Прежде всякая модель держала обработку
+    /// кадра и сверяла слепок настроек; при полутора сотнях машин это давало около шести
+    /// процентов времени главного потока — плату за переход границы ради сравнения одного
+    /// числа. Настройки же меняются лишь рукой в отладочной панели, то есть считанные разы
+    /// за партию.
+    ///
+    /// СЛОИ ПЕЧУТСЯ ИЗ АЛЬФЫ КОРПУСА и потому пересобираются целиком, а не правятся по месту;
+    /// сама выпечка идёт один раз на вид, поскольку запечённая модель хранится в определении.
+    /// </summary>
+    public static void Rebake()
+    {
+        if (Shown.Count == 0)
+            return;
+
+        // Слепок настроек снимается один раз за кадр, а правка пришла в этом же кадре:
+        // без сброса сверка вернула бы величину, снятую до неё
+        ModelBake.Restamp();
+
+        foreach (var model in Shown.ToArray())
+        {
+            if (model.Bake is not { Stale: true })
+                continue;
+
+            var fresh = ModelBake.Refresh(model.Bake);
+
+            if (ReferenceEquals(fresh, model.Bake))
+                continue;
+
+            model.Release();
+            model.Adopt(fresh);
+            model.Build();
+        }
+
+        // Виды пекутся по одному, и раскладка пересобирается на каждом: у моделей, собранных
+        // в начале обхода, уровни остались от промежуточной раскладки
+        Restack();
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationTransformChanged)
+            Align();
+    }
+
+    /// <summary>
+    /// Поставить слои затенения по углу корпуса. Отход тени задан в мировых осях, поскольку
+    /// источник света на карте один; отсюда следует, что у повёрнутой машины тень уходит
+    /// в ту же сторону, что и у неповёрнутой, и место её зависит от угла.
+    ///
+    /// Сравнение с прежним углом снимает работу с неподвижных: у постройки угол не меняется
+    /// никогда, и сверка двух чисел заменяет запись во все слои.
+    /// </summary>
+    private void Align()
+    {
+        if (_shifted.Count == 0)
+            return;
+
+        float world = GlobalRotation;
+
+        if (Mathf.IsEqualApprox(world, _aligned))
+            return;
+
+        _aligned = world;
+
+        foreach (var (item, piece) in _shifted)
+            RenderingServer.CanvasItemSetTransform(item, piece.Placed(world));
+    }
 
     /// <summary>
     /// Части-инструменты, найденные во всём поддереве. Ищутся один раз при первом
-    /// обращении: состав сцены во время игры не меняется.
+    /// обращении: состав узлов после запекания не меняется.
     /// </summary>
     public ModelTool[] Tools => _tools ??= Collect();
 
@@ -70,7 +392,7 @@ public partial class UnitModel : Node2D
     ///
     /// Годится там, где инструменты не разделены: изображение в панели строительства,
     /// поле редактора контента, приведение свежей модели к нулю. Носитель в игре
-    /// поворачивает каждую часть отдельно — см. <see cref="Bind"/> и <see cref="AimRig"/>.
+    /// поворачивает каждую часть отдельно — см. <see cref="AimRig"/>.
     ///
     /// Поворот назначается целиком, а не добавляется к тому, что стоит в сцене: иначе
     /// собранный угол зависел бы от того, как художник оставил часть при сохранении.
@@ -98,7 +420,7 @@ public partial class UnitModel : Node2D
     public ModelTool[] Bind(ToolDefinition[] tools)
     {
         if (tools == null || tools.Length == 0)
-            return System.Array.Empty<ModelTool>();
+            return Array.Empty<ModelTool>();
 
         var bound = new ModelTool[tools.Length];
         var taken = new HashSet<ModelTool>();
@@ -161,81 +483,87 @@ public partial class UnitModel : Node2D
     }
 
     /// <summary>
-    /// Окрасить части в цвет команды. Затрагивает только те узлы, на которых стоит
-    /// материал с шейдером, объявляющим параметр <c>team_color</c>: остальное изображение
-    /// остаётся таким, каким нарисовано.
+    /// Окрасить части в цвет команды. Затрагивает только те картинки и узлы, на которых
+    /// стоит вещество с шейдером, объявляющим параметр экземпляра <c>team_color</c>:
+    /// остальное изображение остаётся таким, каким нарисовано.
     ///
-    /// МАТЕРИАЛ РАЗМНОЖАЕТСЯ. Ресурс материала в сцене один на все её экземпляры, и запись
-    /// цвета в него окрасила бы разом всех юнитов этого вида, включая чужих. Поэтому при
-    /// первом обращении каждый материал заменяется собственной копией.
+    /// Цвет пишется объекту отрисовки, а не веществу: вещество одно на вид, и запись в него
+    /// окрасила бы разом всех носителей — см. <see cref="InstanceParam"/>.
     /// </summary>
     public void ApplyTeamColor(Color color)
     {
-        _tinted ??= PrepareTinted();
+        _team = color;
 
-        foreach (var material in _tinted)
-            material.SetShaderParameter(TeamColorParameter, color);
+        foreach (var item in _painted)
+            InstanceParam.WriteColor(item, InstanceParam.TeamColor, color);
     }
 
     /// <summary>
     /// Передать долю прочности слою повреждения: 1 — целая сущность, 0 — вскрытая целиком.
     ///
-    /// ЗАЧЕМ ЭТО ИДЁТ КОДОМ, А ВСЁ ОСТАЛЬНОЕ В СЛОЕ ПОВРЕЖДЕНИЯ — МАТЕРИАЛОМ. Текстура
+    /// ЗАЧЕМ ЭТО ИДЁТ КОДОМ, А ВСЁ ОСТАЛЬНОЕ В СЛОЕ ПОВРЕЖДЕНИЯ — ВЕЩЕСТВОМ. Текстура
     /// внутренностей, карта порядка вскрытия и цвет каймы принадлежат виду и выбираются
-    /// материалом в сцене модели. Прочность же принадлежит сущности и у двух машин одного
-    /// вида разная, поэтому материалом её задать нельзя вовсе.
+    /// веществом в сцене модели. Прочность же принадлежит сущности и у двух машин одного
+    /// вида разная, поэтому веществом её задать нельзя вовсе: она идёт параметром
+    /// экземпляра — см. <see cref="InstanceParam"/>.
     ///
     /// ЗНАЧЕНИЕ СВЕРЯЕТСЯ С ПРЕЖНИМ. Метод зовут каждый кадр, а прочность меняется редко;
-    /// запись в параметр шейдера идёт через движок, и платить за неё на каждом кадре
-    /// за каждую сущность незачем.
+    /// запись идёт через движок, и платить за неё на каждом кадре за каждую сущность незачем.
     /// </summary>
     public void ApplyDamage(float health)
     {
         health = Mathf.Clamp(health, 0f, 1f);
 
-        if (Mathf.IsEqualApprox(health, _health))
+        if (Mathf.IsEqualApprox(health, _health) || _painted.Count == 0)
             return;
 
         _health = health;
-        _tinted ??= PrepareTinted();
 
-        foreach (var material in _tinted)
-            material.SetShaderParameter(HealthParameter, health);
+        foreach (var item in _painted)
+            InstanceParam.Write(item, InstanceParam.Health, health);
     }
 
     /// <summary>
-    /// Переключить все части модели на вещество родителя. Нужно каркасу: шейдер
-    /// строительства стоит на слое <see cref="BlueprintLayer"/>, а вещество в Godot есть
-    /// свойство узла и на потомков само не распространяется. Признак <c>UseParentMaterial</c>
-    /// — единственный способ подчинить всё дерево модели одному шейдеру, не подменяя
-    /// материалы частей по одному и не теряя их при достройке.
-    /// </summary>
-    public void ShareParentMaterial(bool enabled) => ShareParentMaterial(this, enabled);
-
-    /// <summary>
-    /// Убрать из модели все слои затенения. Нужно каркасу: тень принадлежит стоящему
-    /// корпусу, а под шейдером строительства она вдобавок получает собственную сетку,
-    /// отчего силуэт каркаса двоится.
+    /// Переключить всю модель на вещество родителя. Нужно каркасу: шейдер строительства
+    /// стоит на слое <see cref="BlueprintLayer"/>, а вещество в Godot есть свойство узла
+    /// либо объекта отрисовки и на потомков само не распространяется.
     ///
-    /// Узлы именно снимаются, а не прячутся: <see cref="ModelShade"/> собирает себя заново
-    /// при всякой правке настроек затенения и невидимость бы себе вернул.
+    /// Зовётся ДО ввода модели в дерево: картинки создаются с уже назначенным признаком.
     /// </summary>
-    public void DropShades() => DropShades(this);
-
-    private static void DropShades(Node node)
+    public void ShareParentMaterial(bool enabled)
     {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is ModelShade shade)
-            {
-                node.RemoveChild(shade);
-                shade.QueueFree();
-                continue;
-            }
+        _shared = enabled;
 
-            DropShades(child);
-        }
+        ShareParentMaterial(this, enabled);
+
+        foreach (var item in _items)
+            RenderingServer.CanvasItemSetUseParentMaterial(item, enabled);
     }
+
+    /// <summary>
+    /// Не показывать слои затенения. Нужно каркасу: тень принадлежит стоящему корпусу,
+    /// а под шейдером строительства она вдобавок получает собственную сетку, отчего силуэт
+    /// каркаса двоится.
+    ///
+    /// Зовётся ДО ввода модели в дерево: слои не создаются вовсе, а не прячутся.
+    /// </summary>
+    public void DropShades() => _shades = false;
+
+    /// <summary>
+    /// Пустая модель. Отвечает за узел, у которого запечённой модели нет вовсе: сцену
+    /// открыли в редакторе. Величины запаса заданы в одном месте — самой <see cref="ModelBake"/>.
+    /// </summary>
+    private static readonly ModelBake Empty = new();
+
+    /// <summary>Габарит изображения в осях модели. Считается при запекании — см. ModelBaker.</summary>
+    public Rect2 Bounds() => (Bake ?? Empty).Bounds;
+
+    /// <summary>
+    /// Наибольшее удаление угла габарита от начала координат модели. Именно эту величину
+    /// вписывают в половину стороны ячейки: модель поворачивают, и вписывать надо круг,
+    /// а не прямоугольник.
+    /// </summary>
+    public float Extent() => (Bake ?? Empty).Extent;
 
     private static void ShareParentMaterial(Node node, bool enabled)
     {
@@ -244,95 +572,6 @@ public partial class UnitModel : Node2D
 
         foreach (var child in node.GetChildren())
             ShareParentMaterial(child, enabled);
-    }
-
-    /// <summary>
-    /// Габарит изображения в координатах самой модели: объединение прямоугольников всех
-    /// спрайтов поддерева.
-    ///
-    /// ЗАЧЕМ ОН НУЖЕН. Иконка строительной панели и поле редактора контента вписывают
-    /// изображение в отведённую площадь, а размер сущности в справочнике для этого не годится:
-    /// радиус корпуса меньше видимого размера, поскольку ствол и надстройки намеренно выходят
-    /// за него. Спрашивать размер у одного лишь <see cref="Body"/> тоже нельзя — вынесенный
-    /// ствол остался бы за границей.
-    ///
-    /// СЛОИ ЗАТЕНЕНИЯ НЕ УЧИТЫВАЮТСЯ. Изображение тени шире корпуса на запас размытия и
-    /// отнесено по направлению света; включи его в габарит — и корпус в ячейке панели стал бы
-    /// мельче ровно на величину этого запаса, причём тем заметнее, чем сильнее размытие.
-    /// </summary>
-    public Rect2 Bounds()
-    {
-        var result = new Rect2();
-        bool any = false;
-
-        Measure(this, Transform2D.Identity, ref result, ref any);
-
-        // Пустая модель всё же занимает место: вписывающему нужен ненулевой размер,
-        // иначе множитель обратится в бесконечность
-        return any ? result : new Rect2(-Const.Unit * 0.5f, -Const.Unit * 0.5f,
-            Const.Unit, Const.Unit);
-    }
-
-    /// <summary>
-    /// Наибольшее удаление угла габарита от начала координат модели. Именно эту величину
-    /// вписывают в половину стороны ячейки: модель поворачивают, и вписывать надо круг,
-    /// а не прямоугольник.
-    /// </summary>
-    public float Extent()
-    {
-        var bounds = Bounds();
-
-        return Mathf.Max(
-            Mathf.Max(bounds.Position.Length(), bounds.End.Length()),
-            Mathf.Max(new Vector2(bounds.Position.X, bounds.End.Y).Length(),
-                new Vector2(bounds.End.X, bounds.Position.Y).Length()));
-    }
-
-    private static void Measure(Node node, Transform2D basis, ref Rect2 result, ref bool any)
-    {
-        foreach (var child in node.GetChildren())
-        {
-            var local = child is Node2D placed ? basis * placed.Transform : basis;
-
-            if (child is Sprite2D { Texture: not null, Visible: true } sprite
-                and not ModelShade)
-            {
-                var size = sprite.Texture.GetSize();
-                var rect = new Rect2(
-                    sprite.Centered ? sprite.Offset - size * 0.5f : sprite.Offset, size);
-
-                Include(local, rect, ref result, ref any);
-            }
-
-            Measure(child, local, ref result, ref any);
-        }
-    }
-
-    /// <summary>
-    /// Расширить габарит прямоугольником спрайта. Учитываются все четыре угла после поворота:
-    /// повёрнутый прямоугольник занимает больше места, чем его стороны по осям.
-    /// </summary>
-    private static void Include(Transform2D basis, Rect2 rect, ref Rect2 result, ref bool any)
-    {
-        Span<Vector2> corners =
-        [
-            basis * rect.Position,
-            basis * new Vector2(rect.End.X, rect.Position.Y),
-            basis * rect.End,
-            basis * new Vector2(rect.Position.X, rect.End.Y),
-        ];
-
-        foreach (var corner in corners)
-        {
-            if (!any)
-            {
-                result = new Rect2(corner, Vector2.Zero);
-                any = true;
-                continue;
-            }
-
-            result = result.Expand(corner);
-        }
     }
 
     private ModelTool[] Collect()
@@ -353,38 +592,87 @@ public partial class UnitModel : Node2D
         }
     }
 
-    private ShaderMaterial[] PrepareTinted()
+    /// <summary>Уровень картинки. У сведённого изображения все картинки лежат на нуле.</summary>
+    private int Depth(in MaterialOrderBalancer.Key key) =>
+        _flat ? 0 : ModelBaker.Order.Level(key);
+
+    /// <summary>
+    /// Переназначить уровни показанным моделям, если раскладка пересобрана. Уровень зависит
+    /// от всех разобранных видов сразу, поэтому появление нового вида сдвигает номера
+    /// у картинок уже показанных машин.
+    ///
+    /// Сверка идёт по номеру раскладки, поэтому в спокойном состоянии обход стоит одного
+    /// сравнения на машину, а работа возникает лишь при первом рождении машины нового вида.
+    /// </summary>
+    public static void Restack()
     {
-        var materials = new List<ShaderMaterial>();
-        PrepareTinted(this, materials);
-        return materials.ToArray();
+        int revision = ModelBaker.Revision;
+
+        if (_stacked == revision)
+            return;
+
+        _stacked = revision;
+
+        foreach (var model in Shown)
+            model.Restack(revision);
     }
 
-    private static void PrepareTinted(Node node, List<ShaderMaterial> materials)
+    /// <summary>Номер раскладки, до которого перечень показанных моделей уже доведён.</summary>
+    private static int _stacked = -1;
+
+    private void Restack(int revision)
     {
-        if (node is CanvasItem { Material: ShaderMaterial shared } item && Tintable(shared))
+        if (_revision == revision)
+            return;
+
+        _revision = revision;
+
+        for (int i = 0; i < _items.Count; i++)
+            RenderingServer.CanvasItemSetZIndex(_items[i], Depth(_keys[i]));
+
+        foreach (var node in _staged)
+            if (Alive.Is(node))
+                node.ZIndex = Depth(Staged(node));
+    }
+
+    /// <summary>
+    /// Собрать узлы, получившие при запекании собственный уровень, и поставить им его.
+    /// Ключ узла хранится пометкой: копия узла у каждой машины своя, а уровень у них общий.
+    /// </summary>
+    private void CollectStaged(Node node)
+    {
+        if (node is CanvasItem item && item.HasMeta(ModelBaker.LevelMeta))
         {
-            var own = (ShaderMaterial)shared.Duplicate();
-            item.Material = own;
-            materials.Add(own);
+            item.ZIndex = Depth(Staged(item));
+            _staged.Add(item);
         }
 
         foreach (var child in node.GetChildren())
-            PrepareTinted(child, materials);
+            CollectStaged(child);
     }
 
-    /// <summary>Объявляет ли шейдер параметр цвета команды.</summary>
-    private static bool Tintable(ShaderMaterial material)
+    /// <summary>Ключ уцелевшего узла, записанный на нём при запекании.</summary>
+    private static MaterialOrderBalancer.Key Staged(CanvasItem item) =>
+        MaterialOrderBalancer.Key.Single(item.GetMeta(ModelBaker.LevelMeta).AsUInt64());
+
+    /// <summary>
+    /// Свести изображение на один уровень — см. <see cref="_flat"/>. Зовётся ДО ввода
+    /// модели в дерево: картинки создаются с уже назначенным уровнем.
+    /// </summary>
+    public void Flatten() => _flat = true;
+
+    /// <summary>
+    /// Собрать узлы, принимающие величины сущности. Вещество им НЕ размножается: величины
+    /// пишутся параметром экземпляра прямо в объект отрисовки узла.
+    /// </summary>
+    private void CollectPainted(Node node)
     {
-        if (material.Shader == null)
-            return false;
+        if (node is CanvasItem item
+            && InstanceParam.Declares(item.Material, InstanceParam.TeamColor))
+            _painted.Add(item.GetCanvasItem());
 
-        foreach (var uniform in material.Shader.GetShaderUniformList())
-            if (uniform.AsGodotDictionary().TryGetValue("name", out var name)
-                && name.AsString() == TeamColorParameter)
-                return true;
-
-        return false;
+        foreach (var child in node.GetChildren())
+            CollectPainted(child);
     }
 
     private ModelLayer _gizmo;
@@ -393,15 +681,6 @@ public partial class UnitModel : Node2D
     {
         if (Engine.IsEditorHint())
             _gizmo = ModelLayer.Attach(this, PaintGizmo, "Gizmo", ModelLayer.TopZ, internalNode: true);
-    }
-
-    public override void _Process(double delta)
-    {
-        // Подсказки следуют за правкой сцены; в игре узлу считать нечего
-        if (Engine.IsEditorHint())
-            _gizmo?.QueueRedraw();
-        else
-            SetProcess(false);
     }
 
     /// <summary>Подсказка корпуса. Рисует её слой поверх изображения — см. <see cref="ModelLayer"/>.</summary>

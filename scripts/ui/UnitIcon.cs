@@ -101,7 +101,7 @@ public partial class UnitIcon : Control
 
         string wanted = _definition?.Model ?? "";
 
-        if (Alive.Is(_model) && _model.SceneFilePath == wanted)
+        if (Alive.Is(_model) && _model.Source == wanted)
             return;
 
         if (Alive.Is(_model))
@@ -112,7 +112,11 @@ public partial class UnitIcon : Control
         if (string.IsNullOrEmpty(wanted))
             return;
 
-        var model = ModelLibrary.Instantiate(wanted);
+        var model = UnitModel.Realize(ModelBake.For(_definition));
+
+        // Вне мира уровни раскладки не значат ничего: холст общий с интерфейсом,
+        // и картинки машины легли бы поверх окружающих панелей
+        model?.Flatten();
 
         if (model == null)
             return;
