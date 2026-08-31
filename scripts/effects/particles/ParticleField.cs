@@ -30,9 +30,8 @@ public sealed partial class ParticleField : GpuParticles2D
     public ParticleKey Key { get; private set; }
 
     /// <summary>
-    /// Завести поле по признаку. Материал берётся у признака как есть, пока множитель
-    /// размера натуральный; при ином множителе поле получает собственную копию материала
-    /// с домноженными размером, скоростью, затуханием и разбросом — см. <see cref="ParticleKey"/>.
+    /// Завести поле по признаку. Материал поле получает своей копией, правленной под вброс
+    /// и под множитель размера, — см. <see cref="Prepare"/>.
     /// </summary>
     public static ParticleField Make(in ParticleKey key, int capacity)
     {
@@ -51,7 +50,7 @@ public sealed partial class ParticleField : GpuParticles2D
             Emitting = false,
             Explosiveness = 0f,
             VisibilityRect = new Rect2(-Reach, -Reach, Reach * 2f, Reach * 2f),
-            ProcessMaterial = Resized(key),
+            ProcessMaterial = Prepare(key),
         };
 
         return field;
@@ -110,18 +109,25 @@ public sealed partial class ParticleField : GpuParticles2D
     }
 
     /// <summary>
-    /// Материал поля. При натуральном размере отдаётся общий материал сцены; при ином —
-    /// его копия, у которой домножено всё, что имеет размерность длины. Домножать
-    /// приходится сам материал, поскольку размер частицы вычисляется им заново каждый кадр
-    /// и внешним преобразованием не задаётся.
+    /// Материал поля. Всегда копия материала сцены, а не он сам, поскольку правки нужны
+    /// в двух случаях: неестественный множитель размера и трёхмерный поворот.
+    ///
+    /// МНОЖИТЕЛЬ РАЗМЕРА домножает всё, что имеет размерность длины. Домножать приходится
+    /// сам материал, поскольку размер частицы вычисляется им заново каждый кадр и внешним
+    /// преобразованием не задаётся.
     /// </summary>
-    private static Material Resized(in ParticleKey key)
+    private static Material Prepare(in ParticleKey key)
     {
-        if (key.Process == null || key.Natural)
-            return key.Process;
+        if (key.Process == null)
+            return null;
 
         if (key.Process.Duplicate() is not ParticleProcessMaterial copy)
             return key.Process;
+
+        Flatten(copy);
+
+        if (key.Natural)
+            return copy;
 
         float size = key.Size;
 
@@ -135,5 +141,32 @@ public sealed partial class ParticleField : GpuParticles2D
         copy.Gravity *= size;
 
         return copy;
+    }
+
+    /// <summary>
+    /// Свести трёхмерный поворот к плоскому.
+    ///
+    /// ЗАЧЕМ. Материал с признаком <c>use_rotation_3d</c> собирает преобразование частицы
+    /// заново из углов поворота и затирает при этом место рождения, переданное вбросом:
+    /// частицы всех событий оказываются в начале координат поля, то есть в одной точке мира.
+    /// Плоский поворот такого действия не оказывает.
+    ///
+    /// ПЕРЕВОД ОДНОЗНАЧЕН И ВИДА НЕ МЕНЯЕТ. Плоскую сцену вращать можно лишь вокруг оси Z,
+    /// поэтому у объявленных пределов значимы только третьи составляющие, и они переходят
+    /// в пределы плоского угла как есть — обе величины заданы в градусах. Признак
+    /// в сценах эффектов включён там, где художнику понадобился случайный разворот спрайта,
+    /// и именно этот разворот перевод сохраняет.
+    /// </summary>
+    private static void Flatten(ParticleProcessMaterial material)
+    {
+        if (!(bool)material.Get("use_rotation_3d"))
+            return;
+
+        var min = (Vector3)material.Get("rotation_3d_min");
+        var max = (Vector3)material.Get("rotation_3d_max");
+
+        material.Set("use_rotation_3d", false);
+        material.AngleMin = min.Z;
+        material.AngleMax = max.Z;
     }
 }
