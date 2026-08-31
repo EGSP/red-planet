@@ -15,7 +15,7 @@ using Godot;
 /// мощностью, и дальше каркас сам заявляет спрос. А ремонт она делает сама, поэтому
 /// в экономике участвует ещё и напрямую.
 /// </summary>
-public partial class Assembler : Building, IWorker
+public partial class Assembler : Building, IWorker, IWorkBeam
 {
     /// <summary>
     /// Манипулятор башни. Такой же инструмент, как рука фабрикатора, и лежит в том же
@@ -46,8 +46,29 @@ public partial class Assembler : Building, IWorker
         : null;
 
     /// <summary>Откуда тянется луч работы. Без модели — из центра башни.</summary>
-    private Vector2 WorkBeamOrigin =>
+    public Vector2 WorkBeamOrigin =>
         Aim.PrimaryWork?.Muzzle(GlobalPosition) ?? GlobalPosition;
+
+    /// <summary>Вид запасного луча: ремонтный, как и вся работа башни-сборщика.</summary>
+    public BeamStyle WorkBeamStyle => GraphicsSettings.RepairBeamStyle;
+
+    /// <summary>
+    /// Конец запасного луча. Пусто, если работы нет либо если луч объявлен в модели:
+    /// в последнем случае его ведёт сам узел луча.
+    /// </summary>
+    public Vector2? WorkBeamPoint
+    {
+        get
+        {
+            if (Aim.WorkBeam != null)
+                return null;
+
+            if (Alive.Is(_attached))
+                return _attached.GlobalPosition;
+
+            return Alive.Is(_repairTarget) ? _repairTarget.GlobalPosition : null;
+        }
+    }
 
     public override void RunOrder(Order order, double dt)
     {
@@ -189,8 +210,9 @@ public partial class Assembler : Building, IWorker
     }
 
     /// <summary>
-    /// Луч работы и манипулятор башни. Рисуются вместе с полосой прочности поверх корпуса,
-    /// иначе модель закрыла бы их собой — см. <see cref="ModelLayer"/>.
+    /// Манипулятор башни поверх корпуса, иначе модель закрыла бы его собой — см.
+    /// <see cref="ModelLayer"/>. Луч работы сюда не входит: его рисует
+    /// <see cref="BeamSystem"/> в общих сетках лучей.
     /// </summary>
     protected override void PaintMarks(CanvasItem canvas)
     {
@@ -200,17 +222,6 @@ public partial class Assembler : Building, IWorker
             return;
 
         float half = Const.Unit * 0.5f;
-
-        // Луч к тому, с чем работаем, — от среза манипулятора, как у подвижного исполнителя
-        // (см. Unit.PaintMarks). Из центра он выходил бы мимо изображения руки. Это запасное
-        // изображение: вид, объявивший в модели узел луча, рисует его сам
-        var target = Aim.WorkBeam != null ? null
-            : Alive.Is(_attached) ? (Node2D)_attached
-            : _repairTarget;
-
-        if (Alive.Is(target))
-            ShapeDraw.Line(canvas, ToLocal(WorkBeamOrigin), ToLocal(target.GlobalPosition),
-                DrawTheme.Line(VizKind.WorkBeamRepair));
 
         // Запасное изображение манипулятора — три коротких луча из центра. При модели
         // руку рисует она сама, и три луча легли бы поверх спрайта

@@ -19,7 +19,7 @@
 /// а не выводить из того, в каком разрезе она нашлась.
 /// </summary>
 public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed, IEconomyActor,
-    IVision, IRepairable, IOrderable, IWorker, IMobile
+    IVision, IRepairable, IOrderable, IWorker, IMobile, IWorkBeam
 {
     /// <summary>
     /// Определение. Ставит Spawner при создании: узел юнита собственной сцены не имеет,
@@ -102,13 +102,6 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
     /// доворачивать инструменты.
     /// </summary>
     private UnitModel _model;
-
-    /// <summary>
-    /// Слой пометок поверх модели: полоса прочности и луч работы. Есть только у юнита
-    /// с моделью — собственные команды узла выполняются до потомков, и без слоя пометки
-    /// ушли бы под корпус (см. <see cref="ModelLayer"/>).
-    /// </summary>
-    private ModelLayer _marks;
 
     public Unit() => Orders = new OrderQueue(this);
 
@@ -217,8 +210,22 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
         Aim.PrimaryWeapon?.Muzzle(GlobalPosition) ?? GlobalPosition;
 
     /// <summary>Откуда тянется луч работы. Без модели — от центра сущности.</summary>
-    private Vector2 WorkBeamOrigin =>
+    public Vector2 WorkBeamOrigin =>
         Aim.PrimaryWork?.Muzzle(GlobalPosition) ?? GlobalPosition;
+
+    /// <summary>
+    /// Вид запасного луча: строительный. Ремонт подвижный исполнитель показывает им же —
+    /// работа у него одна, и разводить её по видам луча незачем.
+    /// </summary>
+    public BeamStyle WorkBeamStyle => GraphicsSettings.BuildBeamStyle;
+
+    /// <summary>
+    /// Конец запасного луча. Пусто, если работы нет либо если луч объявлен в модели:
+    /// в последнем случае его ведёт сам узел луча, и второе изображение легло бы поверх.
+    /// </summary>
+    public Vector2? WorkBeamPoint => Aim.WorkBeam == null && Alive.Is(_attached)
+        ? _attached.GlobalPosition
+        : null;
 
     public float HitRadius => Definition?.RadiusPx ?? Const.Unit * 0.35f;
 
@@ -304,28 +311,6 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
 
         AddChild(_model);
         _model.ApplyTeamColor(TeamPalette.Of(Faction));
-
-        // Слой добавляется ПОСЛЕ модели: порядок отрисовки задан порядком в дереве
-        _marks = ModelLayer.Attach(this, PaintMarks, "Marks", Playground.MarksZ);
-    }
-
-    /// <summary>
-    /// Пометки поверх корпуса: луч к узлу работы. Без модели их рисует сам юнит в конце
-    /// <see cref="_Draw"/>, с моделью — слой, идущий следом за ней.
-    ///
-    /// Полосы прочности здесь нет: она лежит в общей множественной сетке всего мира —
-    /// см. <see cref="HealthBarSystem"/>.
-    /// </summary>
-    private void PaintMarks(CanvasItem canvas)
-    {
-        if (Definition == null)
-            return;
-
-        // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей.
-        // Запасное изображение: вид, объявивший в модели луч, рисует его сам
-        if (Alive.Is(_attached) && Aim.WorkBeam == null)
-            ShapeDraw.Line(canvas, ToLocal(WorkBeamOrigin), ToLocal(_attached.GlobalPosition),
-                DrawTheme.Line(VizKind.WorkBeamBuild));
     }
 
     /// <summary>
@@ -410,7 +395,6 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
         Aim.DriveWorkBeam(WorkBeamAim);
 
         QueueRedraw();
-        _marks?.QueueRedraw();
     }
 
     /// <summary>
@@ -1362,12 +1346,10 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
             facingOffset: toolLocal);
 
         // Модель рисует себя сама дочерним узлом, поэтому запасной круг при ней не нужен:
-        // два изображения одного корпуса наложились бы друг на друга.
-        // Пометки при модели рисует слой, идущий после неё
+        // два изображения одного корпуса наложились бы друг на друга
         if (_model != null)
             return;
 
         UnitVisual.Draw(this, Definition, radius);
-        PaintMarks(this);
     }
 }

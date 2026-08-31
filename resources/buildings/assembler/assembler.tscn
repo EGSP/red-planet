@@ -5,9 +5,9 @@
 [ext_resource type="Script" uid="uid://blu7wu5ta4p8w" path="res://scripts/models/ModelShade.cs" id="3_shade"]
 [ext_resource type="Texture2D" uid="uid://b42qic4d131vf" path="res://resources/buildings/assembler/assembler_body.png" id="4_body"]
 [ext_resource type="Texture2D" uid="uid://ckrhbu8hmv10k" path="res://resources/buildings/assembler/assembler_gun.png" id="5_arm"]
-[ext_resource type="Material" path="res://resources/materials/building.tres" id="92_body"]
-[ext_resource type="Script" path="res://scripts/effects/BeamVisual.cs" id="95_beam"]
-[ext_resource type="Resource" path="res://resources/beams/build_beam.tres" id="96_beamstyle"]
+[ext_resource type="Material" uid="uid://boco48xw1csi5" path="res://resources/materials/building.tres" id="92_body"]
+[ext_resource type="Script" uid="uid://b2g1maw7ae3gn" path="res://scripts/effects/BeamVisual.cs" id="95_beam"]
+[ext_resource type="Resource" uid="uid://p28qnkevijq6" path="res://resources/beams/build_beam.tres" id="96_beamstyle"]
 
 [node name="AssemblerModel" type="Node2D" unique_id=1313299332 node_paths=PackedStringArray("Body")]
 script = ExtResource("1_model")
@@ -52,10 +52,10 @@ texture = ExtResource("5_arm")
 [node name="Muzzle" type="Marker2D" parent="BuildArm" unique_id=1742974170]
 position = Vector2(20, 0)
 
-[node name="Beam" type="Node2D" parent="BuildArm/Muzzle" node_paths=PackedStringArray("PreviewTarget")]
+[node name="Beam" type="Node2D" parent="BuildArm/Muzzle" unique_id=1070116450 node_paths=PackedStringArray("PreviewTarget")]
 script = ExtResource("95_beam")
 Style = ExtResource("96_beamstyle")
 PreviewTarget = NodePath("../../BeamPreview")
 
-[node name="BeamPreview" type="Marker2D" parent="BuildArm"]
-position = Vector2(150, 0)
+[node name="BeamPreview" type="Marker2D" parent="BuildArm" unique_id=1512590238]
+position = Vector2(171, 0)

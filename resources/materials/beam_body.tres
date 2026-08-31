@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://dldbxom7ipgim"]
+
+[ext_resource type="Shader" uid="uid://ec068vamrovr" path="res://resources/shaders/beam_body.gdshader" id="1_shader"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/edge_softness = 0.45
+shader_parameter/end_fade = 0.05
+shader_parameter/flip_x = false
+shader_parameter/flip_y = false
+shader_parameter/rotate_90 = false

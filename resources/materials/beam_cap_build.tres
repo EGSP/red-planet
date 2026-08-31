@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://d08mhn8c6nlxe"]
+
+[ext_resource type="Shader" uid="uid://ckqufn6d7lvgj" path="res://resources/shaders/beam_cap.gdshader" id="1_shader"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/core_share = 0.3
+shader_parameter/falloff = 2.2
+shader_parameter/flip_x = false
+shader_parameter/flip_y = false
+shader_parameter/rotate_90 = false

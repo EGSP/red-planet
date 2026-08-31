@@ -1,17 +1,43 @@
 [gd_resource type="Resource" script_class="BeamStyle" format=3 uid="uid://p28qnkevijq6"]
 
 [ext_resource type="Script" uid="uid://dce40og6yk5xk" path="res://scripts/effects/BeamStyle.cs" id="1_beam"]
+[ext_resource type="Script" uid="uid://lnff56fqx21l" path="res://scripts/effects/BeamBodyStyle.cs" id="2_body"]
+[ext_resource type="Texture2D" uid="uid://ditb6800vb7qb" path="res://assets/textures/P_noise_22-1.png" id="2_qjcsi"]
+[ext_resource type="Script" uid="uid://d4ihpftoi37tk" path="res://scripts/effects/BeamCapStyle.cs" id="3_cap"]
+[ext_resource type="Material" uid="uid://ilxqf11ye7b1" path="res://resources/materials/beam_body_build.tres" id="4_body_material"]
+[ext_resource type="Material" uid="uid://d08mhn8c6nlxe" path="res://resources/materials/beam_cap_build.tres" id="5_cap_material"]
+[ext_resource type="Texture2D" uid="uid://3v8dk0j5a5og" path="res://assets/sprites/ui/commands/icons_command_repair.png" id="5_i7i1y"]
+[ext_resource type="Texture2D" uid="uid://doblyhfj8owke" path="res://assets/textures/beam/P_flash_07.png" id="6_k305y"]
 
-[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_beam"]
-blend_mode = 1
+[sub_resource type="Resource" id="Resource_body"]
+script = ExtResource("2_body")
+Texture = ExtResource("2_qjcsi")
+Material = ExtResource("4_body_material")
+Color = Color(0.28, 0.92, 0.38, 0.85)
+PulseSpeed = 2.1
+PulseDepth = 0.04
+
+[sub_resource type="Resource" id="Resource_impact"]
+script = ExtResource("3_cap")
+Texture = ExtResource("5_i7i1y")
+Material = ExtResource("5_cap_material")
+Color = Color(1.540184e-06, 0.9703658, 0.39461544, 1)
+Radius = 26.5
+PulseSpeed = 0.4
+PulseDepth = 0.12
+SpinSpeed = 0.1
+
+[sub_resource type="Resource" id="Resource_muzzle"]
+script = ExtResource("3_cap")
+Texture = ExtResource("6_k305y")
+Material = ExtResource("5_cap_material")
+Color = Color(7.123351e-06, 0.86006457, 0.35276437, 1)
+Radius = 25.5
+PulseSpeed = 0.2
+PulseDepth = 0.12
 
 [resource]
 script = ExtResource("1_beam")
-Color = Color(0.28, 0.92, 0.38, 1)
-GlowWidth = 13.0
-GlowAlpha = 0.3
-MuzzleRadius = 5.0
-ImpactRadius = 9.0
-PulseSpeed = 6.0
-PulseDepth = 0.25
-Material = SubResource("CanvasItemMaterial_beam")
+Body = SubResource("Resource_body")
+Muzzle = SubResource("Resource_muzzle")
+Impact = SubResource("Resource_impact")

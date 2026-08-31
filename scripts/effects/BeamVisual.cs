@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 /// <summary>
@@ -10,20 +11,36 @@ using Godot;
 /// вызовы <see cref="Strike"/> и <see cref="Release"/>. То же разделение, что у вспышки
 /// выстрела, — узел изображения не разыскивает события сам.
 ///
+/// САМ УЗЕЛ НИЧЕГО НЕ РИСУЕТ. Прежде он выводил полосу и вспышки в собственном <c>_Draw</c>,
+/// и на каждый работающий инструмент приходился свой список команд отрисовки. Теперь узел
+/// лишь ведёт своё состояние — точку конца и разгорание, — а изображение всех лучей мира
+/// собирает <see cref="BeamSystem"/> в множественные сетки. Отсюда и учёт: узел вносит себя
+/// в перечень при входе в дерево и снимает при выходе.
+///
 /// НАЧАЛО ЛУЧА ЕСТЬ ПОЛОЖЕНИЕ САМОГО УЗЛА. Отдельной ссылки на точку выхода нет намеренно:
 /// художник ставит узел туда же, где стоит <see cref="ModelTool.Muzzle"/>, и поворот руки
 /// уносит луч вместе с собой, поскольку узел ей потомок.
 ///
 /// ПРЕДПРОСМОТР В РЕДАКТОРЕ. Поле <see cref="PreviewTarget"/> указывает на обычный
 /// <see cref="Marker2D"/> той же сцены: в редакторе луч тянется к нему, и художник
-/// растягивает его мышью, не запуская игру. Своей обработки мыши узел не заводит — маркер
-/// таскается штатными средствами двумерного редактора. В игре поле не читается вовсе.
+/// растягивает его мышью, не запуская игру. Рисуется предпросмотр тем же
+/// <see cref="BeamPainter"/>, что и лучи в игре, поэтому показывает он ровно то, что будет
+/// видно в партии, — вплоть до шейдеров и бега текстуры.
 /// </summary>
 [Tool]
 [GlobalClass]
 public partial class BeamVisual : Node2D
 {
-    /// <summary>Вид луча. Не назначен — узел не рисует ничего.</summary>
+    /// <summary>
+    /// Все лучи, находящиеся в дереве игры. Перечень ведётся самими узлами, а читает его
+    /// <see cref="BeamSystem"/>: лучи не являются сущностями мира и в <c>Index</c> не входят,
+    /// а разыскивать их обходом дерева каждый кадр значило бы обходить все модели разом.
+    ///
+    /// Узлы редактора сюда не попадают: там ни сессии, ни системы нет.
+    /// </summary>
+    internal static readonly List<BeamVisual> Live = new();
+
+    /// <summary>Вид луча. Не назначен — луч не рисуется.</summary>
     [Export] public BeamStyle Style { get; set; }
 
     /// <summary>
@@ -46,10 +63,23 @@ public partial class BeamVisual : Node2D
     /// <summary>Отсчёт для пульсации и бега текстуры, секунд.</summary>
     private float _time;
 
-    private Material _applied;
+    /// <summary>Отрисовщик предпросмотра. Только в редакторе; в игре лучи рисует система.</summary>
+    private BeamPainter _preview;
 
-    /// <summary>Луч сейчас нарисован. Нужен ради одной последней перерисовки при гашении.</summary>
-    private bool _lit;
+    /// <summary>Вид, под который собран предпросмотр. Сменился — отрисовщик пересобирается.</summary>
+    private BeamStyle _previewed;
+
+    /// <summary>Начало луча в мировых координатах — положение самого узла.</summary>
+    public Vector2 From => GlobalPosition;
+
+    /// <summary>Конец луча в мировых координатах.</summary>
+    public Vector2 To => _target;
+
+    /// <summary>Насколько луч разгорелся. Ноль означает, что рисовать нечего.</summary>
+    public float Power => _power;
+
+    /// <summary>Собственный отсчёт луча: по нему идут пульсация и бег рисунка.</summary>
+    public float Time => _time;
 
     /// <summary>
     /// Тянуть луч к точке. Зовётся каждый кадр, пока работа идёт: точка движется вместе
@@ -65,23 +95,12 @@ public partial class BeamVisual : Node2D
     /// <summary>Погасить луч. Гаснет не мгновенно — см. <see cref="BeamStyle.FadeTime"/>.</summary>
     public void Release() => _held = false;
 
-    public override void _Ready()
+    /// <summary>
+    /// Продвинуть разгорание и собственный отсчёт. В игре зовётся системой лучей: порядок
+    /// кадра задаёт планировщик, а не обход дерева нод.
+    /// </summary>
+    public void Advance(double delta)
     {
-        // Видимостью луч не управляется — пока работы нет, узел просто не отдаёт команд
-        // рисования. Признак снимается лишь затем, чтобы луч, спрятанный в сцене при
-        // подборе вида, не остался невидимым в игре. В редакторе не трогаем вовсе:
-        // видимость есть сохраняемое свойство узла, и запись в неё попала бы в файл
-        if (!Engine.IsEditorHint())
-            Visible = true;
-    }
-
-    public override void _Process(double delta)
-    {
-        if (Engine.IsEditorHint())
-            Preview();
-
-        Sync();
-
         float target = _held && Style != null ? 1f : 0f;
         float span = _held ? Style?.RiseTime ?? 0f : Style?.FadeTime ?? 0f;
 
@@ -89,21 +108,63 @@ public partial class BeamVisual : Node2D
             ? Mathf.MoveToward(_power, target, (float)delta / span)
             : target;
 
-        if (_power <= 0f)
-        {
-            // Погасший луч перерисовывается ровно один раз: холст держит последние
-            // отданные команды, и без этого на экране осталась бы прошлая картинка
-            if (!_lit)
-                return;
+        // Отсчёт идёт только у горящего луча: у погасшего он всё равно ни на что не влияет,
+        // а без остановки набегал бы за партию до величин, теряющих точность
+        if (_power > 0f)
+            _time += (float)delta;
+    }
 
-            _lit = false;
-            QueueRedraw();
+    public override void _EnterTree()
+    {
+        if (!Engine.IsEditorHint())
+            Live.Add(this);
+    }
+
+    public override void _ExitTree()
+    {
+        Live.Remove(this);
+        DropPreview();
+    }
+
+    public override void _Ready()
+    {
+        // Видимостью луч не управляется: пока работы нет, система просто не отдаёт его сеткам
+        // ни одного экземпляра. Признак снимается лишь затем, чтобы луч, спрятанный в сцене
+        // при подборе вида, не остался невидимым в игре. В редакторе не трогаем вовсе:
+        // видимость есть сохраняемое свойство узла, и запись в неё попала бы в файл
+        if (!Engine.IsEditorHint())
+            Visible = true;
+        else
+            SetProcess(true);
+    }
+
+    /// <summary>
+    /// Кадр предпросмотра. В игре обработка не ведётся вовсе: и отсчёт, и отрисовку
+    /// закрывает <see cref="BeamSystem"/>.
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        if (!Engine.IsEditorHint())
+        {
+            SetProcess(false);
             return;
         }
 
-        _lit = true;
-        _time += (float)delta;
-        QueueRedraw();
+        Preview();
+        Advance(delta);
+
+        if (!ReferenceEquals(_previewed, Style))
+        {
+            DropPreview();
+            _previewed = Style;
+        }
+
+        if (Style == null)
+            return;
+
+        _preview ??= new BeamPainter(this, Style);
+        _preview.Add(From, To, _power, _time);
+        _preview.Flush();
     }
 
     /// <summary>
@@ -133,97 +194,9 @@ public partial class BeamVisual : Node2D
         Strike(PreviewTarget.GlobalPosition);
     }
 
-    /// <summary>
-    /// Согласовать узел с видом. Вещество принадлежит ресурсу, а стоит на узле, поэтому
-    /// подмену ресурса приходится переносить сюда; сверка по ссылке стоит дешевле записи.
-    /// </summary>
-    private void Sync()
+    private void DropPreview()
     {
-        var material = Style?.Material;
-
-        if (_applied == material)
-            return;
-
-        _applied = material;
-        Material = material;
-
-        // Повтор нужен бегущей текстуре: без него участок за краем изображения тянется
-        // краевым пикселем вместо следующего повтора рисунка
-        TextureRepeat = Style?.Texture != null
-            ? TextureRepeatEnum.Enabled
-            : TextureRepeatEnum.ParentNode;
-    }
-
-    /// <summary>
-    /// Тело луча и вспышки на концах. Рисуется в местных координатах узла, поэтому поворот
-    /// руки учитывается сам собой, а цель переводится в них через <see cref="Node2D.ToLocal"/>.
-    /// </summary>
-    public override void _Draw()
-    {
-        if (Style == null || _power <= 0f)
-            return;
-
-        var to = ToLocal(_target);
-        float length = to.Length();
-
-        if (length < 1f)
-            return;
-
-        // Пульсация — свойство изображения, а не работы: толщина колеблется вокруг заданной,
-        // и от разгорания зависит только непрозрачность
-        float pulse = 1f + Style.PulseDepth * Mathf.Sin(_time * Style.PulseSpeed * Mathf.Tau);
-
-        var color = Style.Color;
-        var glow = color with { A = color.A * Style.GlowAlpha * _power };
-        var core = color.Lerp(Colors.White, 0.55f) with { A = color.A * _power };
-
-        if (Style.Texture != null)
-            Body(to, length, glow with { A = color.A * _power });
-        else if (Style.GlowWidth > 0f)
-            ShapeDraw.Line(this, Vector2.Zero, to,
-                ShapeStyle.Outline(glow, Style.GlowWidth * pulse, WidthMode.MinScreen));
-
-        if (Style.CoreWidth > 0f)
-            ShapeDraw.Line(this, Vector2.Zero, to,
-                ShapeStyle.Outline(core, Style.CoreWidth * pulse, WidthMode.MinScreen));
-
-        Cap(Vector2.Zero, Style.MuzzleRadius * pulse, core, glow);
-        Cap(to, Style.ImpactRadius * pulse, core, glow);
-    }
-
-    /// <summary>
-    /// Тело луча текстурой: прямоугольник во всю длину, повёрнутый вдоль неё. Рисунок
-    /// повторяется по длине и бежит от среза к цели, поэтому высота текстуры приходится
-    /// на толщину свечения, а ширина задаёт шаг повтора.
-    /// </summary>
-    private void Body(Vector2 to, float length, Color tint)
-    {
-        float width = Mathf.Max(Style.GlowWidth, 1f);
-        var size = Style.Texture.GetSize();
-
-        if (size.X <= 0f || size.Y <= 0f)
-            return;
-
-        // Сколько текселей текстуры приходится на пиксель мира: высота растянута на толщину,
-        // и тот же множитель обязан действовать вдоль, иначе рисунок сомнётся
-        float scale = size.Y / width;
-        float offset = -_time * Style.TextureScroll * scale;
-
-        DrawSetTransform(Vector2.Zero, to.Angle());
-        DrawTextureRectRegion(Style.Texture,
-            new Rect2(0f, -width * 0.5f, length, width),
-            new Rect2(offset, 0f, length * scale, size.Y),
-            tint);
-        DrawSetTransform(Vector2.Zero);
-    }
-
-    /// <summary>Вспышка на конце луча: ядро внутри, свечение вокруг.</summary>
-    private void Cap(Vector2 at, float radius, Color core, Color glow)
-    {
-        if (radius <= 0f)
-            return;
-
-        ShapeDraw.Circle(this, at, radius, ShapeStyle.Solid(glow));
-        ShapeDraw.Circle(this, at, radius * 0.45f, ShapeStyle.Solid(core));
+        _preview?.Discard();
+        _preview = null;
     }
 }

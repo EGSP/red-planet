@@ -25,6 +25,12 @@ public partial class GraphicsSettings : Resource
 {
     private const string Path = "res://resources/tuning/graphics/graphics.tres";
 
+    /// <summary>Виды запасных лучей по умолчанию, если поля свода пустые.</summary>
+    private const string BuildBeamPath = "res://resources/beams/build_beam.tres";
+
+    /// <inheritdoc cref="BuildBeamPath"/>
+    private const string RepairBeamPath = "res://resources/beams/repair_beam.tres";
+
     /// <summary>Затенение частей модели: тени под корпусом и затемнение по кайме.</summary>
     [Export] public ShadingSettings Shading = new();
 
@@ -36,6 +42,15 @@ public partial class GraphicsSettings : Resource
 
     /// <summary>Вид полосы прочности над повреждённой сущностью.</summary>
     [Export] public HealthBarSettings HealthBar = new();
+
+    /// <summary>
+    /// Вид запасного строительного луча — того, что показывают носители без узла луча
+    /// в модели. См. <see cref="IWorkBeam"/>.
+    /// </summary>
+    [Export] public BeamStyle BuildBeam;
+
+    /// <summary>Вид запасного ремонтного луча.</summary>
+    [Export] public BeamStyle RepairBeam;
 
     /// <summary>
     /// Вид метки выделения у постройки. Отдельный свод, а не общий с ходящими: изображение
@@ -89,6 +104,8 @@ public partial class GraphicsSettings : Resource
         settings.UnitMark ??= new SelectionSettings();
         settings.StructureMark ??= new SelectionSettings();
         settings.HealthBar ??= new HealthBarSettings();
+        settings.BuildBeam ??= BeamStyle.Fallback<BeamStyle>(BuildBeamPath);
+        settings.RepairBeam ??= BeamStyle.Fallback<BeamStyle>(RepairBeamPath);
         return settings;
     }
 
@@ -106,4 +123,10 @@ public partial class GraphicsSettings : Resource
 
     /// <summary>Настройки полосы прочности действующего свода.</summary>
     public static HealthBarSettings Bars => Active.HealthBar;
+
+    /// <summary>Вид запасного строительного луча действующего свода.</summary>
+    public static BeamStyle BuildBeamStyle => Active.BuildBeam;
+
+    /// <summary>Вид запасного ремонтного луча действующего свода.</summary>
+    public static BeamStyle RepairBeamStyle => Active.RepairBeam;
 }
