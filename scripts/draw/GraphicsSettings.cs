@@ -2,8 +2,8 @@ using Godot;
 
 /// <summary>
 /// Настройка графики: свод подсистем, каждая из которых отвечает за один приём подачи.
-/// Сейчас их четыре — затенение частей модели, вид каркаса стройки и две метки выделения,
-/// у ходящих сущностей и у построек.
+/// Сейчас их пять — затенение частей модели, вид каркаса стройки, две метки выделения,
+/// у ходящих сущностей и у построек, и полоса прочности.
 ///
 /// ОТКУДА БЕРЁТСЯ ДЕЙСТВУЮЩИЙ СВОД. Основной источник — поле
 /// <see cref="GameManager.GraphicsTuning"/>: сессия объявляет свои настройки явно, как она
@@ -33,6 +33,9 @@ public partial class GraphicsSettings : Resource
 
     /// <summary>Вид метки выделения у ходящей сущности.</summary>
     [Export] public SelectionSettings UnitMark = new();
+
+    /// <summary>Вид полосы прочности над повреждённой сущностью.</summary>
+    [Export] public HealthBarSettings HealthBar = new();
 
     /// <summary>
     /// Вид метки выделения у постройки. Отдельный свод, а не общий с ходящими: изображение
@@ -85,6 +88,7 @@ public partial class GraphicsSettings : Resource
         settings.Construction ??= new ConstructionSettings();
         settings.UnitMark ??= new SelectionSettings();
         settings.StructureMark ??= new SelectionSettings();
+        settings.HealthBar ??= new HealthBarSettings();
         return settings;
     }
 
@@ -99,4 +103,7 @@ public partial class GraphicsSettings : Resource
 
     /// <summary>Настройки метки выделения постройки действующего свода.</summary>
     public static SelectionSettings StructureSelection => Active.StructureMark;
+
+    /// <summary>Настройки полосы прочности действующего свода.</summary>
+    public static HealthBarSettings Bars => Active.HealthBar;
 }

@@ -17,10 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-
-
-
-
+McpInteractionServer="*res://mcp_interaction_server.gd"
 Content="*res://scripts/data/Content.cs"
 
 [dotnet]

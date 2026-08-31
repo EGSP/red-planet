@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="HealthBarSettings" format=3]
+
+[ext_resource type="Script" path="res://scripts/draw/HealthBarSettings.cs" id="1_health_bar"]
+[ext_resource type="Material" path="res://resources/materials/health_bar.tres" id="2_material"]
+
+[resource]
+script = ExtResource("1_health_bar")
+Enabled = true
+Material = ExtResource("2_material")
+Height = 5.0
+FullEnough = 0.999

@@ -18,8 +18,8 @@
 /// файл из двух. Из этого следует и правило для систем: сторону надо спрашивать у сущности,
 /// а не выводить из того, в каком разрезе она нашлась.
 /// </summary>
-public partial class Unit : Entity, IFacing, IDamageable, IArmed, IEconomyActor, IVision,
-    IRepairable, IOrderable, IWorker, IMobile
+public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed, IEconomyActor,
+    IVision, IRepairable, IOrderable, IWorker, IMobile
 {
     /// <summary>
     /// Определение. Ставит Spawner при создании: узел юнита собственной сцены не имеет,
@@ -224,6 +224,12 @@ public partial class Unit : Entity, IFacing, IDamageable, IArmed, IEconomyActor,
 
     public float VisionRadius => Definition?.VisionRadiusPx ?? 0f;
 
+    /// <summary>Ширина полосы прочности: чуть шире корпуса — см. <see cref="IHealthMarked"/>.</summary>
+    public float HealthBarWidth => HitRadius * 2.4f;
+
+    /// <summary>Подъём полосы прочности: над корпусом с постоянным зазором.</summary>
+    public float HealthBarLift => HitRadius + 10f;
+
     /// <summary>
     /// Курс ремонта. Раньше его приходилось складывать из двух определений — прочность
     /// брать из одного, цену из другого, — потому что юнит описывался двумя файлами.
@@ -304,17 +310,16 @@ public partial class Unit : Entity, IFacing, IDamageable, IArmed, IEconomyActor,
     }
 
     /// <summary>
-    /// Пометки поверх корпуса: полоса прочности и луч к узлу работы. Без модели их рисует
-    /// сам юнит в конце <see cref="_Draw"/>, с моделью — слой, идущий следом за ней.
+    /// Пометки поверх корпуса: луч к узлу работы. Без модели их рисует сам юнит в конце
+    /// <see cref="_Draw"/>, с моделью — слой, идущий следом за ней.
+    ///
+    /// Полосы прочности здесь нет: она лежит в общей множественной сетке всего мира —
+    /// см. <see cref="HealthBarSystem"/>.
     /// </summary>
     private void PaintMarks(CanvasItem canvas)
     {
         if (Definition == null)
             return;
-
-        float radius = Definition.RadiusPx;
-
-        HealthBar.Draw(canvas, Health, radius * 2.4f, -radius - 10f, Rotation);
 
         // Луч к узлу работы — это «работа идёт», а не приказ: очередь рисует оверлей.
         // Запасное изображение: вид, объявивший в модели луч, рисует его сам

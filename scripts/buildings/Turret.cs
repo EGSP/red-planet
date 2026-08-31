@@ -147,15 +147,4 @@ public partial class Turret : Building, IArmed
 
         PaintMarks(this);
     }
-
-    /// <summary>
-    /// Полоса прочности башни. Она разворачивается вместе с осью башни, поэтому
-    /// <see cref="Building.PaintMarks"/> здесь заменяется целиком: место турели — всегда
-    /// одна клетка, а поворот полосы задан явно.
-    /// </summary>
-    protected override void PaintMarks(CanvasItem canvas)
-    {
-        float half = Const.Unit * 0.5f;
-        HealthBar.Draw(canvas, Health, Const.Unit * 0.9f, -half - 10f, Rotation);
-    }
 }

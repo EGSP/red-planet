@@ -13,11 +13,25 @@ using Godot;
 /// от её вращения шевелиться не должен. Поэтому угол корпуса — отдельное число,
 /// а поворот при отрисовке применяется правкой трансформа канвы.
 /// </summary>
-public partial class Building : Entity, IFacing, IDamageable, IEconomyActor, IVision, IRepairable,
-    IOrderable, IObstacle
+public partial class Building : Entity, IFacing, IDamageable, IHealthMarked, IEconomyActor,
+    IVision, IRepairable, IOrderable, IObstacle
 {
     public int Id { get; private set; }
     public UnitDefinition Definition { get; private set; }
+
+    /// <summary>
+    /// Ширина полосы прочности: по занятому месту, а не по радиусу попадания — у постройки
+    /// габарит задан клетками. См. <see cref="IHealthMarked"/>.
+    /// </summary>
+    public float HealthBarWidth => FootprintSize.X * 0.9f;
+
+    /// <summary>Подъём полосы прочности: над верхним краем занятого места.</summary>
+    public float HealthBarLift => FootprintSize.Y * 0.5f + 8f;
+
+    /// <summary>Занятое место в мировых пикселях. Пустое определение даёт одну клетку.</summary>
+    private Vector2 FootprintSize => Definition == null
+        ? Vector2.One * Const.Unit
+        : new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
 
     /// <summary>Угол корпуса, под которым постройку поставили. Ось занимаемого места.</summary>
     public float BodyFacing { get; private set; }
@@ -161,20 +175,19 @@ public partial class Building : Entity, IFacing, IDamageable, IEconomyActor, IVi
     }
 
     /// <summary>
-    /// Пометки поверх корпуса: полоса прочности и всё, что добавляют наследники.
-    /// Без модели рисуются самой постройкой в конце <see cref="_Draw"/>, с моделью —
-    /// слоем <see cref="_marks"/>, который идёт следом за ней.
+    /// Пометки поверх корпуса: всё, что добавляют наследники. Без модели рисуются самой
+    /// постройкой в конце <see cref="_Draw"/>, с моделью — слоем <see cref="_marks"/>,
+    /// который идёт следом за ней.
     ///
     /// Базис слоя не повёрнут на угол корпуса: пометки читаются с экрана, и в
     /// <see cref="_Draw"/> перед ними поворот тоже снимается.
+    ///
+    /// У самой постройки пометок не осталось: полоса прочности лежит в общей множественной
+    /// сетке всего мира (<see cref="HealthBarSystem"/>). Метод сохранён точкой расширения —
+    /// наследники добавляют к нему свои подписи и указатели.
     /// </summary>
     protected virtual void PaintMarks(CanvasItem canvas)
     {
-        if (Definition == null)
-            return;
-
-        var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
-        HealthBar.Draw(canvas, Health, size.X * 0.9f, -size.Y * 0.5f - 8f);
     }
 
     /// <summary>

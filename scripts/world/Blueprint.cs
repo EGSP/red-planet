@@ -19,9 +19,23 @@ using Godot;
 /// производит, поэтому приказ стоит на голове его очереди всё время стройки — и потому же
 /// он виден игроку в очереди приказов сразу после назначения.
 /// </summary>
-public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObstacle,
-    IOrderable, IProducer
+public partial class Blueprint : WorkNode, IFacing, IDamageable, IHealthMarked, IVision,
+    IObstacle, IOrderable, IProducer
 {
+    /// <summary>Ширина полосы прочности: по занятому месту — см. <see cref="IHealthMarked"/>.</summary>
+    public float HealthBarWidth => FootprintSize.X * 0.9f;
+
+    /// <summary>
+    /// Подъём полосы прочности. Выше, чем у готовой постройки: над каркасом идёт подпись
+    /// с долей готовности, и полоса не должна её перекрывать.
+    /// </summary>
+    public float HealthBarLift => FootprintSize.Y * 0.5f + 20f;
+
+    /// <summary>Занятое место в мировых пикселях. Пустое определение даёт одну клетку.</summary>
+    private Vector2 FootprintSize => Definition == null
+        ? Vector2.One * Const.Unit
+        : new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
+
     public UnitDefinition Definition { get; private set; }
     public float Progress { get; private set; }
 
@@ -425,7 +439,8 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
     }
 
     /// <summary>
-    /// Пометки поверх каркаса: контур занимаемого места, подписи и полоса прочности.
+    /// Пометки поверх каркаса: контур занимаемого места и подписи. Полоса прочности лежит
+    /// в общей множественной сетке всего мира — см. <see cref="HealthBarSystem"/>.
     /// Рисуются слоем <see cref="BlueprintLayer.Slot.Marks"/>, который идёт после модели,
     /// поэтому контур не закрывается корпусом, выходящим за габарит.
     ///
@@ -450,7 +465,5 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IVision, IObsta
             canvas.DrawString(font, new Vector2(rect.Position.X, rect.End.Y + 16f),
                 $"строителей: {WorkerCount} ({TotalPower:0.#}/с)",
                 HorizontalAlignment.Left, -1, 11, new Color(0.8f, 0.9f, 1f));
-
-        HealthBar.Draw(canvas, Health, size.X * 0.9f, rect.Position.Y - 20f);
     }
 }
