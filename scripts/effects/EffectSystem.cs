@@ -41,11 +41,15 @@ public partial class EffectSystem : GameSystem
     [Export] public PackedScene Impact { get; set; }
 
     /// <summary>
-    /// Сколько вспышек попадания держать наготове. Набор кольцевой: попадания идут часто
-    /// и коротко, поэтому поднимать сцену на каждое и освобождать её следом дороже, чем
-    /// перезапускать давно отыгравшую.
+    /// Сколько частиц вмещает одно общее поле — см. <see cref="ParticleField"/>. Запас
+    /// кольцевой: когда вбросов приходит больше, новые частицы вытесняют самые старые.
+    ///
+    /// ЧИСЛО ОБЩЕЕ НА ВСЕ ПОЛЯ, а не своё у каждого, поскольку поле заводится по признаку
+    /// материала, а не по роду события: разделять запас искр попадания и запас дыма
+    /// значило бы подписывать одно и то же число дважды. Полей немного — по одному
+    /// на различный материал частиц, — поэтому общий запас обходится дёшево.
     /// </summary>
-    [Export] public int ImpactPool { get; set; } = 24;
+    [Export] public int FieldCapacity { get; set; } = 1024;
 
     /// <summary>
     /// Взрыв при гибели. Общий на все виды — и на юниты, и на постройки: разные взрывы
@@ -55,17 +59,6 @@ public partial class EffectSystem : GameSystem
     [Export] public PackedScene Explosion { get; set; }
 
     /// <summary>
-    /// Сколько взрывов держать наготове.
-    ///
-    /// НАБОР ОБЩИЙ СО ВЗРЫВАМИ ОБЛАСТИ, поскольку он заводится на сцену, а сцена у них
-    /// обыкновенно одна и та же (см. <see cref="CombatSettings.SplashEffect"/>). Поэтому
-    /// число выведено не из частоты гибели, а из частоты стрельбы фугасным оружием:
-    /// десяток антов даёт по разрыву на каждый выстрел, и набора на восемь штук хватало бы
-    /// меньше чем на секунду, обрывая уже идущие взрывы.
-    /// </summary>
-    [Export] public int ExplosionPool { get; set; } = 24;
-
-    /// <summary>
     /// Сколько отметин копоти держать на карте — см. <see cref="ScorchField.Capacity"/>.
     /// Задаётся здесь потому, что слой отпечатков поднимается этой системой: собственного
     /// узла в сцене сессии у него нет, как нет его и у вспышек попадания.
@@ -73,51 +66,50 @@ public partial class EffectSystem : GameSystem
     [Export] public int ScorchCapacity { get; set; } = 96;
 
     /// <summary>
-    /// Связка «узел частиц — его носитель». Смещение и угол запомнены в системе координат
-    /// носителя в тот миг, когда узел ещё лежал в модели: после переноса на слой мира
-    /// спросить их уже не у кого.
+    /// Связка «поток пыли — его носитель». Смещение и угол сняты запеканием в системе
+    /// координат корпуса; узла частиц здесь нет вовсе, поскольку выпускает их общее поле.
     /// </summary>
     private sealed class Trail
     {
-        public MovementParticles Node;
+        public EffectBake Effect;
         public IMobile Owner;
         public Vector2 Offset;
         public float Angle;
 
-        /// <summary>Сколько секунд носитель стоит. Гасит выдачу по <c>StopDelay</c>.</summary>
-        public float Idle;
-
         /// <summary>
-        /// Что уже записано в узел: место, угол и доля выдачи. Стоящая машина получает
-        /// одни и те же значения кадр за кадром, а Godot сравнивает их у себя, то есть
-        /// уже после перехода границы C#↔Godot. Первая запись проходит сама собой:
-        /// значения начинаются с NaN, который не равен ничему, в том числе себе.
+        /// Дробный остаток потока по каждой части эффекта. За кадр частиц выходит меньше
+        /// одной, и без накопления остатка поток либо не пошёл бы вовсе, либо шёл бы
+        /// вдесятеро гуще — см. <see cref="ParticleYard.Stream"/>.
         /// </summary>
-        public Vector2 Spot = new(float.NaN, float.NaN);
+        public float[] Debts;
 
-        public float Facing = float.NaN;
-
-        public float Ratio = float.NaN;
-    }
-
-    /// <summary>Вспышка выстрела, найденная у части-инструмента, с ключом её инструмента.</summary>
-    private readonly struct Flash
-    {
-        public readonly string ToolId;
-        public readonly BurstParticles Node;
-
-        public Flash(string toolId, BurstParticles node)
-        {
-            ToolId = toolId;
-            Node = node;
-        }
     }
 
     /// <summary>
-    /// Узлы, потерявшие носителя. Освобождаются не сразу: выпущенная пыль обязана дожить
-    /// свой срок, иначе облако исчезает вместе с погибшей машиной.
+    /// Вспышка выстрела при стволе: ключ инструмента, запечённый эффект и место вспышки
+    /// в осях самой части.
+    ///
+    /// ССЫЛКА НА ЧАСТЬ НУЖНА ПОТОМУ, ЧТО СТВОЛ ПОВОРАЧИВАЕТСЯ ОТДЕЛЬНО ОТ КОРПУСА.
+    /// Узла вспышки, который прежде ездил вместе со стволом сам собой, больше нет,
+    /// и преобразование приходится спрашивать у части в миг выстрела.
     /// </summary>
-    private readonly List<(Node2D Node, float Left)> _fading = new();
+    private readonly struct Flash
+    {
+        public readonly string ToolId;
+        public readonly Node2D Part;
+        public readonly EffectBake Effect;
+        public readonly Vector2 Offset;
+        public readonly float Angle;
+
+        public Flash(string toolId, Node2D part, ModelBake.Emitter emitter)
+        {
+            ToolId = toolId;
+            Part = part;
+            Effect = emitter.Effect;
+            Offset = emitter.Offset;
+            Angle = emitter.Angle;
+        }
+    }
 
     private readonly Dictionary<object, List<Trail>> _trails = new(ByReference.Instance);
 
@@ -126,7 +118,7 @@ public partial class EffectSystem : GameSystem
     /// <summary>
     /// Вспышка попадания, объявленная у ствола: ключ его инструмента, сцена и размер.
     /// Хранится ссылкой на сцену, а не узлом: разрыв случается там, где ни модели,
-    /// ни носителя нет, и играть его будет общий набор готовых экземпляров.
+    /// ни носителя нет, и частицы для него выпустит общее поле.
     /// </summary>
     private readonly struct Blow
     {
@@ -177,19 +169,15 @@ public partial class EffectSystem : GameSystem
     private readonly List<Burial> _closed = new();
     private readonly List<Delayed> _delayed = new();
 
-    /// <summary>Готовые экземпляры одноразовых эффектов, по набору на сцену.</summary>
-    private sealed class Pool
-    {
-        public BurstParticles[] Items;
-        public int Next;
-    }
-
-    private readonly Dictionary<PackedScene, Pool> _pools = new();
+    /// <summary>Общие поля частиц — см. <see cref="ParticleYard"/>.</summary>
+    private ParticleYard _yard;
 
     private ScorchField _scorch;
 
     protected override void OnLink()
     {
+        _yard = new ParticleYard(GM, FieldCapacity);
+
         GM.Index.Watch<IMobile>(OnMobileAdded, OnMobileRetired, this);
         GM.Index.Watch<IArmed>(OnArmedAdded, OnArmedRetired, this);
         GM.Index.Watch<IDamageable>(OnDeadlyAdded, OnDeadlyRetired, this);
@@ -235,80 +223,68 @@ public partial class EffectSystem : GameSystem
             foreach (var trail in trails)
                 Advance(trail, dt);
 
-        Fade(dt);
         Await(dt);
     }
 
     // ── ход: пыль из-под корпуса ──────────────────────────────────────────────────
 
     /// <summary>
-    /// Подвижная сущность вошла в мир: собрать в её модели узлы частиц хода и перенести
-    /// их на слой наземных эффектов.
+    /// Подвижная сущность вошла в мир: завести потоки пыли по тому, что снято с её модели.
+    ///
+    /// УЗЛОВ ЧАСТИЦ ЗДЕСЬ БОЛЬШЕ НЕ ИЩУТ. Запекание сняло их со сцены модели и оставило
+    /// от них настройки рождения (<see cref="ModelBake.Trails"/>), поэтому вошедшая машина
+    /// не приносит с собой ни одного узла выдачи — пыль всех машин выпускает одно общее
+    /// поле.
     /// </summary>
     private void OnMobileAdded(IMobile mobile)
     {
         if (mobile is not Node2D carrier || !Alive.Is(carrier))
             return;
 
-        var found = new List<MovementParticles>();
-        Collect(carrier, found);
+        var found = Model(carrier)?.Bake?.Trails;
 
-        if (found.Count == 0)
+        if (found == null || found.Length == 0)
             return;
 
-        var trails = new List<Trail>(found.Count);
+        var trails = new List<Trail>(found.Length);
 
-        foreach (var node in found)
+        foreach (var item in found)
         {
-            // Смещение снимается ДО переноса: после него узел уже не потомок носителя
-            var local = carrier.GlobalTransform.AffineInverse() * node.GlobalTransform;
+            if (item.Effect == null || item.Effect.Parts.Length == 0)
+                continue;
 
             trails.Add(new Trail
             {
-                Node = node,
+                Effect = item.Effect,
                 Owner = mobile,
-                Offset = local.Origin,
-                Angle = local.Rotation,
+                Offset = item.Offset,
+                Angle = item.Angle,
+                Debts = new float[item.Effect.Parts.Length],
             });
-
-            Detach(node);
         }
 
-        _trails[mobile] = trails;
+        if (trails.Count > 0)
+            _trails[mobile] = trails;
     }
 
     /// <summary>
-    /// Носитель выбыл. Поля его ноды здесь читать нельзя — движок обычно уже освободил
-    /// обёртку, — поэтому опознание идёт только по ссылке, а всё нужное лежит в связке.
+    /// Носитель выбыл. Досчитывать здесь нечего: выпущенная пыль живёт в общем поле и своё
+    /// доживает сама, а связка держала лишь настройки потока.
     /// </summary>
-    private void OnMobileRetired(IMobile mobile)
-    {
-        if (!_trails.Remove(mobile, out var trails))
-            return;
-
-        foreach (var trail in trails)
-        {
-            if (!Alive.Is(trail.Node))
-                continue;
-
-            trail.Node.Emitting = false;
-            _fading.Add((trail.Node, (float)trail.Node.Lifetime));
-        }
-    }
+    private void OnMobileRetired(IMobile mobile) => _trails.Remove(mobile);
 
     /// <summary>
-    /// Шаг одной связки: положение по носителю, плотность по скорости.
+    /// Шаг одного потока: место по носителю, густота по скорости.
     ///
-    /// ПЛОТНОСТЬ, А НЕ ВКЛЮЧЕНИЕ. <see cref="GpuParticles2D.Emitting"/> при обратном
-    /// включении начинает выдачу заново, поэтому мигать им на каждом шаге нельзя:
-    /// разгон и остановка выражаются долей <c>AmountRatio</c>, а само включение снимается
-    /// только после того, как носитель простоял <c>StopDelay</c>.
+    /// ГУСТОТА, А НЕ ВКЛЮЧЕНИЕ. Прежде поток включался и выключался признаком выдачи узла,
+    /// и переступающая в толпе машина мигала бы пылью на каждом шаге; ради этого держалась
+    /// задержка после остановки. Теперь частота вброса прямо пропорциональна доле разгона:
+    /// стоящая машина не даёт частиц вовсе, разгон и торможение видны сами собой,
+    /// а мигать нечему, поскольку включать и выключать больше нечего.
     /// </summary>
     private void Advance(Trail trail, double dt)
     {
-        var node = trail.Node;
-
-        if (!Alive.Is(node) || trail.Owner is not Node2D carrier || !Alive.Is(carrier))
+        if (trail.Owner is not Node2D carrier || !Alive.Is(carrier))
             return;
 
         // Преобразование считается по кэшированным полям сущности, а не узлом: чтение поля
@@ -327,80 +303,16 @@ public partial class EffectSystem : GameSystem
             facing = carrier.GlobalRotation + trail.Angle;
         }
 
-        if (trail.Spot != spot)
-        {
-            trail.Spot = spot;
-            node.GlobalPosition = spot;
-        }
-
-        if (trail.Facing != facing)
-        {
-            trail.Facing = facing;
-            node.GlobalRotation = facing;
-        }
-
+        var bake = trail.Effect;
         float speed = trail.Owner.Movement?.Velocity.Length() ?? 0f;
-        float span = Mathf.Max(node.FullSpeed - node.MinSpeed, 1f);
-        float ratio = Mathf.Clamp((speed - node.MinSpeed) / span, 0f, 1f);
+        float span = Mathf.Max(bake.FullSpeed - bake.MinSpeed, 1f);
+        float ratio = Mathf.Clamp((speed - bake.MinSpeed) / span, 0f, 1f);
 
-        if (trail.Ratio != ratio)
-        {
-            trail.Ratio = ratio;
-            node.AmountRatio = ratio;
-        }
-
-        if (ratio > 0f)
-        {
-            trail.Idle = 0f;
-
-            if (!node.Emitting)
-                node.Emitting = true;
-
+        if (ratio <= 0f)
             return;
-        }
 
-        trail.Idle += (float)dt;
-
-        if (trail.Idle >= node.StopDelay && node.Emitting)
-            node.Emitting = false;
-    }
-
-    /// <summary>Досчитать срок осиротевшим узлам и освободить тех, чья пыль осела.</summary>
-    private void Fade(double dt)
-    {
-        for (int i = _fading.Count - 1; i >= 0; i--)
-        {
-            var (node, left) = _fading[i];
-
-            if (!Alive.Is(node))
-            {
-                _fading.RemoveAt(i);
-                continue;
-            }
-
-            left -= (float)dt;
-
-            if (left > 0f)
-            {
-                _fading[i] = (node, left);
-                continue;
-            }
-
-            _fading.RemoveAt(i);
-            node.QueueFree();
-        }
-    }
-
-    /// <summary>
-    /// Перенести узел на слой наземных эффектов. Частицы обязаны считаться в мировых
-    /// координатах: узел ведётся по носителю вручную, и при местных координатах уже
-    /// выпущенное облако ехало бы вслед за машиной вместо того, чтобы оставаться позади.
-    /// </summary>
-    private void Detach(MovementParticles node)
-    {
-        node.LocalCoords = false;
-        node.GetParent()?.RemoveChild(node);
-        GM.Playground.Add(WorldLayer.GroundEffects, node);
+        for (int i = 0; i < bake.Parts.Length; i++)
+            _yard.Stream(bake.Parts[i], spot, facing, 1f, ratio, dt, ref trail.Debts[i]);
     }
 
     // ── выстрел: вспышка у среза ствола ───────────────────────────────────────────
@@ -427,11 +339,10 @@ public partial class EffectSystem : GameSystem
             if (mount.Weapon == null || mount.Part == null || !Alive.Is(mount.Part))
                 continue;
 
-            var bursts = new List<BurstParticles>();
-            Collect(mount.Part, bursts);
-
-            foreach (var burst in bursts)
-                (found ??= new List<Flash>()).Add(new Flash(mount.Weapon.Id, burst));
+            foreach (var emitter in mount.Part.Flashes)
+                if (emitter.Effect != null)
+                    (found ??= new List<Flash>())
+                        .Add(new Flash(mount.Weapon.Id, mount.Part, emitter));
 
             // Вспышка попадания объявлена внутри той же части и снята запеканием —
             // см. ImpactEffect. Берётся ссылкой на сцену: играть эффект придётся на цели,
@@ -469,8 +380,16 @@ public partial class EffectSystem : GameSystem
             return;
 
         foreach (var flash in flashes)
-            if (flash.ToolId == shot.ToolId && Alive.Is(flash.Node))
-                flash.Node.Play();
+        {
+            if (flash.ToolId != shot.ToolId || !Alive.Is(flash.Part))
+                continue;
+
+            // Место вспышки считается от преобразования ствола: узла, который прежде ездил
+            // вместе с ним сам собой, больше нет
+            var at = flash.Part.GlobalTransform;
+
+            Play(flash.Effect, at * flash.Offset, at.Rotation + flash.Angle, 1f);
+        }
     }
 
     // ── попадание: вспышка на цели ────────────────────────────────────────────────
@@ -483,21 +402,13 @@ public partial class EffectSystem : GameSystem
     {
         // Задетым взрывом вспышка не полагается: у самого взрыва есть свой эффект
         // в середине, и вспышка на каждой цели сверх него дала бы десяток вспышек
-        // на один разрыв, вычерпав при этом набор готовых экземпляров
+        // на один разрыв, вычерпав при этом запас общего поля
         if (hit.FromSplash)
             return;
 
         var (scene, size) = ImpactOf(hit);
-        var burst = Take(scene, ImpactPool);
 
-        if (burst == null)
-            return;
-
-        burst.GlobalPosition = hit.Pos;
-        burst.GlobalRotation = hit.Facing + Mathf.Pi;
-        burst.Scale = Vector2.One * size;
-
-        Play(burst);
+        Play(ParticleBake.Of(scene), hit.Pos, hit.Facing + Mathf.Pi, size);
     }
 
     /// <summary>
@@ -551,7 +462,7 @@ public partial class EffectSystem : GameSystem
     {
         // Оружие со своей вспышкой попадания показало разрыв уже ею: два эффекта в одной
         // точке читаются как сбой, а не как мощный взрыв. Общий взрыв области поэтому
-        // остаётся тем, у кого своей вспышки нет, — и тем поводам, у которых прямого
+        // остаётся тем, у кого своей вспышки нет, — и тем событиям, у которых прямого
         // попадания не было вовсе
         if (Declared(blast.SourceId, blast.ToolId) != null)
             return;
@@ -697,50 +608,32 @@ public partial class EffectSystem : GameSystem
     }
 
     /// <summary>Проиграть взрыв в готовом месте.</summary>
-    private void Fire(PackedScene scene, Vector2 pos, float angle, float size)
-    {
-        var burst = Take(scene, ExplosionPool);
-
-        if (burst == null)
-            return;
-
-        burst.GlobalPosition = pos;
-        burst.GlobalRotation = angle;
-
-        // Экземпляры набора общие, поэтому размер выставляется на каждое проигрывание,
-        // а не один раз при поднятии: прошлый взрыв мог оставить чужой множитель
-        burst.Scale = Vector2.One * Mathf.Max(size, 0.01f);
-
-        Play(burst);
-    }
+    private void Fire(PackedScene scene, Vector2 pos, float angle, float size) =>
+        Play(ParticleBake.Of(scene), pos, angle, Mathf.Max(size, 0.01f));
 
     /// <summary>
     /// Проиграть одноразовый эффект и оставить след, если он объявлен.
     ///
-    /// ПОЧЕМУ ОТМЕТИНУ СТАВИТ СИСТЕМА, А НЕ САМ ЭФФЕКТ. Узел
-    /// <see cref="ScorchStamp"/> — объявление, а не действие: про слой отпечатков и про
-    /// мир вокруг он не знает ничего, как и вспышка выстрела не знает, из какого ствола
+    /// ПОЧЕМУ ОТМЕТИНУ СТАВИТ СИСТЕМА, А НЕ САМ ЭФФЕКТ. Объявление отметины
+    /// (<see cref="ScorchStamp"/>) есть описание, а не действие: про слой отпечатков и про
+    /// мир вокруг оно не знает ничего, как и вспышка выстрела не знает, из какого ствола
     /// вышла. Отсюда общее следствие: отметину оставляет любой эффект, в котором штамп
-    /// положен, — и гибель, и попадание, — а различать поводы здесь не нужно вовсе.
+    /// положен, — и гибель, и попадание, — а различать события здесь не нужно вовсе.
+    ///
+    /// РАЗМЕР ОТМЕТИНЫ РАСТЁТ ВМЕСТЕ С ЭФФЕКТОМ: множитель, объявленный в модели, растит
+    /// и частицы, и пятно под ними, поэтому взрыв титана оставляет след шире, чем взрыв
+    /// бота, без второго числа в объявлении.
     /// </summary>
-    private void Play(BurstParticles burst)
+    private void Play(EffectBake bake, Vector2 spot, float facing, float size)
     {
-        burst.Play();
+        if (bake == null)
+            return;
 
-        foreach (var stamp in burst.Stamps)
-        {
-            if (!Alive.Is(stamp) || stamp.Decal == null)
-                continue;
+        _yard.Play(bake, spot, facing, size);
 
-            // Положение снимается у самого штампа: художник кладёт его со смещением,
-            // когда пятно не совпадает с началом эффекта. Размер берётся с учётом
-            // мирового масштаба узла, поэтому множитель размера взрыва, заданный
-            // в модели, растит и пятно под ним
-            float size = Mathf.Abs(stamp.GlobalScale.X);
-
-            Scorch()?.Stamp(stamp.Decal, stamp.GlobalPosition,
+        foreach (var stamp in bake.Stamps)
+            Scorch()?.Stamp(stamp.Decal, spot + stamp.Offset.Rotated(facing) * size,
                 stamp.MinSize * size, stamp.MaxSize * size);
-        }
     }
 
     /// <summary>
@@ -761,48 +654,6 @@ public partial class EffectSystem : GameSystem
         return _scorch;
     }
 
-    // ── наборы готовых эффектов ───────────────────────────────────────────────────
-
-    /// <summary>
-    /// Очередной экземпляр эффекта из набора. Набор поднимается при первом обращении
-    /// к сцене: партия может пройти вовсе без стрельбы либо без потерь, и платить
-    /// за готовые экземпляры заранее незачем.
-    ///
-    /// НАБОР СВОЙ У КАЖДОЙ СЦЕНЫ. Общий набор пришлось бы поднимать по самому длинному
-    /// эффекту и по самому частому поводу разом, то есть держать десятки взрывов ради
-    /// частоты попаданий.
-    /// </summary>
-    private BurstParticles Take(PackedScene scene, int size)
-    {
-        if (scene == null || size <= 0)
-            return null;
-
-        if (!_pools.TryGetValue(scene, out var pool))
-        {
-            var items = new BurstParticles[size];
-
-            for (int i = 0; i < items.Length; i++)
-            {
-                if (scene.Instantiate() is not BurstParticles burst)
-                {
-                    GD.PushWarning($"[EffectSystem] корень сцены {scene.ResourcePath} " +
-                        "не BurstParticles");
-                    return null;
-                }
-
-                items[i] = GM.Playground.Add(WorldLayer.AirEffects, burst);
-            }
-
-            pool = new Pool { Items = items };
-            _pools[scene] = pool;
-        }
-
-        var next = pool.Items[pool.Next];
-        pool.Next = (pool.Next + 1) % pool.Items.Length;
-
-        return Alive.Is(next) ? next : null;
-    }
-
     /// <summary>
     /// Модель сущности. Ищется однажды, при входе в мир: у носителя она одна и лежит
     /// прямо под ним — см. <see cref="UnitModel"/>.
@@ -814,16 +665,5 @@ public partial class EffectSystem : GameSystem
                 return model;
 
         return null;
-    }
-
-    private static void Collect<T>(Node node, List<T> found) where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                found.Add(match);
-
-            Collect(child, found);
-        }
     }
 }

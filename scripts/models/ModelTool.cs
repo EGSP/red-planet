@@ -100,6 +100,13 @@ public partial class ModelTool : Node2D
     /// </summary>
     public ModelBake.Declaration Projectile => Baked?.Projectile;
 
+    /// <summary>
+    /// Вспышки выстрела, снятые запеканием с частиц внутри части. Место и поворот заданы
+    /// в осях самой части — см. <see cref="ModelBake.Emitter"/>.
+    /// </summary>
+    public ModelBake.Emitter[] Flashes =>
+        Baked?.Flashes ?? System.Array.Empty<ModelBake.Emitter>();
+
     private BeamVisual _beam;
     private bool _beamSought;
 

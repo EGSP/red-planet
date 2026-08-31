@@ -145,6 +145,7 @@ public static class ModelBaker
         bake.Body = sweep.Body.ToArray();
         bake.Tools = sweep.Tools.ToArray();
         bake.Deaths = sweep.Deaths.ToArray();
+        bake.Trails = sweep.Trails.ToArray();
 
         Measure(bake);
 
@@ -223,6 +224,9 @@ public static class ModelBaker
         public readonly List<ModelSprite> Body = new();
         public readonly List<ModelBake.Tool> Tools = new();
         public readonly List<ModelBake.Wreck> Deaths = new();
+
+        /// <summary>Пыль хода, снятая с корпуса.</summary>
+        public readonly List<ModelBake.Emitter> Trails = new();
 
         /// <summary>
         /// Всё, что рисуется, вместе со сквозным <c>z_index</c> и номером в обходе дерева.
@@ -397,6 +401,11 @@ public static class ModelBaker
                 // её собственный код со ссылкой на снятый узел
                 if (!string.IsNullOrEmpty(child.SceneFilePath))
                 {
+                    // Сцены частиц снимаются целиком: узлов выдачи в игре не остаётся,
+                    // а от эффекта хранятся снятые с него настройки рождения
+                    if (Strip(child, here))
+                        continue;
+
                     Keep(child, here);
 
                     // Вложенная сцена рисует сама и потому занимает своё место в очереди:
@@ -446,6 +455,15 @@ public static class ModelBaker
                         here.Baked.Muzzle = here.FromAnchor.Origin;
                         Drop(marker, here);
                         break;
+
+                    // Узел частиц, положенный в сцену модели напрямую, а не экземпляром
+                    // своей сцены. Разбирается так же: снимается и запекается
+                    case MovementParticles:
+                    case BurstParticles:
+                        if (Strip(child, here))
+                            break;
+
+                        goto default;
 
                     default:
                         Keep(child, here);
@@ -521,6 +539,63 @@ public static class ModelBaker
 
             if (child is Node2D placed)
                 placed.Transform = at.FromSurvivor;
+        }
+
+        /// <summary>
+        /// Снять с дерева сцену частиц, запомнив её запечённый вид.
+        ///
+        /// ПЫЛЬ ХОДА И ВСПЫШКА ВЫСТРЕЛА РАЗЛИЧАЮТСЯ ЛИШЬ ТЕМ, К ЧЕМУ ПРИВЯЗАНЫ. Пыль
+        /// принадлежит корпусу и хранится в осях корня модели; вспышка принадлежит стволу
+        /// и хранится в осях своей части, поскольку ствол поворачивается отдельно
+        /// от корпуса.
+        ///
+        /// Ложь означает узел, частицами не являющийся: разбор его продолжается обычным
+        /// порядком.
+        /// </summary>
+        private bool Strip(Node child, Spot at)
+        {
+            switch (child)
+            {
+                case MovementParticles dust:
+                    Trails.Add(new ModelBake.Emitter
+                    {
+                        Effect = ParticleBake.Of(dust),
+                        Offset = at.FromRoot.Origin,
+                        Angle = at.FromRoot.Rotation,
+                    });
+
+                    Cut(dust);
+                    return true;
+
+                case BurstParticles flash when at.Baked != null:
+                    var list = new List<ModelBake.Emitter>(at.Baked.Flashes)
+                    {
+                        new()
+                        {
+                            Effect = ParticleBake.Of(flash),
+                            Offset = at.FromAnchor.Origin,
+                            Angle = at.FromAnchor.Rotation,
+                        },
+                    };
+
+                    at.Baked.Flashes = list.ToArray();
+
+                    Cut(flash);
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Снять узел с дерева, не разбирая его поддерева: сцена частиц запечена целиком,
+        /// и её внутренние узлы никуда переносить не нужно.
+        /// </summary>
+        private void Cut(Node2D node)
+        {
+            node.GetParent()?.RemoveChild(node);
+            Dropped.Add(node);
         }
 
         private void Remember(DeathEffect death, Transform2D toRoot)

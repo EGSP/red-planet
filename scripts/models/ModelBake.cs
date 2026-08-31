@@ -46,6 +46,13 @@ public sealed class ModelBake
         /// <summary>Вспышки попадания, объявленные внутри части.</summary>
         public Declaration[] Impacts = System.Array.Empty<Declaration>();
 
+        /// <summary>
+        /// Вспышки выстрела, снятые с частиц внутри части. Место и поворот заданы в осях
+        /// самой части: узлов вспышки в игре не остаётся, и вычислять их положение
+        /// приходится от преобразования ствола — см. <see cref="EffectSystem"/>.
+        /// </summary>
+        public Emitter[] Flashes = System.Array.Empty<Emitter>();
+
         /// <summary>Снаряд, объявленный внутри части. Null — берётся общий.</summary>
         public Declaration Projectile;
     }
@@ -60,6 +67,21 @@ public sealed class ModelBake
     {
         public PackedScene Effect;
         public float Size = 1f;
+    }
+
+    /// <summary>
+    /// Запечённый эффект частиц, лежавший прямо в сцене модели, вместе с его местом.
+    ///
+    /// ЗАЧЕМ СНИМАТЬ ЕГО С ДЕРЕВА. Узел выдачи обходится движку в отдельный вычислительный
+    /// вызов независимо от числа частиц, а пыль хода и вспышка выстрела лежат при каждой
+    /// машине и при каждом стволе. Запекание оставляет от них числа, а частицы выпускает
+    /// общее поле — см. <see cref="ParticleYard"/>.
+    /// </summary>
+    public sealed class Emitter
+    {
+        public EffectBake Effect;
+        public Vector2 Offset;
+        public float Angle;
     }
 
     /// <summary>
@@ -93,6 +115,9 @@ public sealed class ModelBake
 
     /// <summary>Объявленные взрывы гибели.</summary>
     public Wreck[] Deaths = System.Array.Empty<Wreck>();
+
+    /// <summary>Пыль хода, снятая с корпуса. Место и поворот заданы в осях корпуса.</summary>
+    public Emitter[] Trails = System.Array.Empty<Emitter>();
 
     /// <summary>
     /// Габарит изображения в осях модели без слоёв затенения. Считается при запекании:
