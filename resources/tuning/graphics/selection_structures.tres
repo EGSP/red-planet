@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="SelectionSettings" format=3 uid="uid://b8bsxaf1ltd3o"]
+
+[ext_resource type="Script" uid="uid://33mxee6lsrjg" path="res://scripts/draw/SelectionSettings.cs" id="1_selection"]
+[ext_resource type="Texture2D" uid="uid://1y2f1wx1cjli" path="res://assets/sprites/ui/commands/hover_target.png" id="2_texture"]
+[ext_resource type="Material" uid="uid://cxoqinidswmij" path="res://resources/materials/selection_structures.tres" id="3_material"]
+
+[resource]
+script = ExtResource("1_selection")
+Texture = ExtResource("2_texture")
+Material = ExtResource("3_material")
+SourceImagePadding = 0.05
+ScaleOffset = 1.45

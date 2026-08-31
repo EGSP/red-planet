@@ -2,7 +2,8 @@ using Godot;
 
 /// <summary>
 /// Настройка графики: свод подсистем, каждая из которых отвечает за один приём подачи.
-/// Сейчас их две — затенение частей модели и вид каркаса стройки.
+/// Сейчас их четыре — затенение частей модели, вид каркаса стройки и две метки выделения,
+/// у ходящих сущностей и у построек.
 ///
 /// ОТКУДА БЕРЁТСЯ ДЕЙСТВУЮЩИЙ СВОД. Основной источник — поле
 /// <see cref="GameManager.GraphicsTuning"/>: сессия объявляет свои настройки явно, как она
@@ -29,6 +30,16 @@ public partial class GraphicsSettings : Resource
 
     /// <summary>Вид каркаса строящейся постройки.</summary>
     [Export] public ConstructionSettings Construction = new();
+
+    /// <summary>Вид метки выделения у ходящей сущности.</summary>
+    [Export] public SelectionSettings UnitMark = new();
+
+    /// <summary>
+    /// Вид метки выделения у постройки. Отдельный свод, а не общий с ходящими: изображение
+    /// и материал у множественной сетки одни на все её экземпляры, поэтому иная картинка
+    /// постройки означает и иной свод — см. <see cref="SelectionOverlay"/>.
+    /// </summary>
+    [Export] public SelectionSettings StructureMark = new();
 
     private static GraphicsSettings _active;
 
@@ -72,6 +83,8 @@ public partial class GraphicsSettings : Resource
     {
         settings.Shading ??= new ShadingSettings();
         settings.Construction ??= new ConstructionSettings();
+        settings.UnitMark ??= new SelectionSettings();
+        settings.StructureMark ??= new SelectionSettings();
         return settings;
     }
 
@@ -80,4 +93,10 @@ public partial class GraphicsSettings : Resource
 
     /// <summary>Настройки вида каркаса действующего свода.</summary>
     public static ConstructionSettings Building => Active.Construction;
+
+    /// <summary>Настройки метки выделения ходящей сущности действующего свода.</summary>
+    public static SelectionSettings UnitSelection => Active.UnitMark;
+
+    /// <summary>Настройки метки выделения постройки действующего свода.</summary>
+    public static SelectionSettings StructureSelection => Active.StructureMark;
 }

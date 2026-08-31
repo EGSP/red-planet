@@ -2,9 +2,12 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
-/// Очереди приказов поверх мира: кольцо вокруг выделенного, цепочка от него ко всем
-/// целям по порядку и рамка выделения, пока её тянут. Две стратегии: только выделенные
-/// или все свои — переключается клавишей C, как CapsLock в PA.
+/// Очереди приказов поверх мира: цепочка от исполнителя ко всем целям по порядку и рамка
+/// выделения, пока её тянут. Две стратегии: только выделенные или все свои — переключается
+/// клавишей C, как CapsLock в PA.
+///
+/// Сама метка выделения здесь не рисуется: она лежит ПОД сущностью и потому принадлежит
+/// другому слою — см. <see cref="SelectionOverlay"/>.
 ///
 /// ЗАЧЕМ ОТДЕЛЬНОЙ НОДОЙ, а не рисованием у самих юнитов. Во-первых, цепочка должна лежать
 /// поверх всего, а не тонуть под постройками — у своей ноды слой её собственный. Во-вторых,
@@ -23,13 +26,6 @@ public partial class OrderOverlay : Node2D
         var command = GameManager.I?.Command;
         if (command == null)
             return;
-
-        // Кольца — только у выделенных: это метка выбора, а не приказа
-        foreach (var actor in command.Selected)
-        {
-            if (Alive.Is(actor as Node))
-                DrawRing(actor);
-        }
 
         if (command.ShowAllOrders)
         {
@@ -68,15 +64,6 @@ public partial class OrderOverlay : Node2D
         // у него не возникает, и след жеста говорил бы ему о несуществующем распределении
         if (command.State == CommandState.Drawing && command.MoverCount > 1)
             DrawStroke(command.Path, command.Spots(command.MoverCount));
-    }
-
-    private void DrawRing(IOrderable actor)
-    {
-        float radius = ((actor as IDamageable)?.HitRadius ?? Const.Unit * 0.4f) + 6f;
-        float band = 3f;
-
-        ShapeDraw.Ring(this, ToLocal(actor.GlobalPosition), radius - band * 0.5f, radius + band * 0.5f,
-            DrawTheme.Radius(VizKind.Selection), 32);
     }
 
     /// <summary>

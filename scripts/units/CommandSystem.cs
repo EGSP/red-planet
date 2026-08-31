@@ -53,6 +53,7 @@ public partial class CommandSystem : GameSystem
     private CursorSystem _cursor;
     private PlacementGhost _ghost;
     private OrderOverlay _overlay;
+    private SelectionOverlay _marks;
 
     // Служебная графика отладки. Заводится здесь же, где призрак и очереди приказов:
     // все они живут в слоях мира и создаются один раз при сборке площадки
@@ -1587,6 +1588,11 @@ public partial class CommandSystem : GameSystem
 
         if (_overlay == null || !IsInstanceValid(_overlay))
             _overlay = GM.Playground.Add(WorldLayer.Overlay, new OrderOverlay());
+
+        // Метки выделения отделены от очередей приказов не слоем, а материалом: он
+        // задан на ноде и потому обязан быть у неё единственным — см. SelectionOverlay
+        if (_marks == null || !IsInstanceValid(_marks))
+            _marks = GM.Playground.Add(WorldLayer.Overlay, new SelectionOverlay());
 
         if (_paths == null || !IsInstanceValid(_paths))
             _paths = GM.Playground.Add(WorldLayer.Overlay, new PathOverlay());

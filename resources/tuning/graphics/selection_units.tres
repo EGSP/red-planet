@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="SelectionSettings" format=3 uid="uid://dgbypobx5rjn4"]
+
+[ext_resource type="Script" uid="uid://33mxee6lsrjg" path="res://scripts/draw/SelectionSettings.cs" id="1_selection"]
+[ext_resource type="Texture2D" uid="uid://bfsbutkun7f8x" path="res://assets/sprites/ui/commands/hover_friendly.png" id="2_texture"]
+[ext_resource type="Material" uid="uid://c6jdoei1v3pnf" path="res://resources/materials/selection_units.tres" id="3_material"]
+
+[resource]
+script = ExtResource("1_selection")
+Texture = ExtResource("2_texture")
+Material = ExtResource("3_material")
+ScaleOffset = 1.44

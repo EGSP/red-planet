@@ -3,8 +3,12 @@
 [ext_resource type="Script" uid="uid://bmvn8jctk5cfy" path="res://scripts/draw/GraphicsSettings.cs" id="1_graphics"]
 [ext_resource type="Resource" path="res://resources/tuning/graphics/shading.tres" id="2_shading"]
 [ext_resource type="Resource" uid="uid://dmwexragvlww6" path="res://resources/tuning/graphics/construction.tres" id="3_construction"]
+[ext_resource type="Resource" uid="uid://dgbypobx5rjn4" path="res://resources/tuning/graphics/selection_units.tres" id="4_selection_units"]
+[ext_resource type="Resource" uid="uid://b8bsxaf1ltd3o" path="res://resources/tuning/graphics/selection_structures.tres" id="5_selection_structures"]
 
 [resource]
 script = ExtResource("1_graphics")
 Shading = ExtResource("2_shading")
 Construction = ExtResource("3_construction")
+UnitMark = ExtResource("4_selection_units")
+StructureMark = ExtResource("5_selection_structures")
