@@ -301,6 +301,97 @@ public sealed class SpatialGrid<T> where T : class
     }
 
     /// <summary>
+    /// Корзины, которые задевает квадрат радиуса, — без складывания их содержимого куда-либо.
+    ///
+    /// ЗАЧЕМ ОТДЕЛЬНО ОТ <see cref="Collect"/>. Список нужен там, где одну выборку читают
+    /// несколько правил по очереди. Когда правило одно или все они считаются за один проход,
+    /// список есть чистый расход: копирование ссылок в массив с проверкой присваивания плюс
+    /// повторное чтение тех же объектов из памяти. По замеру на одно это копирование уходило
+    /// около двух процентов времени главного потока.
+    ///
+    /// Перечислитель объявлен структурой и роздан вручную, поэтому <c>foreach</c> по нему
+    /// не создаёт объекта в куче: обход соседей идёт по разу на сущность каждый шаг,
+    /// и мусор здесь стоил бы дороже самой работы.
+    /// </summary>
+    public Area Around(Vector2 from, float radius)
+    {
+        if (Count == 0)
+            return default;
+
+        Queries++;
+
+        return new Area(this, ToBucket(from - new Vector2(radius, radius)),
+            ToBucket(from + new Vector2(radius, radius)));
+    }
+
+    /// <summary>Прямоугольник корзин, отдающий их содержимое списками. См. <see cref="Around"/>.</summary>
+    public readonly struct Area
+    {
+        private readonly SpatialGrid<T> _grid;
+        private readonly Vector2I _min;
+        private readonly Vector2I _max;
+
+        internal Area(SpatialGrid<T> grid, Vector2I min, Vector2I max)
+        {
+            _grid = grid;
+            _min = min;
+            _max = max;
+        }
+
+        public Enumerator GetEnumerator() => new(_grid, _min, _max);
+
+        public struct Enumerator
+        {
+            private readonly SpatialGrid<T> _grid;
+            private readonly Vector2I _min;
+            private readonly Vector2I _max;
+
+            private int _x;
+            private int _y;
+
+            internal Enumerator(SpatialGrid<T> grid, Vector2I min, Vector2I max)
+            {
+                _grid = grid;
+                _min = min;
+                _max = max;
+                _x = min.X - 1;
+                _y = min.Y;
+                Current = null;
+            }
+
+            public List<T> Current { get; private set; }
+
+            public bool MoveNext()
+            {
+                if (_grid == null)
+                    return false;
+
+                while (true)
+                {
+                    if (++_x > _max.X)
+                    {
+                        _x = _min.X;
+
+                        if (++_y > _max.Y)
+                            return false;
+                    }
+
+                    int offset = _grid.Offset(_x, _y);
+
+                    if (offset < 0 || _grid._buckets[offset] is not { } bucket)
+                        continue;
+
+                    _grid.Visited++;
+                    _grid.Scanned += bucket.Items.Count;
+
+                    Current = bucket.Items;
+                    return true;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Все сущности из корзин, которые задевает квадрат радиуса, в список вызывающего.
     /// Для запроса «кто рядом», где нужны все: расталкивание, обход соседей, урон по области.
     ///

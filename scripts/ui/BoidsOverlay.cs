@@ -62,12 +62,12 @@ public partial class BoidsOverlay : Node2D
         if (DebugFlags.BoidRadii)
         {
             ShapeDraw.Circle(this, at, radius, DrawTheme.Radius(VizKind.BoidBody), 20);
-            ShapeDraw.Circle(this, at, radius * (movement?.SenseFactor ?? 3.5f),
+            ShapeDraw.Circle(this, at, radius * (movement?.SenseFactor ?? 2.5f),
                 DrawTheme.Radius(VizKind.BoidSense), 40);
         }
 
         if (DebugFlags.BoidNeighbours)
-            DrawNeighbours(mobile, at, radius * (movement?.SenseFactor ?? 3.5f));
+            DrawNeighbours(mobile, at, radius * (movement?.SenseFactor ?? 2.5f));
 
         if (!DebugFlags.BoidForces)
             return;

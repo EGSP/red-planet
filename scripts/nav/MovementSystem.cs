@@ -34,8 +34,27 @@ using Godot;
 /// </summary>
 public partial class MovementSystem : GameSystem
 {
-    /// <summary>Во сколько радиусов сущность замечает соседей.</summary>
+    /// <summary>
+    /// Во сколько радиусов сущность замечает соседей.
+    ///
+    /// Совпадает с <see cref="PushSense"/> намеренно: обход соседей один на всех
+    /// потребителей, и его радиус есть большее из чутья и зоны расхождения. Зона
+    /// расхождения меньше двух с половиной радиусов быть не может — иначе сосед,
+    /// с которым корпуса уже пересеклись, останется незамеченным, — поэтому чутьё
+    /// ниже этой величины перебора не сокращает, а лишь ослабляет локальный слой.
+    /// </summary>
     [Export] public float SenseFactor = 3.5f;
+
+    /// <summary>
+    /// Сколько соседей учитывается, прочие в этом шаге пропускаются. Ноль и меньше
+    /// означают «всех».
+    ///
+    /// ОТБОР ПРОИЗВОЛЕН. Обход идёт по корзинам сетки, то есть в порядке раскладки,
+    /// а не по близости, поэтому предел отбрасывает не далёких, а случайных. Величина
+    /// заведена для опыта: она показывает, насколько поведение толпы вообще зависит
+    /// от полноты выборки, и насколько дорого обходится эта полнота.
+    /// </summary>
+    [Export] public int NeighbourLimit = 1;
 
     [Export] public float AvoidWeight = 1.4f;
 
@@ -63,8 +82,34 @@ public partial class MovementSystem : GameSystem
     /// </summary>
     [Export] public float SaltSide = 0.2f;
 
-    /// <summary>Сколько проходов расталкивания за кадр.</summary>
-    [Export] public int ResolvePasses = 2;
+    /// <summary>
+    /// Во сколько сумм радиусов простирается мягкая зона расталкивания. Внутри неё сущности
+    /// начинают расходиться ЕЩЁ ДО касания, слабой добавкой к сдвигу.
+    ///
+    /// ЗАЧЕМ. Жёсткий порог по сумме радиусов есть ступенька: сосед либо не влияет вовсе,
+    /// либо влияет сразу заметно. Ступенька видна рывком на том кадре, где перекрытие
+    /// возникло, и она же делает исход чувствительным к тому, что положения соседей взяты
+    /// на начало шага. Мягкая зона снимает и то, и другое ценой небольшого постоянного
+    /// зазора между стоящими вплотную.
+    /// </summary>
+    [Export] public float SoftMargin = 1.25f;
+
+    /// <summary>Доля сдвига в мягкой зоне: во сколько раз слабее жёсткого разведения.</summary>
+    [Export] public float SoftPush = 0.25f;
+
+    /// <summary>
+    /// Во сколько радиусов корпуса сущность ищет тех, с кем расталкивается. Величина
+    /// покрывает мягкую зону пары равных: сумма радиусов есть два радиуса, мягкая зона
+    /// растягивает её ещё на четверть.
+    /// </summary>
+    [Export] public float PushSense = 2.5f;
+
+    /// <summary>
+    /// Ниже какого сдвига за шаг расхождение не применяется, пикселей. Порог общий
+    /// для расхождения и для удержания позиции: <c>Movement.Drift</c> ниже него равен нулю,
+    /// и удержание видит, что юнита не двигали, — см. <see cref="Settle"/>.
+    /// </summary>
+    [Export] public float PushFloor = 0.5f;
 
     /// <summary>Сколько секунд без продвижения считается застреванием.</summary>
     [Export] public float StuckTimeout = 1.5f;
@@ -76,12 +121,50 @@ public partial class MovementSystem : GameSystem
     [Export] public float ExitTimeout = 5f;
 
     private readonly List<IMobile> _actors = new();
-    private readonly List<IMobile> _nearby = new();
     private readonly List<Obb> _walls = new();
     private readonly BoidSalt _salt = new();
 
+    /// <summary>
+    /// Снимок скоростей и положений на начало шага, по порядковым номерам из <see cref="Collect"/>.
+    ///
+    /// ЗАЧЕМ СНИМОК. Обход соседей читает их скорости — выравнивание складывает их, а
+    /// расталкивание предсказывает по ним положение к концу шага. Скорость же назначается
+    /// в этом самом обходе, поэтому без снимка сущность видела бы у соседей с меньшим номером
+    /// новые скорости, а у прочих — старые, и исход зависел бы от порядка обхода. Снимок
+    /// делает фазу порядко-независимой, а тем самым и пригодной к разбиению по потокам.
+    ///
+    /// Положения в этой фазе никто не правит, поэтому они читаются прямо у сущностей;
+    /// снимок положений нужен лишь для того, чтобы в конце шага измерить пройденное.
+    /// </summary>
+    private Vector2[] _velocity = System.Array.Empty<Vector2>();
+
+    private Vector2[] _before = System.Array.Empty<Vector2>();
+
+    /// <summary>Предсказанное к концу шага положение — по нему меряется перекрытие.</summary>
+    private Vector2[] _ahead = System.Array.Empty<Vector2>();
+
+    /// <summary>Радиус корпуса. У юнита это свойство идёт через определение, здесь — поле.</summary>
+    private float[] _radius = System.Array.Empty<float>();
+
+    /// <summary>
+    /// Собственная доля расхождения, накопленная за обход соседей. Применяется после
+    /// интегрирования, в <see cref="Settle"/>.
+    /// </summary>
+    private Vector2[] _push = System.Array.Empty<Vector2>();
+
     /// <summary>Сколько слотов соли уже роздано. По нему назначается очередной.</summary>
     private int _salted;
+
+    /// <summary>
+    /// Сколько соседей нашлось в зоне — сумма, наибольшее и число спросивших за шаг.
+    /// Нужно подбору <see cref="NeighbourLimit"/>: без этих чисел предел ставится наугад,
+    /// поскольку кандидатов из корзин впятеро больше, чем соседей в самой зоне.
+    /// </summary>
+    private int _senseSum;
+
+    private int _senseMax;
+
+    private int _senseSeen;
 
     private PathfindingSystem _pathfinding;
     private int _active;
@@ -93,16 +176,22 @@ public partial class MovementSystem : GameSystem
 
     public override void Step(double dt)
     {
-        Collect();
+        Collect(dt);
 
+        _senseSum = 0;
+        _senseMax = 0;
+        _senseSeen = 0;
+
+        // Обход соседей один на шаг: в нём считаются и силы локального слоя, и собственная
+        // доля расхождения. Порядок фаз — см. Steer и Settle
         for (int i = 0; i < _actors.Count; i++)
             Steer(i, dt);
 
         for (int i = 0; i < _actors.Count; i++)
             Integrate(_actors[i], dt);
 
-        for (int pass = 0; pass < ResolvePasses; pass++)
-            Resolve();
+        for (int i = 0; i < _actors.Count; i++)
+            Settle(i, dt);
 
         // Счётчики снимаются до очистки Active: после неё диагностический снимок уже
         // не смог бы отличить двигавшиеся сущности от удерживавших позицию.
@@ -141,7 +230,7 @@ public partial class MovementSystem : GameSystem
     /// Здесь остаётся лишь порядковый номер, по которому пара сущностей расталкивается
     /// один раз, а не дважды.
     /// </summary>
-    private void Collect()
+    private void Collect(double dt)
     {
         _actors.Clear();
         GM.Space.ReadyMobiles();
@@ -165,6 +254,32 @@ public partial class MovementSystem : GameSystem
             mobile.Movement.Slot = _actors.Count;
             _actors.Add(mobile);
         }
+
+        if (_velocity.Length < _actors.Count)
+        {
+            int size = Mathf.Max(_actors.Count * 2, 64);
+
+            _velocity = new Vector2[size];
+            _before = new Vector2[size];
+            _ahead = new Vector2[size];
+            _radius = new float[size];
+            _push = new Vector2[size];
+        }
+
+        // Предсказанное положение и радиус кладутся в снимок готовыми, а не считаются
+        // в обходе: обход трогает соседа десятки раз за шаг, а сущность здесь — по разу
+        for (int i = 0; i < _actors.Count; i++)
+        {
+            var actor = _actors[i];
+            var at = actor.GlobalPosition;
+            var velocity = actor.Movement.Velocity;
+
+            _velocity[i] = velocity;
+            _before[i] = at;
+            _ahead[i] = at + velocity * (float)dt;
+            _radius[i] = actor.HitRadius;
+            _push[i] = Vector2.Zero;
+        }
     }
 
     // ── управление ────────────────────────────────────────────────────────────────
@@ -175,11 +290,18 @@ public partial class MovementSystem : GameSystem
         var movement = mobile.Movement;
         var definition = mobile.Definition;
 
+        var position = mobile.GlobalPosition;
+        float radius = mobile.HitRadius;
+
         // Выезд из корпуса — до проверки Active: у только что выпущенного юнита приказа
-        // может не быть, и Halt иначе остановил бы его прямо внутри завода
+        // может не быть, и Halt иначе остановил бы его прямо внутри завода.
+        //
+        // Обход соседей делается и здесь, и у остановленного: локальный слой им не нужен,
+        // а расходиться корпусами обязаны все без изъятия
         if (movement.Leaving)
         {
             SteerExit(mobile, movement, definition, dt);
+            Scan(index, mobile, position, radius, Vector2.Zero);
             return;
         }
 
@@ -187,11 +309,9 @@ public partial class MovementSystem : GameSystem
         {
             movement.Settled = false;
             Halt(movement);
+            Scan(index, mobile, position, radius, Vector2.Zero);
             return;
         }
-
-        var position = mobile.GlobalPosition;
-        float radius = mobile.HitRadius;
 
         // Свободное движение пути не запрашивает вовсе: направление берётся прямо на цель,
         // а разойтись с соседями — дело локального слоя. Забытый кеш чистится сам, по сроку
@@ -217,6 +337,7 @@ public partial class MovementSystem : GameSystem
         if (movement.Settled)
         {
             Halt(movement);
+            Scan(index, mobile, position, radius, Vector2.Zero);
             return;
         }
 
@@ -225,21 +346,24 @@ public partial class MovementSystem : GameSystem
         if (seek == Vector2.Zero)
         {
             Halt(movement);
+            Scan(index, mobile, position, radius, Vector2.Zero);
             return;
         }
 
-        Neighbours(mobile, position, radius * SenseFactor);
+        // Единственный обход соседей за шаг: отсюда берутся обход помех, выравнивание,
+        // ослабление курса и доля расхождения
+        var sensed = Scan(index, mobile, position, radius, seek);
 
-        var avoid = Avoidance(mobile, movement, position, seek, radius * SenseFactor);
-        var align = Alignment(mobile, position, radius * SenseFactor);
+        var avoid = AvoidForce(movement, seek, in sensed);
+        var align = AlignForce(in sensed);
         var wall = Walls(movement, position, seek, radius, remaining);
 
         movement.SeekForce = seek;
         movement.AvoidForce = avoid;
         movement.AlignForce = align;
         movement.WallForce = wall;
-        movement.SeekScale = SeekScale(mobile, position, seek, radius);
-        movement.Neighbours = _nearby.Count;
+        movement.SeekScale = sensed.Scale;
+        movement.Neighbours = sensed.Count;
 
         // Веса солятся встречными знаками: так различается не сила локального слоя в целом,
         // а СООТНОШЕНИЕ обхода и выравнивания, то есть само поведение в толпе. Одинаковый
@@ -552,96 +676,288 @@ public partial class MovementSystem : GameSystem
         if (remaining - movement.StopDistance > radius * 3f)
             return false;
 
-        Neighbours(mobile, position, radius * 2.5f);
+        // Обход свой, а не из общего прохода: проверка нужна до того, как выяснится
+        // направление движения, а по обоим условиям выше она почти всегда отсекается
+        // ещё до обращения к сетке
+        int limit = NeighbourLimit > 0 ? NeighbourLimit : int.MaxValue;
+        int seen = 0;
 
-        foreach (var other in _nearby)
+        foreach (var items in GM.Space.ReadyMobiles().Around(position, radius * PushSense))
         {
+            for (int k = 0; k < items.Count && seen < limit; k++)
+            {
+                var other = items[k];
 
-            if (other.Faction != mobile.Faction)
-                continue;
+                if (ReferenceEquals(other, mobile) || other.Movement.Slot < 0)
+                    continue;
 
-            float gap = position.DistanceTo(other.GlobalPosition);
+                float gap = position.DistanceTo(other.GlobalPosition);
 
-            if (gap > radius + other.HitRadius + 2f)
-                continue;
+                // Предел, как и в общем обходе, считается по соседям в зоне
+                if (gap > radius * PushSense)
+                    continue;
 
-            if (other.GlobalPosition.DistanceTo(target) < remaining)
-                return true;
+                seen++;
+
+                if (other.Faction != mobile.Faction)
+                    continue;
+
+                if (gap > radius + other.HitRadius + 2f)
+                    continue;
+
+                if (other.GlobalPosition.DistanceTo(target) < remaining)
+                    return true;
+            }
+
+            if (seen >= limit)
+                break;
         }
 
         return false;
     }
 
-    // ── boids ─────────────────────────────────────────────────────────────────────
+    // ── обход соседей ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Всё, что даёт один обход соседей. Правила остались раздельными — каждое живёт
+    /// в своём методе и правит свои поля, — но выборка у них общая и читается однократно.
+    ///
+    /// ПОЧЕМУ НЕ СПИСОК СОСЕДЕЙ. Прежде обход складывал найденных в список, по которому
+    /// затем проходили три правила, а расталкивание собирало свой список ещё дважды.
+    /// Выборка при этом всякий раз была вложена в наибольшую, то есть сетка опрашивалась
+    /// четырежды ради одних и тех же соседей, да ещё и с копированием ссылок.
+    /// </summary>
+    private struct Sensed
+    {
+        /// <summary>Считать ли локальный слой. У остановленного и выезжающего он не нужен.</summary>
+        public bool Boids;
+
+        public Vector2 Push;
+        public Vector2 AlignSum;
+        public int AlignCount;
+        public float AvoidTotal;
+        public float AvoidStrongest;
+        public int AvoidPick;
+
+        /// <summary>Множитель стремления к цели — см. <see cref="Scale"/>.</summary>
+        public float Scale;
+
+        /// <summary>Сколько соседей просмотрено. Читает панель отладки.</summary>
+        public int Count;
+    }
+
+    /// <summary>
+    /// Обойти соседей и посчитать по ним всё сразу. Положения соседей берутся прямо
+    /// у сущностей — в этой фазе их никто не правит; скорости и предсказанные положения
+    /// берутся из снимка, поэтому исход не зависит от порядка обхода.
+    /// </summary>
+    private Sensed Scan(int index, IMobile mobile, Vector2 position, float radius,
+        Vector2 seek)
+    {
+        var movement = mobile.Movement;
+        bool boids = seek != Vector2.Zero;
+        float sense = radius * SenseFactor;
+
+        var sensed = new Sensed { Boids = boids, Scale = 1f };
+
+        // Локальному слою нужно чутьё, расталкиванию — мягкая зона; берётся большее,
+        // а лишних отсеет каждое правило по своему порогу
+        float range = boids ? Mathf.Max(sense, radius * PushSense) : radius * PushSense;
+
+        var ahead = _ahead[index];
+        float senseSquared = sense * sense;
+        float rangeSquared = range * range;
+        int limit = NeighbourLimit > 0 ? NeighbourLimit : int.MaxValue;
+
+        foreach (var items in GM.Space.ReadyMobiles().Around(position, range))
+        {
+            for (int k = 0; k < items.Count && sensed.Count < limit; k++)
+            {
+                var other = items[k];
+                int slot = other.Movement.Slot;
+
+                // Оставшийся без номера в обход не входит: у него нет ни определения,
+                // ни места в снимке. Себя сущность узнаёт по номеру, а не по ссылке
+                if (slot < 0 || slot == index)
+                    continue;
+
+                var delta = other.GlobalPosition - position;
+                float squared = delta.LengthSquared();
+
+                // ПРЕДЕЛ СЧИТАЕТСЯ ПО ТЕМ, КТО В ЗОНУ ПОПАЛ, а не по кандидатам из корзин.
+                // Корзина много крупнее зоны — на два с половиной радиуса корпуса
+                // приходится вчетверо большая площадь просмотра, — и счёт по кандидатам
+                // отбрасывал бы в первую очередь тех, кто ближе всех
+                if (squared > rangeSquared)
+                    continue;
+
+                sensed.Count++;
+
+                Repel(ref sensed, index, mobile, ahead, radius, other, slot);
+
+                if (!boids || squared < 0.000001f)
+                    continue;
+
+                float contact = radius + _radius[slot] + radius * 0.5f;
+                float distance = Mathf.Sqrt(squared);
+
+                Scale(ref sensed, mobile, contact, seek, other, delta, distance);
+
+                if (squared > senseSquared)
+                    continue;
+
+                Avoid(ref sensed, mobile, movement, seek, other, delta / distance, distance, sense);
+                Align(ref sensed, mobile, other, slot);
+            }
+
+            if (sensed.Count >= limit)
+                break;
+        }
+
+        _push[index] = sensed.Push;
+
+        _senseSum += sensed.Count;
+        _senseSeen++;
+
+        if (sensed.Count > _senseMax)
+            _senseMax = sensed.Count;
+
+        return sensed;
+    }
+
+    /// <summary>
+    /// Собственная доля расхождения с одним соседом.
+    ///
+    /// РЕАКЦИЯ, А НЕ ВОЗДЕЙСТВИЕ. Прежде пара разбиралась один раз, и тот, чей номер меньше,
+    /// двигал обоих — то есть писал в чужое поле положения. Из этого следовало, что исход
+    /// зависел от порядка обхода, а сама фаза была принципиально последовательной. Здесь
+    /// каждая сторона считает пару сама и правит только себя, а доли двух сторон в сумме
+    /// дают единицу (<see cref="Share"/>), поэтому прежние правила приоритета сохранены
+    /// в точности, а запись в соседей исчезла.
+    ///
+    /// ПЕРЕКРЫТИЕ МЕРЯЕТСЯ ПО ПРЕДСКАЗАННЫМ ПОЛОЖЕНИЯМ. Расхождение считается до
+    /// интегрирования, а применяется после него, и без поправки на ход этого шага оно
+    /// отставало бы на кадр. Обе стороны предсказывают одинаково — по снимку скоростей, —
+    /// поэтому согласие в паре не нарушается.
+    /// </summary>
+    private void Repel(ref Sensed sensed, int index, IMobile mobile, Vector2 ahead,
+        float radius, IMobile other, int slot)
+    {
+        float wanted = radius + _radius[slot];
+        float soft = wanted * SoftMargin;
+
+        // Отбраковка по квадрату расстояния идёт ПЕРВОЙ. Соседей в чутье втрое больше,
+        // чем в мягкой зоне, и разбор доли с корнем на каждого из них стоил бы дороже
+        // самого расхождения
+        var delta = _ahead[slot] - ahead;
+        float squared = delta.LengthSquared();
+
+        if (squared >= soft * soft)
+            return;
+
+        float share = Share(mobile.Movement, mobile.Faction, other);
+
+        if (share <= 0f)
+            return;
+
+        float distance = Mathf.Sqrt(squared);
+
+        // Совпавшие в точке расходятся по углу, выведенному из номера: направления у них
+        // разные, а значит пара расцепится
+        var push = distance > 0.001f
+            ? delta / distance
+            : Vector2.Right.Rotated(index * 2.399f);
+
+        // Жёсткое разведение плюс слабая добавка мягкой зоны. Сумма непрерывна в точке
+        // касания: на границе перекрытия первое слагаемое обращается в ноль, а второе
+        // подходит к нему с того же значения
+        float overlap = Mathf.Max(0f, wanted - distance) + SoftPush * (soft - distance);
+
+        sensed.Push -= push * (overlap * share);
+    }
+
+    /// <summary>
+    /// Какую долю расхождения сущность берёт на себя. Доли двух сторон в сумме дают единицу,
+    /// поэтому пара расходится ровно так же, как расходилась при обоюдной записи.
+    ///
+    /// Выезжающего из корпуса завода не двигают вовсе: иначе толпа у ворот затолкала бы его
+    /// обратно внутрь. Свой идущий полностью смещает своего стоящего — это и есть
+    /// проталкивание сквозь союзников. Прочие пары делят расхождение поровну.
+    /// </summary>
+    private static float Share(Movement movement, Faction side, IMobile other)
+    {
+        var theirs = other.Movement;
+
+        if (movement.Leaving && !theirs.Leaving)
+            return 0f;
+
+        if (!movement.Leaving && theirs.Leaving)
+            return 1f;
+
+        if (other.Faction == side && movement.Active != theirs.Active)
+            return movement.Active ? 0f : 1f;
+
+        return 0.5f;
+    }
 
     /// <summary>
     /// Обход, а не расталкивание. Сила отталкивания в скоплении гасит стремление к цели —
     /// они направлены навстречу и взаимно уничтожаются, отчего сущность просто стоит.
     /// Обход правит курс мимо соседа и такого вырождения не даёт.
     ///
-    /// Сторона обхода фиксируется, пока сила действует: иначе курс дребезжит между двумя
-    /// соседями по разные стороны от направления движения. Освободился путь — фиксация
-    /// снимается, и сущность возвращается к цели, а не идёт вдоль скопления дальше.
-    ///
     /// Обходят не всех: своего, который сам идёт, обходить не нужно — с ним разберутся
-    /// выравнивание и расталкивание. Обходят удерживающего позицию и чужого.
+    /// выравнивание и расхождение. Обходят удерживающего позицию и чужого.
     /// </summary>
-    private Vector2 Avoidance(IMobile mobile, Movement movement, Vector2 position,
-        Vector2 seek, float sense)
+    private void Avoid(ref Sensed sensed, IMobile mobile, Movement movement, Vector2 seek,
+        IMobile other, Vector2 direction, float distance, float sense)
     {
-        float total = 0f;
-        float strongest = 0f;
-        int side = 0;
+        if (other.Faction == mobile.Faction && !other.Movement.HoldGround)
+            return;
 
-        foreach (var other in _nearby)
-        {
+        float ahead = seek.Dot(direction);
 
-            if (other.Faction == mobile.Faction && !other.Movement.HoldGround)
-                continue;
+        if (ahead < 0.2f)
+            return;
 
-            var delta = other.GlobalPosition - position;
-            float distance = delta.Length();
+        float weight = (1f - distance / sense) * ahead;
+        sensed.AvoidTotal += weight;
 
-            if (distance < 0.001f || distance > sense)
-                continue;
+        if (weight <= sensed.AvoidStrongest)
+            return;
 
-            var direction = delta / distance;
-            float ahead = seek.Dot(direction);
+        sensed.AvoidStrongest = weight;
 
-            if (ahead < 0.2f)
-                continue;
+        // Уходим В СТОРОНУ, ПРОТИВОПОЛОЖНУЮ соседу. Знак выведен из определения
+        // Orthogonal(): для курса (1,0) она даёт (0,−1). Сосед снизу, направление (0,1),
+        // даёт положительное векторное произведение — значит уводить надо
+        // положительным множителем, то есть вверх. Обратный знак разворачивал бы
+        // юнита прямо в соседа, и обход читался бы как притяжение.
+        //
+        // Порог сдвинут солью. У встречных лоб в лоб векторное произведение около нуля,
+        // и без сдвига обе сущности выбирают сторону по одному и тому же неустойчивому
+        // знаку — то есть чаще всего одну и ту же, что и есть затор. Сдвиг постоянен
+        // у сущности, поэтому в такой паре стороны почти всегда оказываются разными
+        sensed.AvoidPick = seek.Cross(direction) > _salt.Of(movement.Salt) * SaltSide ? 1 : -1;
+    }
 
-            float weight = (1f - distance / sense) * ahead;
-            total += weight;
-
-            if (weight <= strongest)
-                continue;
-
-            strongest = weight;
-
-            // Уходим В СТОРОНУ, ПРОТИВОПОЛОЖНУЮ соседу. Знак выведен из определения
-            // Orthogonal(): для курса (1,0) она даёт (0,−1). Сосед снизу, направление (0,1),
-            // даёт положительное векторное произведение — значит уводить надо
-            // положительным множителем, то есть вверх. Обратный знак разворачивал бы
-            // юнита прямо в соседа, и обход читался бы как притяжение.
-            //
-            // Порог сдвинут солью. У встречных лоб в лоб векторное произведение около нуля,
-            // и без сдвига обе сущности выбирают сторону по одному и тому же неустойчивому
-            // знаку — то есть чаще всего одну и ту же, что и есть затор. Сдвиг постоянен
-            // у сущности, поэтому в такой паре стороны почти всегда оказываются разными
-            side = seek.Cross(direction) > _salt.Of(movement.Salt) * SaltSide ? 1 : -1;
-        }
-
-        if (total <= 0.001f)
+    /// <summary>
+    /// Сила обхода из накопленного. Сторона фиксируется, пока сила действует: иначе курс
+    /// дребезжит между двумя соседями по разные стороны от направления движения.
+    /// Освободился путь — фиксация снимается, и сущность возвращается к цели,
+    /// а не идёт вдоль скопления дальше.
+    /// </summary>
+    private static Vector2 AvoidForce(Movement movement, Vector2 seek, in Sensed sensed)
+    {
+        if (sensed.AvoidTotal <= 0.001f)
         {
             movement.AvoidSide = 0;
             return Vector2.Zero;
         }
 
         if (movement.AvoidSide == 0)
-            movement.AvoidSide = side == 0 ? 1 : side;
+            movement.AvoidSide = sensed.AvoidPick == 0 ? 1 : sensed.AvoidPick;
 
-        return seek.Orthogonal() * movement.AvoidSide * total;
+        return seek.Orthogonal() * movement.AvoidSide * sensed.AvoidTotal;
     }
 
     /// <summary>
@@ -773,29 +1089,22 @@ public partial class MovementSystem : GameSystem
     /// притяжение к центру группы пришлось бы отключать при встречном движении, а сила,
     /// которую сразу отключают, не нужна вовсе.
     /// </summary>
-    private Vector2 Alignment(IMobile mobile, Vector2 position, float sense)
+    private void Align(ref Sensed sensed, IMobile mobile, IMobile other, int slot)
     {
-        var sum = Vector2.Zero;
-        int count = 0;
+        if (other.Faction != mobile.Faction || !other.Movement.Active)
+            return;
 
-        foreach (var other in _nearby)
-        {
-
-            if (other.Faction != mobile.Faction || !other.Movement.Active)
-                continue;
-
-            if (position.DistanceTo(other.GlobalPosition) > sense)
-                continue;
-
-            sum += other.Movement.Velocity;
-            count++;
-        }
-
-        if (count == 0 || sum.LengthSquared() < 0.0001f)
-            return Vector2.Zero;
-
-        return sum.Normalized();
+        // Скорость берётся из снимка, а не у соседа: свою он мог получить в этом же обходе,
+        // и без снимка сумма зависела бы от порядка
+        sensed.AlignSum += _velocity[slot];
+        sensed.AlignCount++;
     }
+
+    /// <summary>Направление выравнивания из накопленного.</summary>
+    private static Vector2 AlignForce(in Sensed sensed) =>
+        sensed.AlignCount == 0 || sensed.AlignSum.LengthSquared() < 0.0001f
+            ? Vector2.Zero
+            : sensed.AlignSum.Normalized();
 
     /// <summary>
     /// Правило «кто кого толкает»: стремление к цели ослабляется тем сильнее, чем точнее
@@ -804,36 +1113,26 @@ public partial class MovementSystem : GameSystem
     /// Отсюда же берётся окружение: цель, к которой прижались враги, перестаёт их
     /// расталкивать и остаётся на месте.
     /// </summary>
-    private float SeekScale(IMobile mobile, Vector2 position, Vector2 seek, float radius)
+    private static void Scale(ref Sensed sensed, IMobile mobile, float contact, Vector2 seek,
+        IMobile other, Vector2 delta, float distance)
     {
-        float scale = 1f;
+        if (distance > contact)
+            return;
 
-        foreach (var other in _nearby)
-        {
+        float into = seek.Dot(delta / distance);
 
-            float contact = radius + other.HitRadius + radius * 0.5f;
-            var delta = other.GlobalPosition - position;
-            float distance = delta.Length();
+        if (into <= 0f)
+            return;
 
-            if (distance < 0.001f || distance > contact)
-                continue;
+        // Стоящий свой ослабляет seek слабо: идущий обязан проталкиваться сквозь него,
+        // а не гасить курс. Сильный коэффициент оставляем врагу и окружению цели.
+        float weight = other.Faction != mobile.Faction ? 0.9f
+            : other.Movement.HoldGround ? 0.15f
+            : 0.1f;
 
-            float into = seek.Dot(delta / distance);
+        float proximity = 1f - distance / contact;
 
-            if (into <= 0f)
-                continue;
-
-            // Стоящий свой ослабляет seek слабо: идущий обязан проталкиваться сквозь него,
-            // а не гасить курс. Сильный коэффициент оставляем врагу и окружению цели.
-            float weight = other.Faction != mobile.Faction ? 0.9f
-                : other.Movement.HoldGround ? 0.15f
-                : 0.1f;
-
-            float proximity = 1f - distance / contact;
-            scale = Mathf.Min(scale, 1f - into * weight * proximity);
-        }
-
-        return Mathf.Clamp(scale, 0f, 1f);
+        sensed.Scale = Mathf.Clamp(Mathf.Min(sensed.Scale, 1f - into * weight * proximity), 0f, 1f);
     }
 
     // ── интегрирование и ограничения ──────────────────────────────────────────────
@@ -845,19 +1144,10 @@ public partial class MovementSystem : GameSystem
         if (movement.Velocity.LengthSquared() < 0.0001f)
             return;
 
-        var before = mobile.GlobalPosition;
-        mobile.GlobalPosition = before + movement.Velocity * (float)dt;
-
         // Поворота корпуса здесь нет намеренно: он назначается в Drive, ДО того как
         // из него выведена скорость. Доворачивать корпус по уже посчитанной скорости
         // значило бы замкнуть круг — скорость выводится из угла, а угол из скорости
-        float expected = movement.Velocity.Length() * (float)dt;
-        float actual = before.DistanceTo(mobile.GlobalPosition);
-
-        if (actual < expected * 0.2f)
-            Stall(mobile, movement, dt);
-        else
-            movement.StuckFor = 0f;
+        mobile.GlobalPosition += movement.Velocity * (float)dt;
     }
 
     /// <summary>
@@ -885,83 +1175,59 @@ public partial class MovementSystem : GameSystem
     }
 
     /// <summary>
-    /// Жёсткие ограничения: наружу из зданий, врозь из чужих корпусов, внутрь границ мира.
-    /// Свой идущий при перекрытии полностью смещает своего стоящего; остальные пары делят
-    /// сдвиг пополам. Раскладка по ячейкам к этому мигу устарела на один проход — для
-    /// расталкивания это несущественно, сдвиги здесь заведомо меньше ячейки.
+    /// Свести шаг: применить накопленное расхождение и жёсткие ограничения — наружу
+    /// из зданий, внутрь границ мира.
+    ///
+    /// ПОЧЕМУ ОТДЕЛЬНОЙ ФАЗОЙ. Расхождение посчитано по положениям на начало шага, а ход
+    /// этого шага прибавлен интегрированием; применить одно к другому можно только после
+    /// того, как оба готовы. Выталкивание же обязано быть последним: оно решает задачу
+    /// достоверно, тогда как всякая сила решала бы её вероятностно.
     /// </summary>
-    private void Resolve()
+    private void Settle(int index, double dt)
     {
-        for (int i = 0; i < _actors.Count; i++)
-        {
-            var mobile = _actors[i];
-            var movement = mobile.Movement;
-            float radius = mobile.HitRadius;
-            var position = mobile.GlobalPosition;
+        var mobile = _actors[index];
+        var movement = mobile.Movement;
+        float radius = mobile.HitRadius;
 
-            Neighbours(mobile, position, radius * 2f);
+        var push = _push[index];
 
-            foreach (var other in _nearby)
-            {
-                // Пара расталкивается один раз: работу делает тот, чей номер меньше
-                if (other.Movement.Slot <= i)
-                    continue;
+        // МЕЛКИЙ СДВИГ НЕ ПРИМЕНЯЕТСЯ ВОВСЕ. Мягкая зона расхождения даёт стоящим вплотную
+        // небольшую постоянную поправку; сама по себе она безобидна, но всякий сдвиг ставит
+        // сущность в очередь на запись положения в узел, а это переход границы C#↔Godot.
+        // По замеру на стоящей армии, где двигались единицы из полутора тысяч, записи
+        // положения занимали 11,7 % времени главного потока. Ниже порога поправка
+        // отбрасывается вместе с признаком вытеснения: расселившийся отряд замирает
+        // полностью, вместо того чтобы вечно подрагивать
+        if (push.LengthSquared() < PushFloor * PushFloor)
+            push = Vector2.Zero;
 
-                var delta = other.GlobalPosition - position;
-                float distance = delta.Length();
-                float wanted = radius + other.HitRadius;
+        var position = mobile.GlobalPosition + push;
 
-                if (distance >= wanted)
-                    continue;
+        // Вытеснение соседями объявляется удержанию позиции: место, с которого юнита
+        // отодвинули, переезжает вместе с ним — см. Movement.Drift
+        movement.Drift = push;
 
-                var push = distance > 0.001f
-                    ? delta / distance
-                    : Vector2.Right.Rotated(i * 2.399f);
+        position = GM.Obstacles.PushOut(position, radius, movement.Exit);
 
-                float overlap = wanted - distance;
+        var bounds = World.ArenaBounds;
+        position.X = Mathf.Clamp(position.X, bounds.Position.X + radius, bounds.End.X - radius);
+        position.Y = Mathf.Clamp(position.Y, bounds.Position.Y + radius, bounds.End.Y - radius);
 
-                // Выезжающего из корпуса не толкают обратно внутрь: весь сдвиг — соседу
-                if (movement.Leaving && !other.Movement.Leaving)
-                {
-                    other.GlobalPosition += push * overlap;
-                    continue;
-                }
+        mobile.GlobalPosition = position;
 
-                if (!movement.Leaving && other.Movement.Leaving)
-                {
-                    position -= push * overlap;
-                    continue;
-                }
+        // Продвижение меряется здесь, а не сразу после интегрирования: там оно совпадало
+        // с ожидаемым всегда, поскольку положение только что было туда и записано, отчего
+        // застревание не обнаруживалось вовсе. Итог шага знает лишь эта фаза — она видит
+        // и расхождение с соседями, и упор в стену
+        float expected = movement.Velocity.Length() * (float)dt;
 
-                // Свой идущий полностью смещает своего стоящего: иначе оба делят перекрытие
-                // пополам, и проход сквозь стоящих союзников вырождается в топтание на месте.
-                // Чужих и пары с одинаковым намерением (оба идут или оба стоят) по-прежнему
-                // разводим поровну.
-                if (other.Faction == mobile.Faction && movement.Active != other.Movement.Active)
-                {
-                    if (movement.Active)
-                        other.GlobalPosition += push * overlap;
-                    else
-                        position -= push * overlap;
+        if (expected > 0.0001f && _before[index].DistanceTo(position) < expected * 0.2f)
+            Stall(mobile, movement, dt);
+        else
+            movement.StuckFor = 0f;
 
-                    continue;
-                }
-
-                position -= push * (overlap * 0.5f);
-                other.GlobalPosition += push * (overlap * 0.5f);
-            }
-
-            position = GM.Obstacles.PushOut(position, radius, movement.Exit);
-
-            var bounds = World.ArenaBounds;
-            position.X = Mathf.Clamp(position.X, bounds.Position.X + radius, bounds.End.X - radius);
-            position.Y = Mathf.Clamp(position.Y, bounds.Position.Y + radius, bounds.End.Y - radius);
-
-            mobile.GlobalPosition = position;
-
-            if (movement.Leaving)
-                FinishExit(mobile, movement, position, radius);
-        }
+        if (movement.Leaving)
+            FinishExit(mobile, movement, position, radius);
     }
 
     /// <summary>
@@ -991,21 +1257,6 @@ public partial class MovementSystem : GameSystem
         movement.EndExit();
     }
 
-    // ── раскладка соседей ─────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Соседи в окрестности, кроме самой спрашивающей. Берутся из общей раскладки мира;
-    /// оставшиеся без номера в обход не входят — см. <see cref="Collect"/>.
-    /// </summary>
-    private void Neighbours(IMobile self, Vector2 position, float sense)
-    {
-        GM.Space.ReadyMobiles().Collect(position, sense, _nearby, self);
-
-        for (int i = _nearby.Count - 1; i >= 0; i--)
-            if (_nearby[i].Movement.Slot < 0)
-                _nearby.RemoveAt(i);
-    }
-
     /// <summary>Сколько подвижных сущностей обслужено в прошлом кадре. Читает панель отладки.</summary>
     public int Tracked => _actors.Count;
 
@@ -1016,11 +1267,11 @@ public partial class MovementSystem : GameSystem
         data["settled"] = _settled;
         data["blocked"] = _blocked;
         data["leaving"] = _leaving;
-        data["resolve_passes"] = ResolvePasses;
+        data["soft_margin"] = SoftMargin;
+        data["neighbour_limit"] = NeighbourLimit;
+        data["neighbours_avg"] = _senseSeen > 0 ? (float)_senseSum / _senseSeen : 0f;
+        data["neighbours_max"] = _senseMax;
         data["bucket_px"] = GM.Space.Mobiles.BucketPx;
     }
 
-    /// <summary>Раскладка по ячейкам — рисует отладка.</summary>
-    /// <summary>Сколько соседей учитывала последняя спрошенная сущность. Читает панель отладки.</summary>
-    public int LastNeighbours => _nearby.Count;
 }

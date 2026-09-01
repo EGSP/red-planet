@@ -562,6 +562,19 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
         if (!Posted || !Definition.IsMobile || _calm < Const.RegroupDelay)
             return;
 
+        // ВЫТЕСНЕНИЕ НЕ ЕСТЬ УХОД С МЕСТА. Соседи отодвигают стоящего каждый шаг, и возврат
+        // к прежней точке отодвигал бы их в ответ; те возвращались бы тоже, и толпа
+        // качалась бы без конца, воспроизводя работу расталкивания каждый кадр. Поэтому
+        // место переезжает вместе с юнитом: отряд один раз растекается до плотности,
+        // при которой корпуса не пересекаются, и на этом успокаивается.
+        // Порог мелкого сдвига держит сама система движения (MovementSystem.PushFloor):
+        // ниже него расхождение не применяется, и Drift равен нулю
+        if (Movement.Drift != Vector2.Zero)
+        {
+            _anchor = GlobalPosition;
+            return;
+        }
+
         if (GlobalPosition.DistanceTo(_anchor) > Const.Unit)
             Movement.Seek(_anchor, 0f);
     }
