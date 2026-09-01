@@ -42,9 +42,6 @@ public sealed class ObstacleMap
 
     private readonly List<ObstacleChange> _journal = new();
 
-    /// <summary>Уже выданные препятствия при обходе ячеек. Общий буфер: обход не вложенный.</summary>
-    private readonly HashSet<object> _seen = new(ByReference.Instance);
-
     /// <summary>Сколько раз менялся состав. По нему пересобирается растр навигации.</summary>
     public int Revision { get; private set; }
 
@@ -191,11 +188,15 @@ public sealed class ObstacleMap
     /// столько раз, сколько ячеек оно задевает, и сила выходила бы тем больше, чем крупнее
     /// строение.
     /// </summary>
+    /// <param name="seen">
+    /// Набор уже выданных препятствий. Передаётся снаружи, а не держится полем карты:
+    /// отклонение от стен считается в несколько потоков, и общий набор был бы гонкой.
+    /// </param>
     public void Nearby(Vector2 position, float radius, List<Obb> destination,
-        IObstacle except = null)
+        HashSet<object> seen, IObstacle except = null)
     {
         destination.Clear();
-        _seen.Clear();
+        seen.Clear();
 
         var probe = new Rect2(position - new Vector2(radius, radius),
             new Vector2(radius * 2f, radius * 2f));
@@ -207,7 +208,7 @@ public sealed class ObstacleMap
 
             foreach (var obstacle in bucket)
             {
-                if (ReferenceEquals(obstacle, except) || !_seen.Add(obstacle))
+                if (ReferenceEquals(obstacle, except) || !seen.Add(obstacle))
                     continue;
 
                 if (_shapes.TryGetValue(obstacle, out var shape))

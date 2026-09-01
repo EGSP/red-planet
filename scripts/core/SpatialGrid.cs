@@ -301,94 +301,44 @@ public sealed class SpatialGrid<T> where T : class
     }
 
     /// <summary>
-    /// Корзины, которые задевает квадрат радиуса, — без складывания их содержимого куда-либо.
+    /// Прямоугольник корзин, который задевает квадрат радиуса вокруг точки. Отсюда
+    /// начинается РУЧНОЙ обход — см. <see cref="Cell"/> и <see cref="CountQueries"/>.
     ///
-    /// ЗАЧЕМ ОТДЕЛЬНО ОТ <see cref="Collect"/>. Список нужен там, где одну выборку читают
-    /// несколько правил по очереди. Когда правило одно или все они считаются за один проход,
-    /// список есть чистый расход: копирование ссылок в массив с проверкой присваивания плюс
-    /// повторное чтение тех же объектов из памяти. По замеру на одно это копирование уходило
-    /// около двух процентов времени главного потока.
-    ///
-    /// Перечислитель объявлен структурой и роздан вручную, поэтому <c>foreach</c> по нему
-    /// не создаёт объекта в куче: обход соседей идёт по разу на сущность каждый шаг,
-    /// и мусор здесь стоил бы дороже самой работы.
+    /// ЗАЧЕМ РУЧНОЙ. Список нужен там, где одну выборку читают несколько правил по очереди.
+    /// Когда правило одно или все они считаются за один проход, список есть чистый расход:
+    /// копирование ссылок в массив плюс повторное чтение тех же объектов из памяти.
+    /// Перечислитель вместо списка мусора не создаёт, но и он остаётся вызовом на каждую
+    /// корзину — по замеру 2 % времени главного потока, — а кроме того ведёт счётчики
+    /// запросов прямо в сетке, что при обходе из нескольких потоков означало бы гонку
+    /// за одни и те же поля. Ручной обход снимает и то, и другое: вызывающий идёт по
+    /// корзинам сам и складывает свой счёт в сетку один раз, когда ему удобно.
     /// </summary>
-    public Area Around(Vector2 from, float radius)
+    public void Bounds(Vector2 from, float radius, out Vector2I min, out Vector2I max)
     {
-        if (Count == 0)
-            return default;
+        var reach = new Vector2(radius, radius);
 
-        Queries++;
-
-        return new Area(this, ToBucket(from - new Vector2(radius, radius)),
-            ToBucket(from + new Vector2(radius, radius)));
+        min = ToBucket(from - reach);
+        max = ToBucket(from + reach);
     }
 
-    /// <summary>Прямоугольник корзин, отдающий их содержимое списками. См. <see cref="Around"/>.</summary>
-    public readonly struct Area
+    /// <summary>Содержимое корзины по её месту в поле. Пусто, если корзина за краем либо пуста.</summary>
+    public List<T> Cell(int x, int y)
     {
-        private readonly SpatialGrid<T> _grid;
-        private readonly Vector2I _min;
-        private readonly Vector2I _max;
+        int offset = Offset(x, y);
 
-        internal Area(SpatialGrid<T> grid, Vector2I min, Vector2I max)
-        {
-            _grid = grid;
-            _min = min;
-            _max = max;
-        }
+        return offset < 0 ? null : _buckets[offset]?.Items;
+    }
 
-        public Enumerator GetEnumerator() => new(_grid, _min, _max);
-
-        public struct Enumerator
-        {
-            private readonly SpatialGrid<T> _grid;
-            private readonly Vector2I _min;
-            private readonly Vector2I _max;
-
-            private int _x;
-            private int _y;
-
-            internal Enumerator(SpatialGrid<T> grid, Vector2I min, Vector2I max)
-            {
-                _grid = grid;
-                _min = min;
-                _max = max;
-                _x = min.X - 1;
-                _y = min.Y;
-                Current = null;
-            }
-
-            public List<T> Current { get; private set; }
-
-            public bool MoveNext()
-            {
-                if (_grid == null)
-                    return false;
-
-                while (true)
-                {
-                    if (++_x > _max.X)
-                    {
-                        _x = _min.X;
-
-                        if (++_y > _max.Y)
-                            return false;
-                    }
-
-                    int offset = _grid.Offset(_x, _y);
-
-                    if (offset < 0 || _grid._buckets[offset] is not { } bucket)
-                        continue;
-
-                    _grid.Visited++;
-                    _grid.Scanned += bucket.Items.Count;
-
-                    Current = bucket.Items;
-                    return true;
-                }
-            }
-        }
+    /// <summary>
+    /// Учесть выполненный вручную обход: запросов, осмотренных корзин, просмотренных
+    /// сущностей. Складывается разом, а не по одной корзине, поэтому годится и для обхода
+    /// из нескольких потоков — каждый копит своё, а слагает после общего барьера.
+    /// </summary>
+    public void CountQueries(int queries, int visited, int scanned)
+    {
+        Queries += queries;
+        Visited += visited;
+        Scanned += scanned;
     }
 
     /// <summary>
