@@ -17,28 +17,31 @@ uniform bool flip_x = false;
 uniform bool flip_y = false;
 uniform bool rotate_90 = false;
 
+// Цвет экземпляра сохраняется отдельно по той же причине, что и у тела луча: в фрагментной
+// части COLOR приходит уже умноженным на выборку из текстуры по НЕПРЕОБРАЗОВАННЫМ
+// координатам, и без этого рисунок накладывался бы дважды — развёрнутый и исходный.
+varying vec4 instance_color;
+
+void vertex() {
+	instance_color = COLOR;
+}
+
 void fragment() {
 	// Развороты считаются от середины квадрата, иначе рисунок уезжает за край
-	vec2 uv = UV - vec2(0.5);
+	vec2 uv = UV;
 
-	if (rotate_90) {
-		uv = vec2(uv.y, -uv.x);
-	}
+	uv = mix(uv, vec2(uv.y, 1.0 - uv.x), float(rotate_90));
+	uv.x = mix(uv.x, 1.0 - uv.x, float(flip_x));
+	uv.y = mix(uv.y, 1.0 - uv.y, float(flip_y));
 
-	if (flip_x) {
-		uv.x = -uv.x;
-	}
-
-	if (flip_y) {
-		uv.y = -uv.y;
-	}
-
-	vec4 tex = texture(TEXTURE, uv + vec2(0.5));
+	vec4 tex = texture(TEXTURE, uv);
 
 	// Круглое пятно строится из расстояния до середины квадрата. Оно нужно и с текстурой:
-	// им задаётся спад яркости, а текстура остаётся рисунком поверх
+	// им задаётся спад яркости, а текстура остаётся рисунком поверх. Нижний порог отделён
+	// от верхнего: smoothstep с совпавшими порогами объявлен неопределённым
 	float dist = clamp(length(UV - vec2(0.5)) * 2.0, 0.0, 1.0);
-	float spot = 1.0 - smoothstep(core_share, 1.0, dist);
+	float spot = 1.0 - smoothstep(min(core_share, 0.999), 1.0, dist);
 
-	COLOR *= tex * pow(spot, falloff);
+	COLOR = instance_color * tex;
+	COLOR.a *= pow(spot, falloff);
 }

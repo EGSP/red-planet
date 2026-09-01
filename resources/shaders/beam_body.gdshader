@@ -49,21 +49,25 @@ void fragment() {
 	// Выбираем только преобразованную и тайловую текстуру.
 	vec4 tex = texture(TEXTURE, uv);
 
-	// Сглаживание краёв луча поперёк его длины.
+	// Сглаживание краёв луча поперёк его длины. Пороги разведены хотя бы на малую величину:
+	// smoothstep с совпавшими порогами объявлен неопределённым, и при нулевой мягкости
+	// разные драйверы возвращают разное.
 	float across = abs(UV.y - 0.5) * 2.0;
+	float softness = max(edge_softness, 0.0001);
 	float edge = 1.0 - smoothstep(
-		1.0 - edge_softness,
+		1.0 - softness,
 		1.0,
 		across
 	);
 
 	// Затухание у начала и конца луча.
+	float fade = max(end_fade, 0.0001);
 	float along = smoothstep(
 		0.0,
-		end_fade,
+		fade,
 		UV.x
 	) * (1.0 - smoothstep(
-		1.0 - end_fade,
+		1.0 - fade,
 		1.0,
 		UV.x
 	));
