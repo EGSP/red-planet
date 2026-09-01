@@ -219,6 +219,10 @@ public partial class Building : Entity, IFacing, IDamageable, IHealthMarked, IEc
 
         Model.Rotation = BodyFacing - Rotation;
 
+        // Мировой угол корпуса модели и есть угол постановки: поворот ноды снят строкой выше.
+        // Сообщается он явно, чтобы модель не выясняла его у движка — см. UnitModel.Face
+        Model.Face(BodyFacing);
+
         // Каждая часть получает свой угол: у постройки с двумя стволами они наводятся
         // врозь, и один угол на все части такого не выразил бы
         Aim.Apply();

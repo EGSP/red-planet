@@ -122,6 +122,13 @@ public partial class UnitModel : Node2D
     private float _aligned = float.NaN;
 
     /// <summary>
+    /// Угол корпуса в мире, назначенный владельцем через <see cref="Face"/>. NaN означает,
+    /// что владелец угла не сообщает и спросить его можно только у движка, — так живут
+    /// поле редактора содержимого, иконка панели и каркас строительства.
+    /// </summary>
+    private float _driven = float.NaN;
+
+    /// <summary>
     /// Цвет команды, назначенный владельцем. Помнится потому, что материалы создаются заново
     /// при всяком вводе в дерево, а окраску владелец назначает один раз при рождении.
     /// </summary>
@@ -228,12 +235,15 @@ public partial class UnitModel : Node2D
         ApplyTeamColor(_team);
         _aligned = float.NaN;
 
-        Align();
+        // Пересборка не отменяет назначенного владельцем угла: Rebake зовёт Release и Build
+        // заново, а сообщать угол повторно владельцу неоткуда — он делает это по изменению,
+        // которого при пересборке не было
+        Align(float.IsNaN(_driven) ? GlobalRotation : _driven);
 
         // Обработка кадра остаётся только редактору, где узел ведёт подсказки. В игре модель
         // за кадр не делает ничего: пересборку теней приносит UnitModel.Rebake
         SetProcess(Engine.IsEditorHint());
-        SetNotifyTransform(_shifted.Count > 0);
+        SetNotifyTransform(_shifted.Count > 0 && float.IsNaN(_driven));
 
         if (!Engine.IsEditorHint())
             Shown.Add(this);
@@ -353,7 +363,34 @@ public partial class UnitModel : Node2D
     public override void _Notification(int what)
     {
         if (what == NotificationTransformChanged)
-            Align();
+            Align(GlobalRotation);
+    }
+
+    /// <summary>
+    /// Сообщить угол корпуса в мире. Зовёт владелец, которому этот угол известен и без
+    /// движка: у юнита им служит <see cref="Entity.Rotation"/>, у постройки — угол
+    /// постановки (см. <c>Building.SyncModel</c>).
+    ///
+    /// ЗАЧЕМ. Прежде угол выяснялся у движка: уведомление об изменении преобразования
+    /// приходило на каждое перемещение машины, и в ответ на него читался
+    /// <c>Node2D.GlobalRotation</c> — переход границы C#↔Godot, при котором движок ещё
+    /// и выводит мировое преобразование из цепочки родителей. По замеру на одно это чтение
+    /// уходило 9 % времени главного потока. Владелец же угол знает и передаёт его полем.
+    ///
+    /// Уведомление после первого такого вызова снимается: оно приходило и на перемещение,
+    /// хотя отход теней зависит только от поворота.
+    /// </summary>
+    public void Face(float world)
+    {
+        // Подписка снимается ОДИН раз, при первом назначении: владелец зовёт этот метод
+        // каждый кадр, а SetNotifyTransform есть такой же переход границы C#↔Godot, какой
+        // здесь и устраняется, — по замеру повторные вызовы забирали 7 % главного потока
+        if (float.IsNaN(_driven))
+            SetNotifyTransform(false);
+
+        _driven = world;
+
+        Align(world);
     }
 
     /// <summary>
@@ -364,12 +401,10 @@ public partial class UnitModel : Node2D
     /// Сравнение с прежним углом снимает работу с неподвижных: у постройки угол не меняется
     /// никогда, и сверка двух чисел заменяет запись во все слои.
     /// </summary>
-    private void Align()
+    private void Align(float world)
     {
         if (_shifted.Count == 0)
             return;
-
-        float world = GlobalRotation;
 
         if (Mathf.IsEqualApprox(world, _aligned))
             return;

@@ -321,6 +321,9 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
 
         AddChild(_model);
         _model.ApplyTeamColor(TeamPalette.Of(Faction));
+
+        // Угол корпуса модель получает от юнита, а не выясняет у движка — см. UnitModel.Face
+        _model.Face(Rotation);
     }
 
     /// <summary>
@@ -391,6 +394,10 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
         float request = Aim.Advance(Rotation, delta);
 
         TurnBody(request, delta);
+
+        // Слои затенения ставятся по углу корпуса, который здесь уже известен: своё поле
+        // юнита вместо чтения преобразования у движка — см. UnitModel.Face
+        _model?.Face(Rotation);
 
         // Инструменты модели ведутся здесь, а не в _Draw: узел модели рисует себя сам,
         // и к моменту его отрисовки поворот обязан быть уже выставлен

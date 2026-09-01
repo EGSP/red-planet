@@ -167,9 +167,9 @@ public partial class HoverSystem : GameSystem
     /// правилу, по которому его нельзя выделить.
     /// </summary>
     private static bool Pickable(IDamageable target) =>
-        target is Node2D node
+        target is Entity node
         && Alive.Is(node)
-        && node.IsVisibleInTree()
+        && node.Visible
         && !Targeting.Leaving(target);
 
     /// <summary>

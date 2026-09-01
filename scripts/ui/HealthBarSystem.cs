@@ -89,7 +89,8 @@ public partial class HealthBarSystem : GameSystem
             if (health == null || health.Ratio >= settings.FullEnough)
                 continue;
 
-            if (marked is not Node2D node || !Alive.Is(node) || !node.IsVisibleInTree())
+            // Показ берётся полем сущности — см. то же место в UnitGizmoOverlay
+            if (marked is not Entity node || !Alive.Is(node) || !node.Visible)
                 continue;
 
             var at = marked.GlobalPosition;

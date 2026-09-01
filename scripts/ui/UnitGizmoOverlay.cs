@@ -37,7 +37,10 @@ public partial class UnitGizmoOverlay : GameSystem
         // выбранную для постановки
         foreach (var entity in GM.Index.All<IToolGizmo>())
         {
-            if (entity is not Node2D node || !Alive.Is(node) || !node.IsVisibleInTree())
+            // Показ читается полем сущности, а не IsVisibleInTree: последний обходит
+            // цепочку родителей у движка, тогда как сущности лежат прямо в слоях площадки,
+            // и слои не гасятся — значит собственный показ и есть показ в дереве
+            if (entity is not Entity node || !Alive.Is(node) || !node.Visible)
                 continue;
 
             UnitGizmos.Put(entity.GizmoTools, entity.Faction, entity.GlobalPosition,
