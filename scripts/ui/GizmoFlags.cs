@@ -142,25 +142,58 @@ public static class GizmoGate
 }
 
 /// <summary>
+/// Сущность, у которой есть круги инструментов. По этому разрезу индекса их и обходит
+/// <see cref="UnitGizmoOverlay"/>.
+///
+/// ЗАЧЕМ ИНТЕРФЕЙС, А НЕ ВЫЗОВ ИЗ _Draw САМОЙ СУЩНОСТИ. Круги объявляются общей множественной
+/// сетке мира, и объявление это кадровое: пропущенный кадр означает пропавший круг. Ноды же
+/// перерисовываются не каждый кадр, а по надобности, и постройка, простоявшая кадр без
+/// изменений, показывала бы круг с разрывами. Обход разреза от порядка перерисовки не зависит.
+/// </summary>
+public interface IToolGizmo
+{
+    /// <summary>Какие круги есть у сущности: обзор, ствол, рабочая рука.</summary>
+    GizmoTools GizmoTools { get; }
+
+    /// <summary>Сторона сущности: по ней матрица показа решает, свой это круг или чужой.</summary>
+    Faction Faction { get; }
+
+    /// <summary>Место сущности в мире: круги концентричны ей.</summary>
+    Vector2 GlobalPosition { get; }
+
+    /// <summary>
+    /// Мировой угол оси инструмента. У подвижной сущности ствол доворачивается отдельно
+    /// от корпуса, у турели ось башни совпадает с поворотом ноды.
+    /// </summary>
+    float ToolFacing { get; }
+
+    /// <summary>
+    /// Готовая постройка со стволом. Отдельным признаком, потому что покрытие турелей
+    /// показывается при постановке вооружённой постройки — см. <see cref="GizmoGate"/>.
+    /// </summary>
+    bool ArmedStructure { get; }
+}
+
+/// <summary>
 /// Отрисовка областей инструментов с учётом <see cref="GizmoGate"/>.
-/// Сущности зовут один метод вместо трёх разрозненных вызовов gizmo.
+/// Сущности описываются одним вызовом вместо трёх разрозненных.
 /// </summary>
 public static class UnitGizmos
 {
-    public static void Draw(CanvasItem canvas, in GizmoTools tools, Faction faction,
-        bool selected = false, bool armedStructure = false, float facingOffset = 0f)
+    public static void Put(in GizmoTools tools, Faction faction, Vector2 at, float facing,
+        WorldLayer layer, bool selected = false, bool armedStructure = false)
     {
         if (tools.VisionRadius > 0f &&
             GizmoGate.Allows(GizmoKind.Vision, faction, selected))
-            VisionGizmo.Draw(canvas, tools.VisionRadius);
+            VisionGizmo.Put(at, tools.VisionRadius, layer);
 
         if (tools.Weapon != null &&
             GizmoGate.Allows(GizmoKind.Attack, faction, selected, armedStructure))
-            WeaponGizmo.Draw(canvas, tools.Weapon, facingOffset);
+            WeaponGizmo.Put(at, tools.Weapon, facing, layer);
 
         if (tools.WorkRadius > 0f &&
             GizmoGate.Allows(GizmoKind.Work, faction, selected))
-            WorkGizmo.Draw(canvas, tools.WorkRadius);
+            WorkGizmo.Put(at, tools.WorkRadius, layer);
     }
 }
 
@@ -173,5 +206,14 @@ public static class WorkGizmo
             return;
 
         ShapeDraw.Circle(canvas, Vector2.Zero, radius, DrawTheme.Radius(VizKind.Work), 48);
+    }
+
+    /// <inheritdoc cref="VisionGizmo.Put"/>
+    public static void Put(Vector2 at, float radius, WorldLayer layer)
+    {
+        if (radius <= 0f)
+            return;
+
+        ShapeMesh.Circle(at, radius, DrawTheme.Radius(VizKind.Work), layer);
     }
 }

@@ -20,8 +20,23 @@ using Godot;
 /// он виден игроку в очереди приказов сразу после назначения.
 /// </summary>
 public partial class Blueprint : WorkNode, IFacing, IDamageable, IHealthMarked, IVision,
-    IObstacle, IOrderable, IProducer
+    IObstacle, IOrderable, IProducer, IToolGizmo
 {
+    /// <summary>
+    /// Круги инструментов сущности — см. <see cref="IToolGizmo"/>. Показывает их отдельной
+    /// системой <see cref="UnitGizmoOverlay"/>: объявление фигур кадровое, а нода
+    /// перерисовывается по надобности.
+    /// </summary>
+    /// <remarks>У каркаса обзор урезан: полная зона появится у готовой постройки.</remarks>
+    public GizmoTools GizmoTools =>
+        GizmoTools.From(Definition) with { VisionRadius = VisionRadius };
+
+    /// <inheritdoc cref="IToolGizmo.ToolFacing"/>
+    public float ToolFacing => GlobalRotation;
+
+    /// <summary>Каркас ещё не стреляет: покрытие турелей его не касается.</summary>
+    public bool ArmedStructure => false;
+
     /// <summary>Ширина полосы прочности: по занятому месту — см. <see cref="IHealthMarked"/>.</summary>
     public float HealthBarWidth => FootprintSize.X * 0.9f;
 
@@ -411,10 +426,6 @@ public partial class Blueprint : WorkNode, IFacing, IDamageable, IHealthMarked, 
 
         var size = new Vector2(Definition.Size.X, Definition.Size.Y) * Const.Unit;
         var rect = new Rect2(-size * 0.5f, size);
-
-        // У каркаса обзор урезан: полная зона появится у готовой постройки
-        var tools = GizmoTools.From(Definition) with { VisionRadius = VisionRadius };
-        UnitGizmos.Draw(this, tools, Faction, selected: GizmoGate.IsSelected(this));
 
         // Каркас повёрнут так же, как встанет постройка: место он занимает уже сейчас,
         // и показывать его иначе, чем оно занято, нельзя

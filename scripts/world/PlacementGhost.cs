@@ -4,30 +4,50 @@ using Godot;
 /// <summary>
 /// Призрак будущей застройки: зелёный — можно ставить, красный — нельзя.
 ///
-/// Рисует не одно место, а весь план: протаскивание с выбранной постройкой раскладывает
-/// целую партию, и показать её игрок должен до того, как отпустит кнопку. Негодные места
+/// Показывает не одно место, а весь план: протаскивание с выбранной постройкой раскладывает
+/// целую партию, и увидеть её игрок должен до того, как отпустит кнопку. Негодные места
 /// остаются в плане красными — при постановке они пропускаются, и молчаливое исчезновение
 /// их из показа скрывало бы, почему построилось меньше, чем размечено.
 ///
-/// У каждого места два контура. Сплошной — само место, которое займёт постройка. Пунктирный —
+/// У каждого места два контура. Сплошной — само место, которое займёт постройка. Приглушённый —
 /// обязательный зазор вокруг него: игрок должен видеть не только габарит, но и то,
 /// почему постановка вплотную к соседу отклоняется.
 ///
-/// Если выбранная постройка со стволом, у каждого места рисуется ещё и круг атаки:
+/// Если выбранная постройка со стволом, у каждого места показывается ещё и круг атаки:
 /// иначе нельзя оценить перекрытие с уже стоящими турелями (их круги включает
 /// <see cref="GizmoGate.ShowArmedCoverage"/>).
 ///
-/// У раскладки по залежам (<see cref="BuildPattern.MetalArea"/>) дополнительно рисуется
+/// У раскладки по залежам (<see cref="BuildPattern.MetalArea"/>) дополнительно показывается
 /// круг растягивания: радиус тот же, по которому <see cref="BuildLayout"/> отбирает точки
 /// метала, иначе видно только будущие экстракторы, а границу охвата — нет.
+///
+/// ПОЧЕМУ ЭТО БОЛЬШЕ НЕ НОДА. Прежде призрак рисовал себя сам в <c>_Draw</c>, и каждое место
+/// плана стоило многоугольника заливки, замкнутой ломаной контура и второй такой же ломаной
+/// зазора; при раскладке в несколько десятков мест это давало сотни вершин на кадр. Теперь
+/// фигуры объявляются общей множественной сетке мира (<see cref="ShapeMesh"/>), рисовать
+/// призраку нечем, и собственного узла ему не нужно. Объявление ведёт
+/// <see cref="CommandSystem"/> — единственный, кто знает, показан ли призрак сейчас.
 /// </summary>
-public partial class PlacementGhost : Node2D
+public sealed class PlacementGhost
 {
+    /// <summary>
+    /// Слой показа. Поверх мира, а не под сущностями: призрак отвечает на вопрос, встанет ли
+    /// постройка здесь, и ответ этот важнее всего там, где место уже чем-то занято.
+    /// </summary>
+    private const WorldLayer Layer = WorldLayer.Overlay;
+
     public UnitDefinition Definition;
 
     /// <summary>
+    /// Показан ли призрак сейчас. Признак остался полем, хотя ноды не стало: режим
+    /// постановки может быть включён, а призрак при этом спать — пока место под указателем
+    /// не подсвечено, щелчок обещает обычное выделение, и обещать иное нельзя.
+    /// </summary>
+    public bool Visible;
+
+    /// <summary>
     /// План застройки. Список принадлежит CommandSystem и подставляется сюда ссылкой:
-    /// призрак обязан рисовать ровно то, что будет поставлено, а копия рано или поздно
+    /// призрак обязан показывать ровно то, что будет поставлено, а копия рано или поздно
     /// разошлась бы с подлинником.
     /// </summary>
     public List<BuildSpot> Spots = new();
@@ -39,12 +59,13 @@ public partial class PlacementGhost : Node2D
     public Vector2 StretchCenter;
 
     /// <summary>
-    /// Радиус охвата залежей при протаскивании. Ноль — круг не рисуется
+    /// Радиус охвата залежей при протаскивании. Ноль — круг не показывается
     /// (щелчок без растягивания или раскладка не по залежам).
     /// </summary>
     public float StretchRadius;
 
-    public override void _Draw()
+    /// <summary>Объявить фигуры призрака этого кадра.</summary>
+    public void Put()
     {
         if (Definition == null)
             return;
@@ -53,9 +74,9 @@ public partial class PlacementGhost : Node2D
         {
             // Тот же зелёный, что у годного места: заливка слабее габарита, чтобы
             // сами экстракторы поверх круга оставались читаемыми
-            ShapeDraw.Circle(this, StretchCenter, StretchRadius,
+            ShapeMesh.Circle(StretchCenter, StretchRadius,
                 DrawTheme.Filled(VizKind.PlacementValid, 0.10f, 0.75f, 2f, WidthMode.Screen),
-                64);
+                Layer);
         }
 
         var weapon = Definition.Weapon;
@@ -65,18 +86,19 @@ public partial class PlacementGhost : Node2D
             var kind = spot.Valid ? VizKind.PlacementValid : VizKind.PlacementInvalid;
             var area = Placement.Footprint(Definition, spot.Center, spot.Facing);
 
-            ShapeDraw.Obb(this, area, DrawTheme.Fill(kind, 0.22f));
-            ShapeDraw.Obb(this, area, DrawTheme.Outline(kind, 2f, WidthMode.Screen));
-            ShapeDraw.Obb(this, area.Grow(Const.BuildMarginPx),
-                DrawTheme.Outline(kind, 1.5f, WidthMode.MinScreen, 0.35f));
+            // Заливка и контур одной фигурой: у формы прямоугольника они заданы вместе,
+            // и разводить их по двум объявлениям, как было при отрисовке на холст, незачем
+            ShapeMesh.Obb(area,
+                DrawTheme.Filled(kind, 0.22f, 1f, 2f, WidthMode.Screen), Layer);
+
+            ShapeMesh.Obb(area.Grow(Const.BuildMarginPx),
+                DrawTheme.Outline(kind, 1.5f, WidthMode.MinScreen, 0.35f), Layer);
 
             if (weapon == null)
                 continue;
 
-            // Круг атаки будущего ствола: локально «вперёд» совпадает с углом постановки
-            DrawSetTransform(spot.Center, spot.Facing, Vector2.One);
-            WeaponGizmo.Draw(this, weapon);
-            DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+            // Круг атаки будущего ствола: ось инструмента совпадает с углом постановки
+            WeaponGizmo.Put(spot.Center, weapon, spot.Facing, Layer);
         }
     }
 }

@@ -19,8 +19,18 @@
 /// а не выводить из того, в каком разрезе она нашлась.
 /// </summary>
 public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed, IEconomyActor,
-    IVision, IRepairable, IOrderable, IWorker, IMobile, IWorkBeam
+    IVision, IRepairable, IOrderable, IWorker, IMobile, IWorkBeam, IToolGizmo
 {
+    /// <summary>
+    /// Круги инструментов сущности — см. <see cref="IToolGizmo"/>. Показывает их отдельной
+    /// системой <see cref="UnitGizmoOverlay"/>: объявление фигур кадровое, а нода
+    /// перерисовывается по надобности.
+    /// </summary>
+    public GizmoTools GizmoTools => GizmoTools.From(Definition);
+
+    /// <summary>Ходящая сущность постройкой со стволом не бывает.</summary>
+    public bool ArmedStructure => false;
+
     /// <summary>
     /// Определение. Ставит Spawner при создании: узел юнита собственной сцены не имеет,
     /// и связать его со справочником больше некому.
@@ -1338,12 +1348,6 @@ public partial class Unit : Entity, IFacing, IDamageable, IHealthMarked, IArmed,
             return;
 
         float radius = Definition.RadiusPx;
-
-        float toolLocal = ToolFacing - Rotation;
-
-        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
-            selected: GizmoGate.IsSelected(this),
-            facingOffset: toolLocal);
 
         // Модель рисует себя сама дочерним узлом, поэтому запасной круг при ней не нужен:
         // два изображения одного корпуса наложились бы друг на друга

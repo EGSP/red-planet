@@ -14,8 +14,24 @@ using Godot;
 /// а поворот при отрисовке применяется правкой трансформа канвы.
 /// </summary>
 public partial class Building : Entity, IFacing, IDamageable, IHealthMarked, IEconomyActor,
-    IVision, IRepairable, IOrderable, IObstacle
+    IVision, IRepairable, IOrderable, IObstacle, IToolGizmo
 {
+    /// <summary>
+    /// Круги инструментов сущности — см. <see cref="IToolGizmo"/>. Показывает их отдельной
+    /// системой <see cref="UnitGizmoOverlay"/>: объявление фигур кадровое, а нода
+    /// перерисовывается по надобности.
+    /// </summary>
+    public GizmoTools GizmoTools => GizmoTools.From(Definition);
+
+    /// <summary>
+    /// Ось инструмента в мировых углах. У турели поворот ноды и есть ось башни, у прочих
+    /// построек ствола нет вовсе, и угол ни на что не влияет.
+    /// </summary>
+    public float ToolFacing => GlobalRotation;
+
+    /// <summary>Постройка со стволом: по этому признаку показывается покрытие турелей.</summary>
+    public bool ArmedStructure => Definition?.Weapon != null;
+
     public int Id { get; private set; }
     public UnitDefinition Definition { get; private set; }
 
@@ -325,10 +341,6 @@ public partial class Building : Entity, IFacing, IDamageable, IHealthMarked, IEc
     {
         if (Definition == null)
             return;
-
-        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
-            selected: GizmoGate.IsSelected(this),
-            armedStructure: Definition.Weapon != null);
 
         // Площадка и запасной корпус рисуются одной последовательностью на всю игру
         // и редактор содержимого — см. BuildingVisual. Угол постановки применяется правкой

@@ -55,6 +55,9 @@
 [ext_resource type="Resource" uid="uid://dj0jlvgwg4ip7" path="res://resources/tuning/nav.tres" id="43_navsettings"]
 [ext_resource type="Script" uid="uid://dngnl101xo5lo" path="res://scripts/ui/HoverSystem.cs" id="44_hover"]
 [ext_resource type="Script" path="res://scripts/ui/HealthBarSystem.cs" id="54_healthbars"]
+[ext_resource type="Script" path="res://scripts/ui/OrderOverlay.cs" id="56_orderoverlay"]
+[ext_resource type="Script" path="res://scripts/ui/UnitGizmoOverlay.cs" id="58_toolgizmos"]
+[ext_resource type="Script" path="res://scripts/draw/ShapeMeshSystem.cs" id="57_shapemesh"]
 [ext_resource type="Script" path="res://scripts/effects/BeamSystem.cs" id="55_beams"]
 [ext_resource type="Script" uid="uid://xosvhvgeak3m" path="res://scripts/ui/HoverPanel.cs" id="45_hoverpanel"]
 [ext_resource type="Script" uid="uid://ce4dufgxum148" path="res://scripts/world/ShadowRenderer.cs" id="46_shadow"]
@@ -101,6 +104,15 @@ UpdateCycle = 1
 
 [node name="HealthBarSystem" type="Node" parent="Systems"]
 script = ExtResource("54_healthbars")
+
+[node name="OrderOverlay" type="Node" parent="Systems"]
+script = ExtResource("56_orderoverlay")
+
+[node name="UnitGizmoOverlay" type="Node" parent="Systems"]
+script = ExtResource("58_toolgizmos")
+
+[node name="ShapeMeshSystem" type="Node" parent="Systems"]
+script = ExtResource("57_shapemesh")
 
 [node name="BeamSystem" type="Node" parent="Systems"]
 script = ExtResource("55_beams")

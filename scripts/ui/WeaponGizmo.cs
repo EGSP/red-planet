@@ -48,6 +48,27 @@ public static class WeaponGizmo
     }
 
     /// <summary>
+    /// Тот же круг дальности с рёбрами сектора, но объявленный общей множественной сетке
+    /// мира. Область поражения здесь не показывается: она нужна только полю редактора
+    /// содержимого, а туда сетки мира не достают.
+    /// </summary>
+    public static void Put(Vector2 at, WeaponDefinition weapon, float facing, WorldLayer layer)
+    {
+        if (weapon == null)
+            return;
+
+        ShapeMesh.Circle(at, weapon.RangePx, DrawTheme.Radius(VizKind.Attack), layer);
+
+        float arc = weapon.FireArc;
+        float length = weapon.RangePx * ConeLength;
+        var edge = DrawTheme.Line(VizKind.Attack, alpha: 0.5f, width: 2f,
+            mode: WidthMode.Screen);
+
+        ShapeMesh.Line(at, at + Heading.Forward(facing + arc) * length, edge, layer);
+        ShapeMesh.Line(at, at + Heading.Forward(facing - arc) * length, edge, layer);
+    }
+
+    /// <summary>
     /// Область поражения — залитый круг на КРАЮ дальности по оси ствола.
     ///
     /// ПОЧЕМУ НА КРАЮ, А НЕ ВОКРУГ НОСИТЕЛЯ. Взрыв случается там, куда прилетел снаряд,

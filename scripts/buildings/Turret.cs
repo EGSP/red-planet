@@ -110,10 +110,6 @@ public partial class Turret : Building, IArmed
 
         float half = Const.Unit * 0.5f;
 
-        UnitGizmos.Draw(this, GizmoTools.From(Definition), Faction,
-            selected: GizmoGate.IsSelected(this),
-            armedStructure: true);
-
         // ПЛОЩАДКА РИСУЕТСЯ ВСЕГДА, В ТОМ ЧИСЛЕ ПРИ МОДЕЛИ: она принадлежит занятому месту,
         // а не изображению корпуса. Прежде вызов стоял ниже раннего выхода, и с появлением
         // у турели сцены изображения площадка исчезла — турель единственная постройка,

@@ -53,6 +53,12 @@ public partial class GraphicsSettings : Resource
     [Export] public BeamStyle RepairBeam;
 
     /// <summary>
+    /// Настройка служебной графики множественными сетками: материалы форм и набор значков
+    /// приказов. Отрисовкой заведует <see cref="ShapeMesh"/>.
+    /// </summary>
+    [Export] public ShapeMeshSettings ShapeDrawing = new();
+
+    /// <summary>
     /// Вид метки выделения у постройки. Отдельный свод, а не общий с ходящими: изображение
     /// и материал у множественной сетки одни на все её экземпляры, поэтому иная картинка
     /// постройки означает и иной свод — см. <see cref="SelectionOverlay"/>.
@@ -104,6 +110,7 @@ public partial class GraphicsSettings : Resource
         settings.UnitMark ??= new SelectionSettings();
         settings.StructureMark ??= new SelectionSettings();
         settings.HealthBar ??= new HealthBarSettings();
+        settings.ShapeDrawing ??= new ShapeMeshSettings();
         settings.BuildBeam ??= BeamStyle.Fallback<BeamStyle>(BuildBeamPath);
         settings.RepairBeam ??= BeamStyle.Fallback<BeamStyle>(RepairBeamPath);
         return settings;
@@ -123,6 +130,9 @@ public partial class GraphicsSettings : Resource
 
     /// <summary>Настройки полосы прочности действующего свода.</summary>
     public static HealthBarSettings Bars => Active.HealthBar;
+
+    /// <summary>Настройки служебной графики действующего свода.</summary>
+    public static ShapeMeshSettings Shapes => Active.ShapeDrawing;
 
     /// <summary>Вид запасного строительного луча действующего свода.</summary>
     public static BeamStyle BuildBeamStyle => Active.BuildBeam;

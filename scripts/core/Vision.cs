@@ -97,4 +97,17 @@ public static class VisionGizmo
         // а десятки дисков не перекрывают карту
         ShapeDraw.Circle(canvas, Vector2.Zero, radius, DrawTheme.Radius(VizKind.Vision), 48);
     }
+
+    /// <summary>
+    /// Тот же круг обзора, но объявленный общей множественной сетке мира и потому заданный
+    /// мировыми координатами. Применяется в игре; отрисовка на холст осталась редактору
+    /// содержимого, где менеджера сессии нет и сетки завести не на чем.
+    /// </summary>
+    public static void Put(Vector2 at, float radius, WorldLayer layer)
+    {
+        if (radius <= 0f)
+            return;
+
+        ShapeMesh.Circle(at, radius, DrawTheme.Radius(VizKind.Vision), layer);
+    }
 }

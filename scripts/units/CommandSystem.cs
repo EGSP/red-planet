@@ -52,7 +52,6 @@ public partial class CommandSystem : GameSystem
 
     private CursorSystem _cursor;
     private PlacementGhost _ghost;
-    private OrderOverlay _overlay;
     private SelectionOverlay _marks;
 
     // Служебная графика отладки. Заводится здесь же, где призрак и очереди приказов:
@@ -437,7 +436,7 @@ public partial class CommandSystem : GameSystem
         BuildLayout.Compute(GM, Pending, anchor, visual, alt, _plan, SandboxPattern(alt));
         UpdateStretchGhost(anchor, visual, alt);
 
-        _ghost.QueueRedraw();
+        _ghost.Put();
     }
 
     /// <summary>
@@ -1577,17 +1576,16 @@ public partial class CommandSystem : GameSystem
         if (_navigation == null || !IsInstanceValid(_navigation))
             _navigation = GM.Playground.Add(WorldLayer.Overlay, new NavGridOverlay());
 
-        if (_ghost == null || !IsInstanceValid(_ghost))
+        if (_ghost == null)
         {
-            _ghost = GM.Playground.Add(WorldLayer.Overlay, new PlacementGhost());
+            // Узла у призрака нет: фигуры он объявляет общей множественной сетке мира,
+            // а объявление ведётся отсюда — см. PlacementGhost
+            _ghost = new PlacementGhost();
 
             // План принадлежит системе, а призрак получает его ссылкой: показанное
             // и поставленное обязаны быть одним и тем же списком
             _ghost.Spots = _plan;
         }
-
-        if (_overlay == null || !IsInstanceValid(_overlay))
-            _overlay = GM.Playground.Add(WorldLayer.Overlay, new OrderOverlay());
 
         // Метки выделения отделены от очередей приказов не слоем, а материалом: он
         // задан на ноде и потому обязан быть у неё единственным — см. SelectionOverlay
